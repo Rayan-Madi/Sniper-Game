@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sniper</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+    #canvas { display: block; width: 100vw; height: 100vh; }
+
+    /* SCOPE OVERLAY */
+    #scope {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      display: none;
+    }
+    #scope canvas { width: 100%; height: 100%; }
+
+    /* HUD */
+    #hud {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      color: #c8f0c8;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+    #hud-top {
+      position: absolute; top: 18px; left: 0; right: 0;
+      display: flex; justify-content: space-between; padding: 0 24px;
+    }
+    #hud-bottom {
+      position: absolute; bottom: 18px; left: 0; right: 0;
+      display: flex; justify-content: space-between; padding: 0 24px;
+      align-items: flex-end;
+    }
+    .hud-box {
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(200,240,200,0.18);
+      padding: 8px 14px;
+      border-radius: 4px;
+      line-height: 1.7;
+    }
+    .hud-label { color: rgba(200,240,200,0.45); font-size: 10px; text-transform: uppercase; }
+    .hud-val { font-size: 16px; font-weight: bold; }
+    #stress-bar-wrap { width: 130px; }
+    #stress-bar {
+      height: 4px; background: rgba(200,240,200,0.15);
+      border-radius: 2px; margin-top: 6px; overflow: hidden;
+    }
+    #stress-fill {
+      height: 100%; width: 0%;
+      background: #4eff4e;
+      border-radius: 2px;
+      transition: width 0.3s, background 0.3s;
+    }
+    #breath-bar {
+      height: 4px; background: rgba(110,200,255,0.15);
+      border-radius: 2px; margin-top: 8px; overflow: hidden;
+    }
+    #breath-fill {
+      height: 100%; width: 100%;
+      background: #6ec8ff;
+      border-radius: 2px;
+      transition: background 0.2s;
+    }
+    #alert-banner {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ff4444; font-size: 22px; letter-spacing: 0.2em;
+      text-shadow: 0 0 20px #ff0000;
+      display: none;
+      animation: blink 0.5s ease infinite alternate;
+    }
+    @keyframes blink { from { opacity: 1; } to { opacity: 0.2; } }
+    #kill-feed {
+      position: absolute; top: 80px; right: 24px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    #dossier {
+      position: absolute; top: 90px; left: 24px;
+      max-width: 280px; display: none;
+      background: rgba(20,15,8,0.78);
+      border: 1px solid rgba(255,212,78,0.4);
+      border-left: 3px solid #ffd44e;
+      padding: 10px 14px; border-radius: 4px;
+      color: #f0e0b0; font-size: 12px; line-height: 1.6;
+    }
+    .dossier-title {
+      color: #ffd44e; font-size: 11px; letter-spacing: 0.1em;
+      margin-bottom: 6px; text-transform: uppercase;
+    }
+    .kill-entry {
+      background: rgba(0,0,0,0.6);
+      border-left: 2px solid #4eff4e;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #4eff4e;
+      animation: fadeup 2.5s ease forwards;
+    }
+    @keyframes fadeup {
+      0% { opacity: 0; transform: translateY(8px); }
+      20% { opacity: 1; transform: translateY(0); }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    /* MENUS */
+    #menu, #upgrade-screen, #game-over, #level-clear, #pause-menu, #settings-screen,
+    #mp-menu, #mp-create, #mp-join, #mp-result {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.88);
+      color: #c8f0c8;
+      z-index: 100;
+      gap: 18px;
+    }
+    #upgrade-screen, #game-over, #level-clear, #pause-menu, #settings-screen,
+    #mp-menu, #mp-create, #mp-join, #mp-result { display: none; }
+
+    /* ── PVP ─────────────────────────────────────────────────────── */
+    .mp-code {
+      font-size: 46px; letter-spacing: 0.3em; color: #ffd44e;
+      text-shadow: 0 0 24px rgba(255,212,78,0.4); margin: 10px 0;
+    }
+    .mp-input {
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(200,240,200,0.3);
+      color: #c8f0c8; font-family: 'Courier New', monospace; font-size: 28px;
+      letter-spacing: 0.3em; text-align: center; padding: 10px 18px; width: 220px;
+      text-transform: uppercase;
+    }
+    .mp-error { color: #ff6666; font-size: 12px; min-height: 16px; }
+    #mp-hud {
+      position: fixed; inset: 0; pointer-events: none; z-index: 60;
+      color: #c8f0c8; font-family: 'Courier New', monospace; display: none;
+    }
+    #mp-timer {
+      position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.55); border: 1px solid rgba(200,240,200,0.2);
+      padding: 8px 22px; font-size: 22px; letter-spacing: 0.1em; border-radius: 4px;
+    }
+    #mp-role-banner {
+      position: absolute; top: 18px; left: 18px;
+      background: rgba(0,0,0,0.55); border: 1px solid rgba(200,240,200,0.2);
+      padding: 8px 16px; font-size: 12px; letter-spacing: 0.08em; border-radius: 4px;
+    }
+    #mp-parts {
+      position: absolute; top: 60px; left: 18px;
+      background: rgba(0,0,0,0.5); border-left: 2px solid #ffd44e;
+      padding: 6px 14px; font-size: 12px; letter-spacing: 0.06em;
+    }
+    #mp-abilities {
+      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 12px; pointer-events: auto;
+    }
+    .mp-ability {
+      background: rgba(0,0,0,0.6); border: 1px solid rgba(200,240,200,0.3);
+      color: #c8f0c8; font-family: inherit; font-size: 11px; letter-spacing: 0.05em;
+      padding: 10px 14px; border-radius: 4px; cursor: pointer; width: 140px;
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .mp-ability:disabled { opacity: 0.4; cursor: default; }
+    .mp-ability .cd-bar {
+      position: absolute; bottom: 0; left: 0; height: 3px; background: #ffd44e;
+      width: 0%; transition: width 0.2s linear;
+    }
+    /* Overlay de verrouillage (déblocage progressif) : masque le bouton et
+       affiche le temps restant avant déblocage. */
+    .mp-ability .ab-lock:not(:empty) {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.78); color: #ffd44e; font-size: 15px; letter-spacing: 0.08em;
+      font-weight: bold;
+    }
+    .mp-ability .ab-lock::before { content: '🔒 '; font-size: 12px; }
+    #mp-crosshair {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 18px; height: 18px; display: none;
+    }
+    #mp-crosshair::before, #mp-crosshair::after {
+      content: ''; position: absolute; background: #ff4444;
+    }
+    #mp-crosshair::before { left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); }
+    #mp-crosshair::after { top: 50%; left: 0; right: 0; height: 2px; transform: translateY(-50%); }
+    #mp-killfeed {
+      position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+      font-size: 13px; letter-spacing: 0.06em; color: #ffd44e; opacity: 0;
+      transition: opacity 0.4s; text-shadow: 0 2px 10px #000;
+    }
+    #mp-score {
+      font-size: 15px; color: #ffd44e; letter-spacing: 0.1em; margin: 8px 0 16px;
+    }
+    /* Lunette de visée du sniper (clic droit) : vignette noire circulaire +
+       réticule fin. Cachée par défaut, affichée par pvp.js pendant la visée. */
+    #mp-scope {
+      display: none; position: fixed; inset: 0; z-index: 70; pointer-events: none;
+      background: radial-gradient(circle at center,
+        rgba(0,0,0,0) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.55) 33%,
+        rgba(0,0,0,0.97) 38%, #000 40%);
+    }
+    #mp-scope::before, #mp-scope::after {
+      content: ''; position: absolute; background: rgba(0,0,0,0.85);
+    }
+    /* trait horizontal du réticule */
+    #mp-scope::before { left: 50%; top: 50%; width: 60vh; height: 1px; transform: translate(-50%, -50%); }
+    /* trait vertical du réticule */
+    #mp-scope::after  { left: 50%; top: 50%; width: 1px; height: 60vh; transform: translate(-50%, -50%); }
+    /* Menu principal translucide : on voit le décor 3D vivant derrière */
+    #menu {
+      background: radial-gradient(ellipse at center, rgba(5, 9, 15, 0.38) 0%, rgba(3, 5, 9, 0.82) 100%);
+    }
+    #pause-menu { z-index: 150; background: rgba(0,0,0,0.82); }
+    #settings-screen {
+      z-index: 160; gap: 22px;
+      /* Le bloc "Commandes PvP" rend ce panneau plus grand que la fenêtre sur
+         les petits écrans — sans ceci, tout ce qui dépasse (dont RETOUR)
+         devient inatteignable, faute de défilement (justify-content:center
+         hérité ne permet pas de scroller vers le haut du contenu débordant). */
+      overflow-y: auto; justify-content: flex-start; padding: 40px 0;
+    }
+
+    /* PARAMÈTRES */
+    .settings-group {
+      border: 1px solid rgba(200,240,200,0.18);
+      border-radius: 6px;
+      padding: 18px 26px;
+      display: flex; flex-direction: column; gap: 14px;
+      min-width: 420px;
+    }
+    .settings-title {
+      font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase;
+      color: rgba(200,240,200,0.45); margin-bottom: 4px;
+    }
+    .settings-row {
+      display: grid; grid-template-columns: 160px 1fr 56px;
+      align-items: center; gap: 14px; font-size: 13px;
+    }
+    .settings-row input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      height: 4px; background: rgba(200,240,200,0.2); border-radius: 2px; outline: none;
+    }
+    .settings-row input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #4eff4e; cursor: pointer;
+    }
+    .settings-row input[type=checkbox] { width: 16px; height: 16px; accent-color: #4eff4e; }
+    .set-val { font-size: 12px; color: #ffd44e; text-align: right; }
+    .keymap {
+      display: flex; justify-content: space-between; gap: 30px;
+      font-size: 12px; color: rgba(200,240,200,0.7);
+      padding: 3px 0; border-bottom: 1px solid rgba(200,240,200,0.06);
+    }
+    .keymap span:last-child { color: #c8f0c8; }
+    .keybind-key {
+      background: rgba(200,240,200,0.08); border: 1px solid rgba(200,240,200,0.25);
+      border-radius: 4px; padding: 3px 12px; cursor: pointer; min-width: 44px;
+      text-align: center; font-family: 'Courier New', monospace;
+    }
+    .keybind-key:hover { background: rgba(78,255,78,0.15); border-color: #4eff4e; }
+    .keybind-key.listening { background: rgba(255,212,78,0.18); border-color: #ffd44e; color: #ffd44e; }
+    .btn-small {
+      align-self: flex-start; font-size: 11px; padding: 6px 14px;
+      background: transparent; border: 1px solid rgba(200,240,200,0.3); color: rgba(200,240,200,0.7);
+      border-radius: 4px; cursor: pointer; letter-spacing: 0.08em;
+    }
+    .btn-small:hover { border-color: #4eff4e; color: #4eff4e; }
+    .menu-title {
+      font-size: 42px; letter-spacing: 0.3em;
+      text-shadow: 0 0 30px #4eff4e;
+      margin-bottom: 10px;
+    }
+    .menu-sub { color: rgba(200,240,200,0.5); font-size: 13px; letter-spacing: 0.1em; }
+    .btn {
+      background: transparent;
+      border: 1px solid rgba(200,240,200,0.35);
+      color: #c8f0c8;
+      padding: 12px 36px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-radius: 2px;
+    }
+    .btn:hover { background: rgba(78,255,78,0.1); border-color: #4eff4e; color: #4eff4e; }
+    .btn-danger { border-color: rgba(255,80,80,0.35); color: #ff8080; }
+    .btn-danger:hover { background: rgba(255,60,60,0.1); border-color: #ff4444; color: #ff4444; }
+
+    /* UPGRADES */
+    #upgrade-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 200px);
+      gap: 14px;
+      margin: 10px 0;
+    }
+    .upg-card {
+      border: 1px solid rgba(200,240,200,0.2);
+      padding: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .upg-card:hover:not(.maxed) { border-color: #4eff4e; background: rgba(78,255,78,0.06); }
+    .upg-card.maxed { opacity: 0.4; cursor: default; }
+    .upg-name { font-size: 13px; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .upg-desc { font-size: 10px; color: rgba(200,240,200,0.45); margin-bottom: 10px; line-height: 1.5; }
+    .upg-level { display: flex; gap: 4px; justify-content: center; margin-bottom: 10px; }
+    .upg-pip { width: 14px; height: 4px; border-radius: 2px; background: rgba(200,240,200,0.15); }
+    .upg-pip.filled { background: #4eff4e; }
+    .upg-cost { font-size: 11px; color: #ffd44e; }
+    #upgrade-points { font-size: 18px; color: #ffd44e; }
+    #level-info { font-size: 13px; color: rgba(200,240,200,0.5); letter-spacing: 0.08em; }
+
+    /* INSTRUCTION */
+    #instruction {
+      position: fixed; bottom: 60px; left: 50%;
+      transform: translateX(-50%);
+      color: rgba(200,240,200,0.4);
+      font-size: 12px; letter-spacing: 0.1em;
+      pointer-events: none;
+      transition: opacity 0.5s;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <canvas id="scope-canvas" style="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;display:none;"></canvas>
+
+  <div id="hud" style="display:none;">
+    <div id="hud-top">
+      <div class="hud-box">
+        <div class="hud-label">Mission</div>
+        <div class="hud-val" id="hud-level">Niveau 1</div>
+      </div>
+      <div class="hud-box">
+        <div class="hud-label">Cibles restantes</div>
+        <div class="hud-val" id="hud-targets">0</div>
+      </div>
+      <div class="hud-box">
+        <div class="hud-label">Score</div>
+        <div class="hud-val" id="hud-score">0</div>
+      </div>
+    </div>
+    <div id="hud-bottom">
+      <div class="hud-box" id="stress-bar-wrap">
+        <div class="hud-label">Stress</div>
+        <div id="stress-bar"><div id="stress-fill"></div></div>
+        <div class="hud-label" style="margin-top:6px;">Souffle (Maj)</div>
+        <div id="breath-bar"><div id="breath-fill"></div></div>
+      </div>
+      <div class="hud-box">
+        <div class="hud-label">Zoom</div>
+        <div class="hud-val" id="hud-zoom">×1</div>
+      </div>
+    </div>
+    <div id="alert-banner">⚠ ALERTE ⚠</div>
+    <div id="kill-feed"></div>
+    <div id="dossier">
+      <div class="dossier-title">⌖ DOSSIER — CIBLE À IDENTIFIER</div>
+      <div id="dossier-text"></div>
+    </div>
+  </div>
+
+  <div id="instruction">CLIC DROIT — Viser &nbsp;|&nbsp; CLIC GAUCHE — Tirer &nbsp;|&nbsp; MOLETTE — Zoom &nbsp;|&nbsp; MAJ — Retenir son souffle</div>
+
+  <div id="menu">
+    <div class="menu-title">SNIPER</div>
+    <div class="menu-sub">Éliminez les cibles. Ne vous faites pas repérer.</div>
+    <button class="btn" id="btn-start">COMMENCER</button>
+    <button class="btn" id="btn-multiplayer">MULTIJOUEUR (1V1)</button>
+    <button class="btn" id="btn-settings-menu">PARAMÈTRES</button>
+    <button class="btn btn-danger" id="btn-reset-save" style="display:none;font-size:11px;padding:8px 22px;">RECOMMENCER L'HISTOIRE</button>
+  </div>
+
+  <!-- MULTIJOUEUR : menu -->
+  <div id="mp-menu">
+    <div class="menu-title" style="font-size:30px;">SNIPER VS CONTRE-TUEUR</div>
+    <div class="menu-sub">Un joueur vise. L'autre se cache, s'arme, et riposte.</div>
+    <button class="btn" id="btn-mp-create">CRÉER UNE PARTIE</button>
+    <button class="btn" id="btn-mp-join-show">REJOINDRE UNE PARTIE</button>
+    <button class="btn btn-danger" id="btn-mp-back">RETOUR</button>
+  </div>
+
+  <!-- MULTIJOUEUR : création (code + attente) -->
+  <div id="mp-create">
+    <div class="menu-title" style="font-size:22px;">EN ATTENTE D'UN ADVERSAIRE</div>
+    <div class="menu-sub">Donne ce code à ton adversaire :</div>
+    <div class="mp-code" id="mp-code-display">----</div>
+    <div class="menu-sub" id="mp-create-status">Connexion au relais…</div>
+    <button class="btn btn-danger" id="btn-mp-create-cancel">ANNULER</button>
+  </div>
+
+  <!-- MULTIJOUEUR : rejoindre -->
+  <div id="mp-join">
+    <div class="menu-title" style="font-size:22px;">REJOINDRE UNE PARTIE</div>
+    <input class="mp-input" id="mp-join-input" maxlength="4" placeholder="CODE">
+    <div class="mp-error" id="mp-join-error"></div>
+    <button class="btn" id="btn-mp-join-go">REJOINDRE</button>
+    <button class="btn btn-danger" id="btn-mp-join-cancel">ANNULER</button>
+  </div>
+
+  <!-- MULTIJOUEUR : fin de manche -->
+  <div id="mp-result">
+    <div class="menu-title" id="mp-result-title" style="font-size:26px;">MANCHE TERMINÉE</div>
+    <div class="menu-sub" id="mp-result-detail">—</div>
+    <div id="mp-score">Score — Vous : 0 &nbsp;|&nbsp; Adversaire : 0</div>
+    <button class="btn" id="btn-mp-rematch">MANCHE SUIVANTE</button>
+    <button class="btn btn-danger" id="btn-mp-quit">QUITTER VERS LE MENU</button>
+  </div>
+
+  <!-- MULTIJOUEUR : lunette de visée du sniper (clic droit maintenu) -->
+  <div id="mp-scope"></div>
+
+  <!-- MULTIJOUEUR : HUD en jeu -->
+  <div id="mp-hud">
+    <div id="mp-role-banner">RÔLE : —</div>
+    <div id="mp-timer">10:00</div>
+    <div id="mp-parts" style="display:none;">Pièces d'arme : 0 / 3</div>
+    <div id="mp-crosshair"></div>
+    <div id="mp-killfeed"></div>
+    <div id="mp-abilities" style="display:none;">
+      <button class="mp-ability" id="ab-phone">[1] 📞 APPEL<div class="cd-bar"></div><span class="ab-lock"></span></button>
+      <button class="mp-ability" id="ab-cling">[2] 🫂 PNJ COLLANT<div class="cd-bar"></div><span class="ab-lock"></span></button>
+      <button class="mp-ability" id="ab-alarm">[3] 🚨 ALARME<div class="cd-bar"></div><span class="ab-lock"></span></button>
+    </div>
+  </div>
+
+  <!-- MENU PAUSE -->
+  <div id="pause-menu">
+    <div class="menu-title" style="font-size:32px;">PAUSE</div>
+    <button class="btn" id="btn-resume">REPRENDRE</button>
+    <button class="btn" id="btn-restart">RECOMMENCER LE NIVEAU</button>
+    <button class="btn" id="btn-settings-pause">PARAMÈTRES</button>
+    <button class="btn btn-danger" id="btn-pause-menu">MENU PRINCIPAL</button>
+  </div>
+
+  <!-- PARAMÈTRES -->
+  <div id="settings-screen">
+    <div class="menu-title" style="font-size:28px;">PARAMÈTRES</div>
+
+    <div class="settings-group">
+      <div class="settings-row">
+        <label>Volume général</label>
+        <input type="range" id="set-volume" min="0" max="100" value="70">
+        <span class="set-val" id="set-volume-val">70%</span>
+      </div>
+      <div class="settings-row">
+        <label>Sensibilité visée</label>
+        <input type="range" id="set-sens" min="20" max="300" value="100">
+        <span class="set-val" id="set-sens-val">1.00</span>
+      </div>
+      <div class="settings-row">
+        <label>Inverser l'axe Y</label>
+        <input type="checkbox" id="set-inverty">
+        <span class="set-val"></span>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-title">Commandes</div>
+      <div class="keymap"><span>Viser</span><span>Clic droit (maintenu)</span></div>
+      <div class="keymap"><span>Tirer</span><span>Clic gauche</span></div>
+      <div class="keymap"><span>Zoom</span><span>Molette</span></div>
+      <div class="keymap"><span>Retenir son souffle</span><span>Maj</span></div>
+      <div class="keymap"><span>Pause</span><span>Échap</span></div>
+      <div class="keymap"><span>Aller à un niveau (menu)</span><span>1 – 6</span></div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-title">Commandes PvP (remappables)</div>
+      <div class="keymap keybind-row"><span>Avancer (contre-tueur)</span><span class="keybind-key" data-action="forward"></span></div>
+      <div class="keymap keybind-row"><span>Reculer</span><span class="keybind-key" data-action="back"></span></div>
+      <div class="keymap keybind-row"><span>Gauche</span><span class="keybind-key" data-action="left"></span></div>
+      <div class="keymap keybind-row"><span>Droite</span><span class="keybind-key" data-action="right"></span></div>
+      <div class="keymap keybind-row"><span>Émote (danser / saluer)</span><span class="keybind-key" data-action="emote"></span></div>
+      <div class="keymap keybind-row"><span>Capacité sniper 1 — Appel</span><span class="keybind-key" data-action="ability1"></span></div>
+      <div class="keymap keybind-row"><span>Capacité sniper 2 — PNJ collant</span><span class="keybind-key" data-action="ability2"></span></div>
+      <div class="keymap keybind-row"><span>Capacité sniper 3 — Alarme</span><span class="keybind-key" data-action="ability3"></span></div>
+      <button class="btn-small" id="btn-pvpkeys-reset">RÉINITIALISER</button>
+    </div>
+
+    <button class="btn" id="btn-settings-back">RETOUR</button>
+  </div>
+
+  <div id="upgrade-screen">
+    <div class="menu-title" style="font-size:28px;">AMÉLIORATIONS</div>
+    <div id="level-info"></div>
+    <div id="upgrade-points"></div>
+    <div id="upgrade-grid"></div>
+    <button class="btn" id="btn-next-level">MISSION SUIVANTE →</button>
+  </div>
+
+  <div id="level-clear">
+    <div class="menu-title" id="lc-title" style="font-size:28px;color:#4eff4e;">MISSION ACCOMPLIE</div>
+    <div id="lc-score" class="menu-sub"></div>
+    <button class="btn" id="btn-upgrades">AMÉLIORER →</button>
+    <button class="btn" id="btn-see-ending" style="display:none;border-color:#ffd44e;color:#ffd44e;">VOIR LA FIN →</button>
+  </div>
+
+  <div id="game-over">
+    <div class="menu-title" style="font-size:28px;color:#ff4444;">MISSION ÉCHOUÉE</div>
+    <div class="menu-sub" id="game-over-reason">Vous avez été repéré</div>
+    <button class="btn" id="btn-retry">RECOMMENCER</button>
+    <button class="btn btn-danger" id="btn-menu">MENU PRINCIPAL</button>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

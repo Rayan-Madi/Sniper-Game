@@ -1,0 +1,21 @@
+# Dépendances
+node_modules/
+server/node_modules/
+
+# Build
+dist/
+release/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Divers
+.claude/
+*.local
