@@ -753,12 +753,14 @@ export function buildMapParty() {
   scene.background = new THREE.Color(0x0a0a14)
   scene.fog = new THREE.Fog(0x0a0a14, 60, 130)
 
-  // Sol rue entre les deux immeubles
-  plane(80, 80, 0x1a1a1a)
+  // Sol rue entre les deux immeubles (légèrement sous 0 pour éviter le z-fight
+  // avec le parquet de la salle, qui est calé pile au niveau des pieds y=0)
+  plane(80, 80, 0x1a1a1a, -0.05)
 
   // ── SALLE DE FÊTE — pièce OUVERTE côté caméra (sinon on ne voit rien) ──
-  // Sol parquet (z -25 → -16)
-  box(30, 0.3, 9, 0x4a3520, 0, 0.15, -20.5)
+  // Sol parquet : SURFACE à y=0 (les PNJ ont les pieds à 0). Auparavant la
+  // surface était à 0,3 → tout le monde (et les meubles) semblait enfoncé.
+  box(30, 0.2, 9, 0x4a3520, 0, -0.1, -20.5)
   // Plafond
   box(30, 0.3, 9, 0x15101e, 0, 8, -20.5)
   // Mur du fond
@@ -806,6 +808,16 @@ export function buildMapParty() {
   box(1.8, 0.35, 0.9, 0x2a2a2a, -8, 0.17, -20.5)
   box(1.8, 0.35, 0.9, 0x2a2a2a,  8, 0.17, -20.5)
 
+  // Meubles BAS (canapés + dossiers, tables) : trop bas pour être détectés
+  // automatiquement par box() (seuil h ≥ 1,1) → on les déclare explicitement
+  // comme obstacles pour que les PNJ ne les traversent plus.
+  for (const [ox, oz, ow, od] of [
+    [-8, -22.1, 4, 1.8], [8, -22.1, 4, 1.8],       // canapés (assise + dossier)
+    [-8, -20.5, 1.8, 0.9], [8, -20.5, 1.8, 0.9],   // tables basses
+  ]) {
+    obstacles.push({ minX: ox - ow / 2, maxX: ox + ow / 2, minZ: oz - od / 2, maxZ: oz + od / 2 })
+  }
+
   // Bar côté gauche
   box(5, 1.2, 1.2, 0x2a1a10, -10, 0.6, -19)
   box(5.2, 0.1, 1.3, 0x3a2810, -10, 1.26, -19) // comptoir
@@ -848,7 +860,7 @@ export function buildMapParty() {
     new THREE.MeshBasicMaterial({ color: 0x220033, transparent: true, opacity: 0.6 })
   )
   danceFloor.rotation.x = -Math.PI / 2
-  danceFloor.position.set(0, 0.46, -20); add(danceFloor)
+  danceFloor.position.set(0, 0.03, -20); add(danceFloor)   // au ras du parquet (y≈0)
   // Carreaux de piste
   for (let dx = -4; dx <= 4; dx += 2) {
     for (let dz = -2; dz <= 2; dz += 2) {
@@ -856,7 +868,7 @@ export function buildMapParty() {
         const tile = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.8),
           new THREE.MeshBasicMaterial({ color: 0x440055, transparent: true, opacity: 0.5 }))
         tile.rotation.x = -Math.PI / 2
-        tile.position.set(dx, 0.47, -20 + dz); add(tile)
+        tile.position.set(dx, 0.04, -20 + dz); add(tile)
       }
     }
   }
