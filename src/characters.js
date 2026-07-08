@@ -114,6 +114,17 @@ export function spawnCharacter(type, opts = {}) {
     if (o.isMesh) {
       o.castShadow = true; o.frustumCulled = false
       if (tint != null) { o.material = o.material.clone(); o.material.color = new THREE.Color(tint) }
+      // Certains .glb (ex: gangster_man_02) exportent le matériau du CORPS en
+      // "transparent" alors qu'il est 100% opaque → il rend en alpha-blending et
+      // le cou/le torse paraissent fantomatiques. On force l'opacité pour tout
+      // matériau marqué transparent mais dont l'opacité vaut 1 (les cheveux, eux,
+      // sont à opacity 0 → réellement transparents, on n'y touche pas).
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      for (const m of mats) {
+        if (m && m.transparent && m.opacity >= 0.99) {
+          m.transparent = false; m.depthWrite = true; m.needsUpdate = true
+        }
+      }
     }
   })
 
