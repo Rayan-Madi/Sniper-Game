@@ -12,7 +12,7 @@ const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve()
 
 const FAKE = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] }
 beforeEach(() => { vi.useFakeTimers(FAKE); document.body.innerHTML = '<div id="briefing-root" hidden></div>' })
-afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; document.head.innerHTML = '' })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.body.innerHTML = ''; document.head.innerHTML = '' })
 
 describe('playCinematic', () => {
   it('monte la scène, l\'affiche, puis la démonte et appelle onDone une fois à la fin', async () => {
@@ -79,5 +79,74 @@ describe('playCinematic', () => {
 
   it('refuse une cinématique inconnue', async () => {
     await expect(playCinematic('nope', {})).rejects.toThrow(/inconnue/)
+  })
+
+  // Tolérance aux pannes : une scène cassée ne doit jamais bloquer le jeu derrière un écran noir.
+  it.each([
+    ['dont start() lève une erreur', { ...fakeScene, css: '.t2 .x { color: blue }', start() { throw new Error('boum') } }],
+    ['sans #st ni #scene (le kit ne peut pas se monter)', { ...fakeScene, css: '.t2 .x { color: blue }', html: '<div></div>' }],
+  ])('scène %s : démontage complet, onDone une fois, aucune erreur propagée', async (_nom, scene) => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    registerScene('cassee', async () => scene)
+    const onDone = vi.fn()
+    const handle = await playCinematic('cassee', { onDone })
+    const root = document.getElementById('briefing-root')
+    expect(handle.error).toBeInstanceOf(Error)
+    expect(logged).toHaveBeenCalled()
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(root.hidden).toBe(true)
+    expect(root.innerHTML).toBe('')
+    expect(isCinematicPlaying()).toBe(false)
+    expect([...document.head.querySelectorAll('style')].some(s => s.textContent.includes('.t2 .x'))).toBe(false)
+    // plus aucun écouteur : la touche n'est ni retenue ni comptée
+    const key = new KeyboardEvent('keydown', { code: 'Escape', bubbles: true, cancelable: true })
+    document.dispatchEvent(key)
+    root.click()
+    expect(key.defaultPrevented).toBe(false)
+    expect(handle.stop).not.toThrow()
+    expect(handle.cancel).not.toThrow()
+    await vi.advanceTimersByTimeAsync(5000); await flush()
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('un démontage qui échoue n\'empêche pas onDone d\'être appelé', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    registerScene('fragile', async () => ({ ...fakeScene, start(K) { K.destroy = () => { throw new Error('destroy cassé') }; throw new Error('boum') } }))
+    const onDone = vi.fn()
+    const handle = await playCinematic('fragile', { onDone })
+    expect(handle.error).toBeInstanceOf(Error)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  // La dernière demande gagne, même quand les chargements se terminent dans le désordre.
+  it.each([
+    ['la première se charge avant la seconde', true],
+    ['la seconde se charge avant la première', false],
+  ])('deux demandes sans attendre : seule la seconde est montée (%s)', async (_nom, firstLoadsFirst) => {
+    const sceneA = { ...fakeScene, stClass: 'st ta', css: '.ta .x { color: red }', start(K) { K.run({ beats: [{ min: 3000 }] }) } }
+    const sceneB = { ...fakeScene, stClass: 'st tb', css: '.tb .x { color: red }' }
+    let loadA, loadB
+    registerScene('lenteA', () => new Promise(r => { loadA = () => r(sceneA) }))
+    registerScene('lenteB', () => new Promise(r => { loadB = () => r(sceneB) }))
+    const first = vi.fn(), second = vi.fn()
+    const pA = playCinematic('lenteA', { onDone: first })
+    const pB = playCinematic('lenteB', { onDone: second })
+    if (firstLoadsFirst) { loadA(); loadB() } else { loadB(); loadA() }
+    const [hA, hB] = await Promise.all([pA, pB])
+    await flush()
+    const root = document.getElementById('briefing-root')
+    expect(hA.kit).toBeNull()
+    expect(hB.kit).not.toBeNull()
+    expect(root.querySelector('.st.tb #scene')).not.toBeNull()
+    expect(root.querySelector('.ta')).toBeNull()
+    expect([...document.head.querySelectorAll('style')].some(s => s.textContent.includes('.ta .x'))).toBe(false)
+    // la scène abandonnée n'a laissé aucun minuteur : tout s'arrête avec la seconde
+    await vi.advanceTimersByTimeAsync(1000); await flush()
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(root.hidden).toBe(true)
+    expect(isCinematicPlaying()).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
