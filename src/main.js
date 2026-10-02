@@ -40,6 +40,9 @@ let statShots = 0, statHits = 0, statStart = 0, statAlerts = 0
 let timeScale = 1
 let killcamActive = false
 
+// Jeton de mission : incrémenté à chaque lancement, il neutralise les minuteurs de fin d'une mission abandonnée
+let missionToken = 0
+
 // Choix moral (cadenas du conteneur, niveau du port)
 let moralLockMesh = null, moralLockBox = null, moralLockLight = null
 
@@ -286,6 +289,7 @@ function cinematicAudio() {
 
 // Briefing de la mission au premier essai seulement (ou sur demande), puis le niveau.
 function launchLevel(n, { forceBriefing = false } = {}) {
+  missionToken++
   menuEl.style.display = 'none'
   upgradeEl.style.display = 'none'
   gameOverEl.style.display = 'none'
@@ -301,6 +305,7 @@ function launchLevel(n, { forceBriefing = false } = {}) {
 
   const idx = (n - 1) % 6
   if (!forceBriefing && upgradeState.briefingSeen[idx]) { startLevel(n); return }
+  stopMissionAmbience()   // REVOIR depuis la pause : la nappe de la mission en cours ne doit pas couvrir le briefing
   gamePhase = 'briefing'
   clock.getDelta()
   cinematic('m' + (idx + 1), {
@@ -782,7 +787,9 @@ function killCivilian(npc) {
   fleeNearby(npc.mesh.position, 25)
   playCivilKill()
   addKillFeed('⚠ CIVIL ABATTU — MISSION ÉCHOUÉE', true)
+  const token = missionToken
   setTimeout(() => {
+    if (token !== missionToken) return   // mission relancée entre-temps
     document.getElementById('game-over-reason').textContent = 'Vous avez éliminé un civil innocent'
     playGameOver()
     triggerGameOver()
@@ -921,10 +928,11 @@ function startKillcam() {
       font-family:'Courier New',monospace;font-size:30px;letter-spacing:0.45em;
       color:#ff5544;text-shadow:0 0 24px rgba(255,40,20,0.7);">CIBLE NEUTRALISÉE</div>`
   document.body.appendChild(ov)
+  const token = missionToken
   setTimeout(() => {
     timeScale = 1
     ov.remove()
-    triggerLevelClear()
+    if (token === missionToken) triggerLevelClear()   // mission relancée entre-temps : pas d'écran de réussite
   }, 1500)
 }
 
@@ -990,7 +998,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Shift') holdBreathKey = true
 
   // Échap : pause / reprise
-  if (e.key === 'Escape') {
+  if (e.key === 'Escape' && !e.repeat) {
     if (gamePhase === 'playing') pauseGame()
     else if (gamePhase === 'paused') {
       // Si on est dans les paramètres, on les ferme d'abord
@@ -1000,6 +1008,8 @@ document.addEventListener('keydown', e => {
   }
 
   // Raccourci de test : touches 1-6 depuis le menu/écrans pour sauter à un niveau
+  // (pas pendant une saisie : les codes PvP contiennent des chiffres)
+  if (e.target.closest && e.target.closest('input, textarea')) return
   if (gamePhase !== 'playing' && gamePhase !== 'paused' && gamePhase !== 'briefing' && gamePhase !== 'cinematic' && e.key >= '1' && e.key <= '6') {
     upgradeState.currentLevel = parseInt(e.key)
     launchLevel(upgradeState.currentLevel)
