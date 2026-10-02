@@ -6,12 +6,19 @@ export const UPGRADES = {
   silencer:  { name: 'Silencieux',  desc: 'Tir raté n\'alerte pas les gardes',        max: 2, cost: [2,3] },
 }
 
+const NO_BRIEFING_SEEN = () => [false, false, false, false, false, false]
+
 export const state = {
   levels: { velocity: 0, stability: 0, coldblood: 0, zoom: 0, silencer: 0 },
   points: 0,
   totalScore: 0,
   currentLevel: 1,
+  freedVictims: false,              // choix moral du port (mission 3) : victimes libérées ?
+  briefingSeen: NO_BRIEFING_SEEN(), // briefing de chaque mission déjà vu → pas rejoué au réessai
 }
+
+export function markBriefingSeen(index) { state.briefingSeen[index] = true }
+export function resetCampaignFlags() { state.freedVictims = false; state.briefingSeen = NO_BRIEFING_SEEN() }
 
 // ─── Sauvegarde de progression (mode histoire) ─────────────────────
 const SAVE_KEY = 'sniper-save'
@@ -23,7 +30,8 @@ export function saveProgress() {
       points: state.points,
       totalScore: state.totalScore,
       currentLevel: state.currentLevel,
-      freed: !!window.__freedVictims,
+      freedVictims: state.freedVictims,
+      briefingSeen: state.briefingSeen,
     }))
   } catch (e) { /* stockage indisponible */ }
 }
@@ -36,7 +44,8 @@ export function loadProgress() {
     state.points = d.points || 0
     state.totalScore = d.totalScore || 0
     state.currentLevel = d.currentLevel || 1
-    if (d.freed) window.__freedVictims = true
+    state.freedVictims = !!(d.freedVictims ?? d.freed)
+    state.briefingSeen = NO_BRIEFING_SEEN().map((_, i) => !!(d.briefingSeen && d.briefingSeen[i]))
     return true
   } catch (e) { return false }
 }
@@ -47,7 +56,7 @@ export function resetProgress() {
   state.points = 0
   state.totalScore = 0
   state.currentLevel = 1
-  window.__freedVictims = false
+  resetCampaignFlags()
 }
 
 export function getStats() {
