@@ -60,7 +60,7 @@ const MAX_LEVEL = 6        // dernier niveau (la fête)
 
 // ─── DOM ───────────────────────────────────────────────────────────
 const menuEl       = document.getElementById('menu')
-const hudEl        = document.getElementById('hud')
+const hudEl        = document.getElementById('game-hud')
 const upgradeEl    = document.getElementById('upgrade-screen')
 const gameOverEl   = document.getElementById('game-over')
 const levelClearEl = document.getElementById('level-clear')
@@ -422,7 +422,7 @@ function startLevel(n) {
   }
 
   // Dossier d'indices (cible cachée)
-  const dossier = document.getElementById('dossier')
+  const dossier = document.getElementById('target-dossier')
   if (hidden && dossier) {
     document.getElementById('dossier-text').textContent = hidden.clue
     dossier.style.display = 'block'

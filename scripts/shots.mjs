@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 const [id, ...instants] = process.argv.slice(2)
 if (!id || !instants.length) { console.error('Usage : node scripts/shots.mjs <id> <ms> [<ms>…]'); process.exit(1) }
@@ -15,7 +15,8 @@ const BASE = process.env.BASE_URL || (MAQ ? 'http://localhost:5193/' : 'http://l
 const page = MAQ ? (id === 'epilogue' ? 'epilogue.html' : `briefing-${id}.html`) : ''
 mkdirSync('shots', { recursive: true })
 for (const ms of instants) {
-  const out = join('shots', `${MAQ ? 'maquette-' : ''}${id}-${ms}${process.env.PARAMS ? '-' + process.env.PARAMS.replace(/[^a-z0-9]+/gi, '_') : ''}.png`)
+  // Chemin absolu pour --screenshot= : sous Windows, Chrome résout un chemin relatif depuis son propre dossier.
+  const out = resolve('shots', `${MAQ ? 'maquette-' : ''}${id}-${ms}${process.env.PARAMS ? '-' + process.env.PARAMS.replace(/[^a-z0-9]+/gi, '_') : ''}.png`)
   const profile = mkdtempSync(join(tmpdir(), 'shots-'))
   const url = MAQ
     ? `${BASE}${page}?freeze=${ms}${process.env.PARAMS ? '&' + process.env.PARAMS : ''}`
