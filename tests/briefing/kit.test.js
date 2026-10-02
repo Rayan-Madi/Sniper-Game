@@ -161,15 +161,27 @@ describe('kit des cinématiques', () => {
       expect(audio.ctx.createGain).toHaveBeenCalledTimes(1)   // le seul nœud : le maître
     })
 
-    it('destroy() débranche le maître et ne laisse aucun minuteur, même musique en cours', () => {
+    it('destroy() coupe le son en fondu, puis débranche le maître ~300 ms plus tard sans laisser de minuteur', async () => {
       const audio = fakeAudio('running')
       const K = createKit({ root: mountScene(), audio })
       K.music('tense')
       expect(audio.ctx.createOscillator).toHaveBeenCalled()
       K.destroy()
       const master = audio.ctx.createGain.mock.results[0].value
+      expect(master.gain.setTargetAtTime).toHaveBeenCalledWith(0.0001, 0, 0.06)   // fondu, pas de coupure nette
+      expect(master.disconnect).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(300)
       expect(master.disconnect).toHaveBeenCalled()
       expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('après destroy(), plus aucun son n\'est produit pendant le fondu', async () => {
+      const audio = fakeAudio('running')
+      const K = createKit({ root: mountScene(), audio })
+      K.destroy()
+      K.snd.boom(); K.music('tense')
+      expect(audio.ctx.createOscillator).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(300)
     })
   })
 })

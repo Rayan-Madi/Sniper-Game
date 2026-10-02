@@ -12,8 +12,9 @@ const SCENES = {
   m6: () => import('./scenes/m6.js'),
   epilogue: () => import('./scenes/epilogue.js'),
 }
-const SKIP_KEYS = new Set(['Escape', 'Enter', 'Space'])
+const SKIP_KEYS = new Set(['Escape', 'Enter', 'NumpadEnter', 'Space'])
 const FADE_MS = 400
+const SKIP_GRACE_MS = 500   // délai de double-clic de Windows : le 2e clic du bouton de lancement ne doit pas passer la scène
 let current = null
 let generation = 0   // jeton de demande : seule la dernière cinématique demandée est montée
 
@@ -30,7 +31,14 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
   const load = SCENES[id]
   if (!load) throw new Error('cinématique inconnue : ' + id)
   const ticket = ++generation
-  const mod = await load()
+  // fond noir dès le chargement : l'image 3D figée du jeu ne doit pas se voir en attendant la scène
+  if (!current) root.hidden = false
+  let mod
+  try { mod = await load() } catch (error) {
+    // seule la dernière demande, sans cinématique en cours, rend la main au jeu ; l'enveloppeur de main.js enchaîne
+    if (ticket === generation && !current) root.hidden = true
+    throw error
+  }
   // une demande plus récente est arrivée pendant le chargement : la dernière gagne, celle-ci s'efface sans bruit
   if (ticket !== generation) return { kit: null, stop() {}, cancel() {} }
 
@@ -38,7 +46,7 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
   if (current) current.cancel()
   ensureKitStyle()
 
-  let K = null, sceneStyle = null, ended = false, fadeTimer = 0
+  let K = null, sceneStyle = null, ended = false, fadeTimer = 0, readyAt = 0
   // le démontage doit marcher même si le montage a échoué à mi-chemin
   const teardown = () => {
     document.removeEventListener('keydown', onKey, true)
@@ -60,12 +68,15 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
     root.classList.add('k-leaving')
     fadeTimer = setTimeout(finish, FADE_MS)
   }
+  // passage par le joueur (touche, clic) : ignoré pendant le délai de grâce ; handle.stop reste immédiat
+  const playerSkip = () => { if (performance.now() >= readyAt) skip() }
   const onKey = e => {
     if (!SKIP_KEYS.has(e.code)) return
-    e.preventDefault(); e.stopImmediatePropagation()
-    skip()
+    e.preventDefault(); e.stopImmediatePropagation()   // la touche n'atteint jamais le jeu, même ignorée
+    if (e.repeat) return                               // touche maintenue : jamais un passage
+    playerSkip()
   }
-  const onClick = () => skip()
+  const onClick = () => playerSkip()
   const handle = { kit: null, stop: skip, cancel: () => { if (!ended) { ended = true; teardown() } } }
 
   try {
@@ -78,6 +89,7 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
     document.addEventListener('keydown', onKey, true)
     root.addEventListener('click', onClick)
     current = handle
+    readyAt = performance.now() + SKIP_GRACE_MS
     const search = params ? '?' + new URLSearchParams(params).toString() : ''
     mod.start(K, { search })
     K.finished.then(finish)

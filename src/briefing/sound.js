@@ -93,7 +93,11 @@ export function createSound(audio, { at, every, stopEvery }) {
 
   function destroy() {
     stopVoice(); music(null); dead = true
-    if (master) { try { master.disconnect() } catch (e) { /* déjà débranché */ } }
+    if (!master) return
+    // fondu court plutôt que coupure nette ; le débranchement passe par un minuteur natif, car ceux du kit sont détruits
+    const m = master
+    try { m.gain.setTargetAtTime(0.0001, c.currentTime, 0.06) } catch (e) { /* contexte fermé */ }
+    setTimeout(() => { try { m.disconnect() } catch (e) { /* déjà débranché */ } }, 300)
   }
 
   return {
