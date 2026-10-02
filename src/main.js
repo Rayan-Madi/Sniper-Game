@@ -2,15 +2,16 @@ import * as THREE from 'three'
 import { initScene, scene, camera, renderer } from './scene.js'
 import { showScope, hideScope, isVisible, setZoom, getZoom, setStress, setSteady, updateTremble, getTrembleOffset, drawScope } from './scope.js'
 import { NPC, STATES } from './npc.js'
-import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress } from './upgrades.js'
+import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
 import { MAP_BUILDERS, updateMapAmbient, makeJeep } from './maps.js'
-import { startIntroCinematic, startLevelCinematic, startEndingCinematic, updateCinematic, isCinematicActive } from './cinematic3d.js'
-import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience } from './audio.js'
+import { startIntroCinematic, updateCinematic, isCinematicActive } from './cinematic3d.js'
+import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
 import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys } from './settings.js'
 import { preloadCharacters } from './characters.js'
 import { initMultiplayerMenu } from './pvp.js'
+import { playCinematic } from './briefing/index.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -106,6 +107,7 @@ document.getElementById('btn-start').onclick     = () => {
   }
 }
 document.getElementById('btn-retry').onclick     = () => launchLevel(upgradeState.currentLevel)
+document.getElementById('btn-rebrief').onclick   = () => launchLevel(upgradeState.currentLevel, { forceBriefing: true })
 document.getElementById('btn-menu').onclick      = () => showMenu()
 document.getElementById('btn-upgrades').onclick  = () => showJournal(() => showUpgradeScreen())
 
@@ -126,7 +128,7 @@ function showJournal(onDone) {
   const ov = document.createElement('div')
   ov.style.cssText = `position:fixed;inset:0;z-index:170;display:flex;align-items:center;justify-content:center;
     background:rgba(0,0,0,0.9);font-family:'Courier New',monospace;`
-  const freedNote = (lvl === 3 && window.__freedVictims)
+  const freedNote = (lvl === 3 && upgradeState.freedVictims)
     ? `<div style="color:#7ab87a;margin-top:14px;">P.S. — Je les ai vus courir hors du conteneur. Libres.</div>` : ''
   ov.innerHTML = `
     <div style="background:linear-gradient(160deg,#d8cfb8,#c9bfa4);color:#2a241c;max-width:480px;width:86%;
@@ -154,13 +156,18 @@ document.getElementById('btn-see-ending').onclick = () => {
   levelClearEl.style.display = 'none'
   hudEl.style.display = 'none'
   clearEntities()
-  gamePhase = 'cinematic'
+  gamePhase = 'briefing'
   clock.getDelta()
-  startEndingCinematic(() => {
-    // Réinitialise la progression et revient au menu
-    upgradeState.currentLevel = 1
-    saveProgress()
-    showMenu()
+  cinematic('epilogue', {
+    audio: cinematicAudio(),
+    params: { port: upgradeState.freedVictims ? 'libres' : 'enfermes' },
+    onDone: () => {
+      // Nouvelle campagne : retour à la mission 1, choix du port et briefings vus remis à zéro
+      upgradeState.currentLevel = 1
+      resetCampaignFlags()
+      saveProgress()
+      showMenu()
+    },
   })
 }
 
@@ -173,6 +180,10 @@ document.getElementById('btn-resume').onclick  = () => resumeGame()
 document.getElementById('btn-restart').onclick = () => {
   pauseEl.style.display = 'none'
   launchLevel(upgradeState.currentLevel)
+}
+document.getElementById('btn-rebrief-pause').onclick = () => {
+  pauseEl.style.display = 'none'
+  launchLevel(upgradeState.currentLevel, { forceBriefing: true })
 }
 document.getElementById('btn-pause-menu').onclick = () => { pauseEl.style.display = 'none'; showMenu() }
 
@@ -262,8 +273,19 @@ function closeSettings() {
 }
 
 // ─── Flow ──────────────────────────────────────────────────────────
-function launchLevel(n) {
-  // Cinématique 3D de la cible, puis démarrage du niveau
+// playCinematic ne doit jamais bloquer la partie : si la scène ne se charge pas, on enchaîne quand même.
+function cinematic(id, opts) {
+  playCinematic(id, opts).catch(err => { console.error('[cinématique]', err); opts.onDone() })
+}
+
+function cinematicAudio() {
+  const ctx = audioContext()
+  if (ctx.state === 'suspended') ctx.resume()
+  return { ctx, dest: masterNode() }
+}
+
+// Briefing de la mission au premier essai seulement (ou sur demande), puis le niveau.
+function launchLevel(n, { forceBriefing = false } = {}) {
   menuEl.style.display = 'none'
   upgradeEl.style.display = 'none'
   gameOverEl.style.display = 'none'
@@ -274,12 +296,17 @@ function launchLevel(n) {
   hideScope()
   releaseMouse()
 
-  // Nettoie la scène AVANT la cinématique (sinon résidus du niveau précédent)
+  // Nettoie la scène AVANT le briefing (sinon résidus du niveau précédent)
   clearEntities()
 
-  gamePhase = 'cinematic'
+  const idx = (n - 1) % 6
+  if (!forceBriefing && upgradeState.briefingSeen[idx]) { startLevel(n); return }
+  gamePhase = 'briefing'
   clock.getDelta()
-  startLevelCinematic(n, () => startLevel(n))
+  cinematic('m' + (idx + 1), {
+    audio: cinematicAudio(),
+    onDone: () => { markBriefingSeen(idx); saveProgress(); clock.getDelta(); startLevel(n) },
+  })
 }
 
 function clearConvoy() {
@@ -307,6 +334,7 @@ function startLevel(n) {
   if (moralLockMesh) { scene.remove(moralLockMesh); moralLockMesh = null; moralLockBox = null; moralLockLight = null }
 
   currentLevelData = getLevel(n)
+  if (((n - 1) % 6) + 1 === 3) upgradeState.freedVictims = false   // chaque essai du port repart d'un choix vierge
 
   // Choisir la map selon le niveau (cyclique si > 5)
   const mapIdx = (n - 1) % MAP_BUILDERS.length
@@ -702,7 +730,7 @@ function resolveBullet() {
     scene.remove(moralLockMesh)
     const lockPos = moralLockMesh.position.clone()
     moralLockMesh = null; moralLockBox = null
-    window.__freedVictims = true
+    upgradeState.freedVictims = true
     score += 150
     addKillFeed('🔓 Conteneur ouvert — ils s\'échappent... (+150 pts)')
     // trois silhouettes s'enfuient du conteneur
@@ -972,7 +1000,7 @@ document.addEventListener('keydown', e => {
   }
 
   // Raccourci de test : touches 1-6 depuis le menu/écrans pour sauter à un niveau
-  if (gamePhase !== 'playing' && gamePhase !== 'paused' && e.key >= '1' && e.key <= '6') {
+  if (gamePhase !== 'playing' && gamePhase !== 'paused' && gamePhase !== 'briefing' && gamePhase !== 'cinematic' && e.key >= '1' && e.key <= '6') {
     upgradeState.currentLevel = parseInt(e.key)
     launchLevel(upgradeState.currentLevel)
   }
@@ -1032,6 +1060,7 @@ function loop() {
   if (campaignPaused) return
   // timeScale < 1 pendant la kill-cam (ralenti)
   const dt = Math.min(clock.getDelta(), 0.05) * timeScale
+  if (gamePhase === 'briefing') return   // cinématique en motion design : pas de rendu WebGL
 
   if (gamePhase === 'cinematic') {
     updateCinematic(dt)
@@ -1162,3 +1191,19 @@ loop()
 
 // Le menu principal s'affiche directement au chargement.
 // La cinématique 3D d'intro se joue après le clic sur COMMENCER (voir btn-start).
+
+// Développement : ?cine=m3&freeze=12000&port=libres joue (ou fige) une cinématique directement.
+if (import.meta.env.DEV) {
+  const q = new URLSearchParams(location.search)
+  if (q.has('cine')) {
+    menuEl.style.display = 'none'
+    gamePhase = 'briefing'
+    const params = {}
+    for (const [k, v] of q) if (k !== 'cine' && k !== 'freeze') params[k] = v
+    cinematic(q.get('cine'), {
+      freeze: q.has('freeze') ? +q.get('freeze') : null,
+      params,
+      onDone: () => showMenu(),
+    })
+  }
+}

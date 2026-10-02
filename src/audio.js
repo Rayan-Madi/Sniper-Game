@@ -351,3 +351,7 @@ export function stopMissionAmbience() {
     ambGain.gain.linearRampToValueAtTime(0.0001, c.currentTime + 1.2)
   }
 }
+
+// Contexte et nœud maître partagés : les cinématiques s'y branchent pour suivre le volume du jeu.
+export function audioContext() { return getCtx() }
+export function masterNode() { return out() }
