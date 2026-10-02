@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Briefing M1 — Markov</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  /* M1 — Markov, le marché : l'écoute téléphonique */
+  .m1 .dossier.side { left: 2.5cqw; width: 53cqw; }
+  .m1 .stamp { left: 2.6cqw; top: 13cqw; }
+  .m1 .evp:nth-child(1) { --r: -2.5deg } .m1 .evp:nth-child(2) { --r: 1.8deg } .m1 .evp:nth-child(3) { --r: -1.2deg }
+  .m1 #plan { top: 7.1cqw; left: 58cqw; width: 39.5cqw; height: 40.5cqw; }
+  .m1 .route { stroke-dasharray: 140; stroke-dashoffset: 140; }
+  .m1 .route.on { transition: stroke-dashoffset 1.1s ease-in-out; stroke-dashoffset: 0; }
+  .m1 .dist { position: absolute; font-size: 2.2cqw; color: #f0c040; left: 17cqw; top: 29.5cqw; opacity: 0; transition: opacity .2s; }
+  .m1 .dist.on { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="st m1" id="st">
+    <div class="bg"></div>
+    <div class="scene" id="scene">
+
+      <div class="icpt" id="icpt">
+        <div class="ih"><span class="rec">●</span><span>INTERCEPTION · LIGNE 06 · 21:47</span></div>
+        <div class="wave" id="wave"></div>
+        <div class="trans" id="trans"></div>
+        <div class="who">SOURCE : MARKOV, A. — DURÉE 00:04</div>
+      </div>
+
+      <div class="dossier" id="dossier">
+        <div class="dtab">DOSSIER 01</div>
+        <div class="drow">
+          <div class="photo" id="photo">
+            <img src="img/portrait-gangster-man-01.png" alt="">
+            <div class="tint"></div><div class="lines"></div>
+            <div class="brk" id="brk"><span></span></div>
+            <div class="idtag" id="idtag">IDENTIFIÉ · 97 %</div>
+            <div class="cam"><b>●</b> CAM 03 · 21:52:07</div>
+          </div>
+          <div class="fields">
+            <div class="fl" data-reset data-k="NOM ....... " data-v="MARKOV"></div>
+            <div class="fl" data-reset data-k="ACTIVITÉ .. " data-v="TRAITE HUMAINE"></div>
+            <div class="fl" data-reset data-k="VU ........ " data-v="LE MARCHÉ · 22 H"></div>
+            <div class="fl" data-reset data-k="SIGNE ..... " data-v="COSTUME BLEU NUIT"></div>
+            <div class="fl"><span class="k">ESCORTE ... </span><span class="redact" id="redact"></span></div>
+          </div>
+        </div>
+        <div class="stamp" id="stamp">CIBLE</div>
+        <div class="ev-h" id="evh">PIÈCES À CONVICTION — 3 VICTIMES CONNUES</div>
+        <div class="ev">
+          <div class="evp" id="ev1"><div class="tape"></div><div class="pic"><img src="img/portrait-crime-1.png" alt=""><div class="flash"></div></div><div class="cap" data-reset data-c="#1 · 14/08 · QUAI 7"></div></div>
+          <div class="evp" id="ev2"><div class="tape"></div><div class="pic"><img src="img/portrait-crime-2.png" alt=""><div class="flash"></div></div><div class="cap" data-reset data-c="#2 · 02/09 · PARKING P3"></div></div>
+          <div class="evp" id="ev3"><div class="tape"></div><div class="pic"><img src="img/portrait-crime-3.png" alt=""><div class="flash"></div></div><div class="cap" data-reset data-c="#3 · 11/09 · RUE KARSKI"></div></div>
+        </div>
+      </div>
+
+      <div class="panel" id="plan">
+        <div class="ph">PLAN · LE MARCHÉ</div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs><clipPath id="pinclip"><circle cx="0" cy="0" r="5.2"/></clipPath></defs>
+          <g fill="none" stroke="rgba(215,220,207,.45)" stroke-width=".45">
+            <path class="draw" d="M4 44 H96 M4 56 H96 M30 8 V44 M38 8 V44 M62 56 V96 M70 56 V96"/>
+            <path class="draw" d="M6 10 H26 V40 H6Z M42 10 H94 V40 H42Z M6 60 H58 V94 H6Z M74 60 H94 V94 H74Z"/>
+          </g>
+          <g class="fadein" fill="rgba(215,220,207,.14)">
+            <rect x="44" y="30" width="5" height="3"/><rect x="51" y="30" width="5" height="3"/><rect x="58" y="30" width="5" height="3"/><rect x="65" y="30" width="5" height="3"/>
+            <rect x="44" y="36" width="5" height="3"/><rect x="51" y="36" width="5" height="3"/><rect x="58" y="36" width="5" height="3"/><rect x="65" y="36" width="5" height="3"/>
+            <circle cx="16" cy="25" r="3.2"/>
+          </g>
+          <path class="route" id="route" d="M84 90 V50 H53 V41" fill="none" stroke="#f0c040" stroke-width=".7"/>
+          <g class="pop" id="post">
+            <rect x="74" y="60" width="20" height="34" fill="rgba(240,192,64,.07)" stroke="#f0c040" stroke-width=".4" stroke-dasharray="1.2 1"/>
+            <text x="76" y="65" font-size="3" fill="#f0c040" font-family="Courier New">TOIT</text>
+            <rect x="81.5" y="87.5" width="5" height="5" fill="none" stroke="#f0c040" stroke-width=".6"/><circle cx="84" cy="90" r="1" fill="#f0c040"/>
+            <text x="66" y="98" font-size="3.2" fill="#f0c040" font-family="Courier New">TON POSTE</text>
+          </g>
+          <g transform="translate(53 34)"><g class="pop" id="pin">
+            <circle class="pulse" cx="0" cy="0" r="5.6" fill="none" stroke="#e04848" stroke-width=".6"/>
+            <image href="img/portrait-gangster-man-01.png" x="-6" y="-4.6" width="12" height="15" clip-path="url(#pinclip)" style="filter: grayscale(1) contrast(1.3)"/>
+            <circle cx="0" cy="0" r="5.4" fill="none" stroke="#e04848" stroke-width=".9"/>
+            <text x="7.5" y="1.2" font-size="3.4" fill="#e04848" font-family="Courier New">MARKOV</text>
+          </g></g>
+        </svg>
+        <div class="dist" id="dist">0 m</div>
+      </div>
+
+      <div class="radio" id="radio"></div>
+      <div class="sub" id="sub"></div>
+      <div class="title" id="title"><div class="t1">MISSION 01</div><div class="ln"></div><div class="t2">LE MARCHÉ</div></div>
+    </div>
+  </div>
+</div>
+<script src="kit.js"></script>
+<script>
+  const typeField = (K, f) => { f.innerHTML = '<span class="k"></span><span class="v"></span>'; f.querySelector('.k').textContent = f.dataset.k; K.type(f.querySelector('.v'), f.dataset.v, 320, true) }
+  K.run({
+    music: 'tense',
+    beats: [
+      { label: 'interception', min: 900, cues: [[100, K => K.crt()], [550, K => K.on('icpt')]] },
+      { who: 'PHONE', say: '« Livraison ce soir. Jeune. Propre. Pas de traces. »', post: 450, cues: [[1300, K => K.glitch(120, .45)]] },
+      { label: 'le dossier', pre: 500, min: 3000,
+        say: 'Ça m\'a coûté cher, cette écoute. Markov, il y a une heure.',
+        cues: [
+          [0, K => K.glitch(420, 1)], [150, K => K.on('icpt', 'off')], [450, K => K.on('dossier')],
+          [800, K => { K.on('photo', 'dev'); K.snd.shutter() }],
+          [1250, K => { K.on('brk'); K.snd.beep(1100) }], [1500, K => { K.on('brk', 'lock'); K.snd.beep(1400) }],
+          [2200, K => { K.on('idtag'); K.snd.beep(1800); K.snd.beep(1800, .09) }],
+          ...[...document.querySelectorAll('.fl[data-k]')].map((f, i) => [1450 + i * 420, K => typeField(K, f)]),
+        ] },
+      { say: 'Il vend des êtres humains. La « livraison », c\'est une jeune femme.',
+        cues: [[300, K => { K.on('redact'); K.snd.marker() }], [900, K => { K.on('stamp'); K.snd.stamp(); K.shake(); K.glitch(160, .6) }]] },
+      { label: 'pièces à conviction', say: 'Trois corps en un mois. Mes contacts à la morgue sont formels : c\'est lui.',
+        cues: [[0, K => K.on('evh')], ...['ev1', 'ev2', 'ev3'].map((id, i) => [200 + i * 420, K => {
+          K.on(id); K.snd.slap(); K.snd.shutter(); const cap = K.$(id).querySelector('.cap'); K.type(cap, cap.dataset.c, 380, true) }])] },
+      { label: 'plan : le toit', say: 'J\'ai loué un toit au-dessus du marché. Le proprio ne posera pas de questions.',
+        cues: [[0, K => K.glitch(380, .95)], [300, K => K.on('dossier', 'side')], [600, K => { K.on('plan'); K.snd.sweep() }],
+          [1400, K => K.on('post')], [1500, K => { K.on('pin'); K.snd.ping() }], [1900, K => K.on('route')],
+          [1950, K => { K.on('dist'); K.counter('dist', 0, 31, 1000, ' m', 3) }]] },
+      { say: 'Trente et un mètres. Costume bleu nuit, il téléphone avant de livrer.' },
+      { label: 'bonne chance', say: 'Aucun civil, Viktor. Une balle, et tu quittes ce toit.' },
+      { say: '… Cette fois, c\'est moi qui offre. Bonne chance.', post: 900 },
+      { label: 'carton-titre', min: 2800, cues: [
+          [0, K => { K.$('sub').textContent = ''; K.off('radio'); K.music(null); K.lost(400) }],
+          [400, K => { K.on('dossier', 'out'); K.on('plan', 'out') }], [600, K => K.title()], [1900, K => K.black()]] },
+    ],
+  })
+</script>
+</body>
+</html>

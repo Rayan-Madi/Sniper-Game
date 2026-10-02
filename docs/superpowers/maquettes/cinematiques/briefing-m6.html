@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Briefing M6 — Le commanditaire</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  /* M6 — Le commanditaire, la fête : « le trou noir » (noir et or + rouge) */
+  .m6 .bg { background:
+      radial-gradient(ellipse at 50% 50%, rgba(70,52,18,.22) 0%, transparent 62%),
+      linear-gradient(rgba(212,175,55,.035) 1px, transparent 1px) 0 0 / 3.2cqw 3.2cqw,
+      linear-gradient(90deg, rgba(212,175,55,.035) 1px, transparent 1px) 0 0 / 3.2cqw 3.2cqw; }
+
+  /* le trou noir : disque d'accrétion or et rouge, il avale l'écran avant le carton-titre */
+  .m6 .void { position: absolute; left: 20cqw; top: -1.9cqw; width: 60cqw; height: 60cqw; border-radius: 50%; pointer-events: none; opacity: 0;
+      background: radial-gradient(circle closest-side, #000 0 34%, rgba(0,0,0,.92) 35.5%, rgba(243,220,138,.24) 37%, rgba(212,175,55,.12) 42%, rgba(224,72,72,.08) 50%, transparent 70%);
+      transition: opacity 1.2s, transform 1.8s cubic-bezier(.6,0,.3,1); }
+  .m6 .void::after { content: ''; position: absolute; inset: 14%; border-radius: 50%;
+      background: conic-gradient(from 10deg, transparent 0 7%, rgba(243,220,138,.4) 10%, transparent 14% 29%, rgba(224,72,72,.3) 33%, transparent 37% 54%, rgba(243,220,138,.34) 58%, transparent 62% 79%, rgba(212,175,55,.3) 84%, transparent 88%);
+      -webkit-mask: radial-gradient(circle closest-side, transparent 0 50%, #000 53% 60%, transparent 68%);
+              mask: radial-gradient(circle closest-side, transparent 0 50%, #000 53% 60%, transparent 68%);
+      animation: m6-spin 22s linear infinite; }
+  .m6 .void.on { opacity: .85; }
+  .m6 .void.big { opacity: 1; transform: scale(2.6); }
+  @keyframes m6-spin { to { transform: rotate(360deg) } }
+
+  /* interception : plus instable que d'habitude */
+  .m6 .icpt { top: 13cqw; }
+  .m6 .ih { color: rgba(243,220,138,.72); }
+  .m6 .wave i:nth-child(3n) { background: #ff2e4a; }
+  .m6 .wave i:nth-child(7n+2) { background: #f1f4ea; opacity: .5; }
+  .m6 .icpt.on .wave { animation: m6-jit 1.7s steps(1) infinite; }
+  .m6 .icpt.on .trans { animation: m6-txj 2.6s steps(1) infinite; }
+  .m6 .icpt .who b { color: #e04848; font-weight: normal; }
+  .m6 .icpt .tl { position: absolute; left: 22%; width: 30%; top: 6.4cqw; height: .35cqw; background: rgba(224,72,72,.45); mix-blend-mode: screen; opacity: 0; }
+  .m6 .icpt.on .tl { opacity: 1; animation: m6-tl 2.1s steps(1) infinite; }
+  @keyframes m6-jit { 0%,100% { transform: none; clip-path: none } 8% { transform: translateX(-.9cqw) skewX(-7deg) } 10% { transform: none }
+      41% { clip-path: inset(0 0 55% 0); transform: translateX(1.3cqw) } 44% { clip-path: none; transform: none }
+      77% { transform: translate(.5cqw, -.3cqw) scaleY(1.3) } 80% { transform: none } }
+  @keyframes m6-txj { 0%,100% { transform: none; clip-path: none } 31% { transform: translateX(.7cqw) skewX(-9deg) } 33% { transform: none }
+      66% { clip-path: inset(0 0 48% 0); transform: translateX(-.9cqw) } 68% { clip-path: none; transform: none } }
+  @keyframes m6-tl { 0% { top: 6.4cqw; left: 22%; opacity: 1 } 25% { top: 11cqw; left: 55%; opacity: .3 } 50% { top: 3cqw; left: 8%; opacity: .8 } 75% { top: 14cqw; left: 40%; opacity: 0 } }
+
+  /* dossier presque vide */
+  .m6 .dossier { left: 22cqw; top: 7.5cqw; width: 56cqw; border-color: rgba(212,175,55,.38);
+      background: linear-gradient(180deg, rgba(15,13,9,.97), rgba(7,7,7,.97)); }
+  .m6 .dossier.side { left: 8cqw; }
+  .m6 .dtab { background: #d4af37; }
+  .m6 #srch b { color: #f1f4ea; font-weight: normal; }
+  .m6 .vph { position: relative; width: 15cqw; aspect-ratio: 4 / 5; flex: none; overflow: hidden; opacity: 0;
+      background: radial-gradient(ellipse at 50% 40%, #17150f 0%, #050505 75%); border: 1px solid rgba(212,175,55,.32);
+      outline: .25cqw solid transparent; outline-offset: .2cqw; transition: opacity .25s, outline-color .2s; }
+  .m6 .vph.on { opacity: 1; }
+  .m6 .vph.hl { outline-color: #e04848; }
+  .m6 .vl { position: absolute; inset: 0; }
+  .m6 .vl svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .m6 .vl path { fill: #252832; stroke: rgba(212,175,55,.3); stroke-width: .6; }
+  .m6 .vl .q { position: absolute; left: 0; right: 0; top: 7%; text-align: center; font-family: Georgia, 'Times New Roman', serif; font-size: 9cqw; line-height: 1;
+      color: #d4af37; text-shadow: .35cqw 0 rgba(224,72,72,.8), -.35cqw 0 rgba(0,210,255,.4); }
+  .m6 .tear { position: absolute; inset: 0; pointer-events: none; }
+  .m6 .tear .vl { background: #0b0a08; filter: saturate(2.2) hue-rotate(-18deg) brightness(1.25); }
+  .m6 .tear.a { clip-path: inset(22% 0 70% 0); transform: translateX(1.3cqw); }
+  .m6 .tear.b { clip-path: inset(47% 0 45% 0); transform: translateX(-1.6cqw); }
+  .m6 .tear.c { clip-path: inset(72% 0 21% 0); transform: translateX(.9cqw); }
+  .m6 .vph.on .tear.a { animation: m6-ta 1.9s steps(1) infinite; }
+  .m6 .vph.on .tear.b { animation: m6-tb 1.3s steps(1) infinite; }
+  .m6 .vph.on .tear.c { animation: m6-tc 2.4s steps(1) infinite; }
+  @keyframes m6-ta { 0% { clip-path: inset(22% 0 70% 0); transform: translateX(1.3cqw) } 20% { clip-path: inset(12% 0 80% 0); transform: translateX(-2cqw) }
+      45% { clip-path: inset(33% 0 59% 0); transform: translateX(.6cqw) } 70% { clip-path: inset(60% 0 31% 0); transform: translateX(2.4cqw) } 85% { clip-path: inset(5% 0 93% 0); transform: none } }
+  @keyframes m6-tb { 0% { clip-path: inset(47% 0 45% 0); transform: translateX(-1.6cqw) } 30% { clip-path: inset(15% 0 74% 0); transform: translateX(1cqw) }
+      60% { clip-path: inset(80% 0 12% 0); transform: translateX(-.7cqw) } 85% { clip-path: inset(40% 0 52% 0); transform: translateX(2.6cqw) } }
+  @keyframes m6-tc { 0% { clip-path: inset(72% 0 21% 0); transform: translateX(.9cqw) } 35% { clip-path: inset(28% 0 64% 0); transform: translateX(-2.2cqw) }
+      65% { clip-path: inset(88% 0 4% 0); transform: translateX(1.5cqw) } 90% { clip-path: inset(52% 0 40% 0); transform: none } }
+  .m6 .vph .nz { position: absolute; inset: -30%; opacity: .3; mix-blend-mode: screen; animation: k-grain .3s steps(3) infinite;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+  .m6 .vph .lines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.32) 0 1px, transparent 1px 3px); }
+  .m6 .vtag { position: absolute; left: 6%; top: 4%; font-size: 1.05cqw; background: #e04848; color: #0b0c10; padding: .15cqw .5cqw; font-weight: bold; text-shadow: none; opacity: 0; }
+  .m6 .vtag.on { opacity: 1; }
+  .m6 .vph .cam { position: absolute; left: .8cqw; bottom: .7cqw; font-size: 1.05cqw; color: #e8efe0; text-shadow: 0 0 2px #000; opacity: .85; }
+  .m6 .vph .cam b { color: #e04848; font-weight: normal; animation: k-blink 1s steps(2) infinite; }
+  .m6 .fields { padding-top: .2cqw; }
+  .m6 .fields .k { display: inline-block; width: 13.6cqw; color: rgba(215,220,207,.55); }
+  .m6 .rb { display: inline-block; vertical-align: middle; height: 1.7cqw; width: var(--w); background: #000;
+      box-shadow: 0 0 0 .13cqw rgba(212,175,55,.55), inset 0 .25cqw 0 rgba(255,255,255,.07);
+      transform: scaleX(0); transform-origin: left center; transition: transform .3s cubic-bezier(.7,0,.2,1), box-shadow .2s; }
+  .m6 .rb.on { transform: none; }
+  .m6 .fl.hl .rb { box-shadow: 0 0 0 .2cqw #e04848, 0 0 1.2cqw rgba(224,72,72,.6); }
+  .m6 .stamp { left: 1.2cqw; top: 13.4cqw; font-size: 2.5cqw; }
+  .m6 .src { display: flex; gap: .8cqw; }
+  .m6 .src span { position: relative; font-size: 1.15cqw; letter-spacing: .12em; padding: .35cqw .7cqw; border: 1px solid rgba(215,220,207,.3); color: rgba(215,220,207,.8);
+      opacity: 0; transition: opacity .2s calc(var(--i) * 90ms), color .2s, border-color .2s; }
+  .m6 .src.on span { opacity: 1; }
+  .m6 .src span::after { content: ''; position: absolute; left: .3cqw; right: .3cqw; top: 50%; height: .16cqw; background: #e04848; transform: scaleX(0); transform-origin: left; transition: transform .25s; }
+  .m6 .src span.x { color: rgba(224,72,72,.8); border-color: rgba(224,72,72,.45); }
+  .m6 .src span.x::after { transform: none; }
+
+  /* le carton d'invitation : noir et or */
+  .m6 .invit { position: absolute; left: 54.5cqw; top: 15.75cqw; width: 30cqw; height: 19.5cqw; z-index: 4; opacity: 0;
+      transform: translate(32cqw, 10cqw) rotate(16deg); transition: opacity .35s, transform 1s cubic-bezier(.2,.8,.2,1);
+      background: radial-gradient(ellipse at 50% 30%, #1d1912 0%, #0a0907 72%);
+      border: .22cqw solid #c9a33f; box-shadow: inset 0 0 0 .5cqw #0a0907, inset 0 0 0 .62cqw rgba(212,175,55,.7), 0 1.2cqw 2.6cqw rgba(0,0,0,.85);
+      text-shadow: none; font-family: 'Bodoni MT', Didot, 'Playfair Display', Georgia, 'Times New Roman', serif; color: #d4af37;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .6cqw; text-align: center; }
+  .m6 .invit.on { opacity: 1; transform: rotate(-4deg); }
+  .m6 .invit.side { transform: translate(12.5cqw, -9cqw) scale(.84) rotate(2deg); }
+  .m6 .invit.out { opacity: 0; }
+  .m6 .invit::before, .m6 .invit::after { content: ''; position: absolute; width: 2.4cqw; height: 2.4cqw; border: .16cqw solid rgba(212,175,55,.85); }
+  .m6 .invit::before { left: 1.2cqw; top: 1.2cqw; border-right: 0; border-bottom: 0; }
+  .m6 .invit::after { right: 1.2cqw; bottom: 1.2cqw; border-left: 0; border-top: 0; }
+  .m6 .invit .orn { display: flex; align-items: center; gap: .7cqw; }
+  .m6 .invit .orn i { width: 3.2cqw; height: .12cqw; background: linear-gradient(90deg, transparent, #d4af37); }
+  .m6 .invit .orn i:last-child { background: linear-gradient(90deg, #d4af37, transparent); }
+  .m6 .invit .orn b { width: .7cqw; height: .7cqw; background: #d4af37; transform: rotate(45deg); }
+  .m6 .invit .k1 { font-size: 1.2cqw; letter-spacing: .42em; padding-left: .42em; color: #e9d48e; }
+  .m6 .invit .nm { font-size: 3.8cqw; font-style: italic; line-height: 1.1; padding: 0 .3em;
+      background: linear-gradient(180deg, #fbeab0 8%, #d4af37 55%, #94701f 96%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .m6 .invit .rl { width: 12cqw; height: .12cqw; background: linear-gradient(90deg, transparent, #d4af37, transparent); }
+  .m6 .invit .dt { font-size: 1.75cqw; letter-spacing: .12em; color: #f1dfa0; }
+  .m6 .invit .dr { font-size: 1.45cqw; font-style: italic; color: #c9a33f; }
+  .m6 .gtag { position: absolute; left: 56.5cqw; top: 38.4cqw; font-size: 1.25cqw; letter-spacing: .2em; color: #d4af37; border: 1px solid rgba(212,175,55,.5);
+      background: rgba(10,9,7,.88); padding: .35cqw .8cqw; opacity: 0; transform: translateY(.6cqw); transition: opacity .3s, transform .4s; z-index: 4; }
+  .m6 .gtag.on { opacity: 1; transform: none; }
+  .m6 .gtag.out { opacity: 0; }
+  .m6 .gtag b { color: #f6ecd0; }
+
+  /* plan de la fête */
+  .m6 #plan { left: 2.5cqw; top: 7.5cqw; width: 62cqw; height: 39.5cqw; border-color: rgba(212,175,55,.35); transform: translateX(-3cqw); }
+  .m6 #plan.on { transform: none; }
+  .m6 #plan.dim { opacity: .5; }
+  .m6 #plan.out { opacity: 0; transform: translateX(-3cqw); }
+  .m6 #plan .ph { color: rgba(243,220,138,.72); }
+  .m6 #plan text { font-family: 'Courier New', Courier, monospace; }
+  .m6 #guests .gst { fill: #f1e6c2; opacity: 0; transition: opacity .2s calc(var(--i) * 28ms); }
+  .m6 #guests.on .gst { opacity: 1; }
+  .m6 #guests.on .dn { transform-box: fill-box; transform-origin: center; animation: m6-dance .42s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -53ms); }
+  .m6 #guests.dim .dn { opacity: .2; transition-delay: 0s; }
+  @keyframes m6-dance { from { transform: translate(-1px, .6px) } to { transform: translate(1px, -.8px) } }
+
+  /* ce que je sais */
+  .m6 .prof { position: absolute; left: 67cqw; top: 27.6cqw; width: 30.5cqw; padding: 1.1cqw 1.3cqw 1cqw; border: 1px solid rgba(212,175,55,.4);
+      background: rgba(10,9,7,.94); opacity: 0; transform: translateX(2cqw); transition: opacity .4s, transform .6s cubic-bezier(.2,.8,.2,1); }
+  .m6 .prof.on { opacity: 1; transform: none; }
+  .m6 .prof.dim { opacity: .5; }
+  .m6 .prof.out { opacity: 0; }
+  .m6 .prof .ph2 { font-size: 1.2cqw; letter-spacing: .3em; color: #d4af37; margin-bottom: .4cqw; }
+  .m6 .prof .fl { font-size: 1.45cqw; line-height: 1.85; min-height: 2.68cqw; }
+  .m6 .prof .v { color: #f1f4ea; }
+  .m6 .prof .fl.r .v { color: #e04848; }
+  .m6 .prof .fl.g .v { color: #f3dc8a; }
+
+  /* traçage : on remonte jusqu'à Anton */
+  .m6 .trace { position: absolute; left: 2.5cqw; top: 1cqw; width: 52cqw; padding: .5cqw .9cqw .6cqw; font-size: 1.2cqw; letter-spacing: .2em; color: #ff6a6a;
+      border: 1px solid rgba(224,72,72,.65); background: rgba(38,6,8,.82); opacity: 0; transition: opacity .2s; z-index: 7; }
+  .m6 .trace.on { opacity: 1; }
+  .m6 .trace.out { opacity: 0; }
+  .m6 .trace .tw { animation: k-blink .5s steps(2) infinite; }
+  .m6 .trace b { color: #f1f4ea; font-weight: normal; }
+  .m6 .trace .tb { height: .5cqw; margin-top: .45cqw; background: rgba(224,72,72,.18); }
+  .m6 .trace .tb i { display: block; height: 100%; width: 0; background: #e04848; }
+  .m6 .trace.on .tb i { width: 87%; transition: width 4.2s linear; }
+  .m6 .trace.full .tb i { width: 100%; transition: width 2.6s linear; }
+  .m6 .hb { position: absolute; inset: 0; pointer-events: none; z-index: 5; opacity: 0; transition: opacity .4s;
+      background: radial-gradient(ellipse at center, transparent 48%, rgba(224,40,40,.3) 100%); }
+  .m6 .hb.on { opacity: 1; animation: m6-hb .85s infinite; }
+  @keyframes m6-hb { 0% { opacity: .35 } 10% { opacity: 1 } 24% { opacity: .5 } 34% { opacity: .9 } 100% { opacity: .35 } }
+  .m6 .radio .lb2 { display: none; }
+  .m6 .radio.comp .lb { display: none; }
+  .m6 .radio.comp .lb2 { display: inline; color: #e04848; }
+  .m6 .radio.comp .dot { color: #e04848; }
+  .m6 .radio.comp .eq i { background: #e04848; }
+
+  /* carton-titre */
+  .m6 .title .t1 { color: #d4af37; letter-spacing: .7em; padding-left: .7em; }
+  .m6 .title .ln { background: linear-gradient(90deg, transparent, #d4af37 20%, #e04848 50%, #d4af37 80%, transparent); }
+  .m6 .title .t2 { font-family: 'Bodoni MT', Didot, Georgia, 'Times New Roman', serif; color: #f6ecd0; letter-spacing: .35em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="st m6" id="st">
+    <div class="bg"></div>
+    <div class="scene" id="scene">
+
+      <div class="void" id="void"></div>
+
+      <div class="icpt" id="icpt">
+        <div class="ih"><span class="rec">●</span><span>INTERCEPTION · LIGNE ?? · 22:58</span></div>
+        <div class="wave" id="wave"></div>
+        <div class="trans" id="trans"></div>
+        <div class="who">SOURCE : <b>██████</b> · NUMÉRO MASQUÉ · TRAÇAGE : <b>ÉCHEC</b></div>
+        <div class="tl"></div>
+      </div>
+
+      <div class="dossier" id="dossier">
+        <div class="dtab">DOSSIER 06 · LE COMMANDITAIRE</div>
+        <div class="drow">
+          <div class="vph" id="vph">
+            <div class="vl">
+              <svg viewBox="0 0 80 100" preserveAspectRatio="none"><path d="M40 20 C29 20 23 29 23 40 C23 49 27 56 32 59 L31 65 C17 68 7 76 5 88 L4 100 H76 L75 88 C73 76 63 68 49 65 L48 59 C53 56 57 49 57 40 C57 29 51 20 40 20 Z"/></svg>
+              <div class="q">?</div>
+            </div>
+            <div class="tear a"></div><div class="tear b"></div><div class="tear c"></div>
+            <div class="nz"></div><div class="lines"></div>
+            <div class="vtag" id="vtag">0 CORRESPONDANCE</div>
+            <div class="cam"><b>●</b> AUCUNE IMAGE</div>
+          </div>
+          <div class="fields">
+            <div class="fl" id="f0"><span class="k" data-reset data-k="NOM ......... "></span><span class="rb" style="--w:12cqw"></span></div>
+            <div class="fl"><span class="k" data-reset data-k="ALIAS ....... "></span><span class="rb" style="--w:8.5cqw"></span></div>
+            <div class="fl"><span class="k" data-reset data-k="NATIONALITÉ . "></span><span class="rb" style="--w:10cqw"></span></div>
+            <div class="fl"><span class="k" data-reset data-k="ADRESSE ..... "></span><span class="rb" style="--w:15cqw"></span></div>
+            <div class="fl"><span class="k" data-reset data-k="RÉSEAU ...... "></span><span class="rb" style="--w:13cqw"></span></div>
+            <div class="fl"><span class="k" data-reset data-k="FORTUNE ..... "></span><span class="rb" style="--w:7cqw"></span></div>
+          </div>
+        </div>
+        <div class="stamp" id="stamp">INCONNU</div>
+        <div class="ev-h" id="srch">SOURCES : 6 · RÉPONSES : <b id="srcn" data-reset></b></div>
+        <div class="src" id="src"><span style="--i:0">PORT</span><span style="--i:1">DOUANES</span><span style="--i:2">MORGUE</span><span style="--i:3">POLICE</span><span style="--i:4">BANQUES</span><span style="--i:5">CASINOS</span></div>
+      </div>
+
+      <div class="invit" id="invit">
+        <div class="orn"><i></i><b></b><i></i></div>
+        <div class="k1">VOUS ÊTES CONVIÉ</div>
+        <div class="nm">Villa Moreau</div>
+        <div class="rl"></div>
+        <div class="dt">Ce soir · 23 h</div>
+        <div class="dr">Tenue de soirée</div>
+      </div>
+      <div class="gtag" id="gtag">LISTE : <b id="gtn" data-reset></b> INVITÉS · AUCUN NOM</div>
+
+      <div class="panel" id="plan">
+        <div class="ph">PLAN · VILLA MOREAU · SALON</div>
+        <svg viewBox="0 0 157 100">
+          <defs>
+            <pattern id="m6chk" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="2" fill="rgba(212,175,55,.2)"/><rect x="2" y="2" width="2" height="2" fill="rgba(212,175,55,.2)"/></pattern>
+            <pattern id="m6hatch" width="2.2" height="2.2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="2.2" stroke="rgba(243,220,138,.5)" stroke-width=".5"/></pattern>
+          </defs>
+          <!-- murs, rue, immeuble d'en face -->
+          <g fill="none" stroke="rgba(215,220,207,.5)" stroke-width=".6">
+            <path class="draw" d="M44 88 H5 V10 H104 M56 88 H104"/>
+            <path class="draw" d="M108 4 V96 M121 4 V96"/>
+            <path class="draw" d="M125 12 H153 V86 H125 Z"/>
+          </g>
+          <g class="fadein">
+            <path d="M103.2 11 V87 M104.8 11 V87" stroke="rgba(150,205,235,.6)" stroke-width=".4" stroke-dasharray="2.2 1"/>
+            <path d="M114.5 4 V96" stroke="rgba(215,220,207,.22)" stroke-width=".4" stroke-dasharray="3 2.5"/>
+            <!-- bar, DJ, piste, canapés -->
+            <rect x="14" y="13" width="46" height="6" fill="rgba(212,175,55,.1)" stroke="rgba(212,175,55,.6)" stroke-width=".4"/>
+            <rect x="8" y="31" width="9" height="18" fill="rgba(212,175,55,.1)" stroke="rgba(212,175,55,.6)" stroke-width=".4"/>
+            <rect x="32" y="30" width="38" height="32" fill="url(#m6chk)" stroke="rgba(212,175,55,.55)" stroke-width=".4"/>
+            <g fill="rgba(215,220,207,.12)" stroke="rgba(215,220,207,.45)" stroke-width=".4">
+              <rect x="9" y="79" width="24" height="5" rx="1"/><rect x="14" y="72.5" width="14" height="3"/>
+              <path d="M76 79 H100 V58 H95 V84 M76 79 V84 H100 V79"/><rect x="81" y="71" width="10" height="4"/>
+            </g>
+            <g fill="rgba(215,220,207,.62)" font-size="2.6" text-anchor="middle">
+              <text x="37" y="17.2" font-size="2.8" fill="#e9d48e">BAR</text>
+              <text x="12.5" y="41" font-size="2.8" fill="#e9d48e">DJ</text>
+              <text x="51" y="66.4" fill="#e9d48e">PISTE DE DANSE</text>
+              <text x="21" y="70">CANAPÉS</text>
+              <text x="86" y="68.6">CANAPÉS</text>
+              <text x="50" y="86">ENTRÉE</text>
+              <text transform="translate(101.6 49) rotate(-90)" font-size="2.3" fill="rgba(150,205,235,.75)">BAIE VITRÉE</text>
+              <text transform="translate(116.4 91) rotate(-90)" font-size="2.4">RUE</text>
+              <text x="139" y="17.6" font-size="2.7">IMMEUBLE</text>
+              <text x="139" y="21.6" font-size="2.7">D'EN FACE</text>
+            </g>
+            <g font-size="3" text-anchor="start">
+              <text x="5" y="96.6" fill="rgba(243,220,138,.85)">INVITÉS : <tspan id="gn" data-reset></tspan></text>
+              <text x="36" y="96.6" fill="#e04848">CIBLE : VISAGE INCONNU</text>
+            </g>
+          </g>
+          <!-- vue depuis la verrière : toute la salle -->
+          <g class="pop" id="cone">
+            <rect x="5" y="10" width="99" height="78" fill="rgba(243,220,138,.07)"/>
+            <polygon points="134,47 104.8,11 104.8,87" fill="rgba(243,220,138,.1)"/>
+            <path d="M134 47 L104.8 11 M134 47 L104.8 87" stroke="#f0c040" stroke-width=".45" stroke-dasharray="1.6 1"/>
+          </g>
+          <g id="guests"></g>
+          <g class="pop" id="verr">
+            <rect x="128" y="31" width="22" height="30" fill="url(#m6hatch)" stroke="#d4af37" stroke-width=".5"/>
+            <text x="139" y="66" font-size="2.6" fill="#f3dc8a" text-anchor="middle">VERRIÈRE · TOIT</text>
+          </g>
+          <g class="pop" id="post">
+            <circle class="pulse" cx="134" cy="47" r="3" fill="none" stroke="#f0c040" stroke-width=".5"/>
+            <rect x="131.5" y="44.5" width="5" height="5" fill="#0a0907" stroke="#f0c040" stroke-width=".6"/><circle cx="134" cy="47" r="1" fill="#f0c040"/>
+            <text x="139" y="79" font-size="3.4" fill="#f0c040" text-anchor="middle" font-weight="bold">TON POSTE</text>
+          </g>
+          <g class="pop" id="distg"><rect x="108.8" y="41.6" width="11.4" height="4.8" fill="#0a0c12" stroke="rgba(243,220,138,.5)" stroke-width=".3"/>
+            <text id="dist" x="114.5" y="45.1" font-size="3" fill="#f3dc8a" text-anchor="middle" data-reset></text></g>
+        </svg>
+      </div>
+
+      <div class="prof" id="prof">
+        <div class="ph2">CE QUE JE SAIS</div>
+        <div class="fl" data-reset data-k="DANSE ....... " data-v="NON"></div>
+        <div class="fl" data-reset data-k="TÉLÉPHONE ... " data-v="OUI"></div>
+        <div class="fl r" data-reset data-k="VISAGE ...... " data-v="????"></div>
+        <div class="fl g" data-reset data-k="TON POSTE ... " data-v="VERRIÈRE"></div>
+        <div class="fl g" data-reset data-k="DISTANCE .... " data-v="38 m"></div>
+      </div>
+
+      <div class="trace" id="trace"><span class="tw">●</span> TRAÇAGE EN COURS · ILS REMONTENT LA LIGNE · <b id="tp" data-reset></b><div class="tb"><i></i></div></div>
+      <div class="hb" id="hb"></div>
+
+      <div class="radio" id="radio"><span class="dot">●</span><span class="lb">CANAL SÉCURISÉ · ANTON, FIXEUR</span><span class="lb2">CANAL COMPROMIS · ANTON, FIXEUR</span><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></div>
+      <div class="sub" id="sub"></div>
+      <div class="title" id="title"><div class="t1">MISSION FINALE</div><div class="ln"></div><div class="t2">LA FÊTE</div></div>
+    </div>
+  </div>
+</div>
+<script src="kit.js"></script>
+<script>
+  // ── préparation : tranches de la silhouette « ? », 24 invités du plan ──
+  const vl = document.querySelector('.m6 .vl')
+  document.querySelectorAll('.m6 .tear').forEach(t => t.appendChild(vl.cloneNode(true)))
+  const GUESTS = [                                   // [x, y, danse ?] — même apparence pour tous : la cible n'est pas désignée
+    [20, 23], [30, 23], [42, 23], [53, 23],                                  // bar
+    [21.5, 35], [22, 45],                                                    // près du DJ
+    [38, 35, 1], [47, 33.5, 1], [58, 36, 1], [65, 34, 1], [41, 46, 1],       // piste
+    [52, 44, 1], [63, 48, 1], [37, 56, 1], [49, 55, 1], [64, 57, 1],
+    [80, 27], [90, 40],                                                      // debout, côté baie
+    [14, 81.5], [21, 81.5], [28, 81.5],                                      // canapé gauche
+    [82, 81.5], [90, 81.5], [97.5, 66],                                      // canapé droit
+  ]
+  const gg = document.getElementById('guests')
+  GUESTS.forEach(([x, y, d], i) => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+    c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 1.5)
+    c.setAttribute('class', d ? 'gst dn' : 'gst'); c.style.setProperty('--i', i)
+    gg.appendChild(c)
+  })
+  const keys = [...document.querySelectorAll('.m6 .fields .k')]
+  const bars = [...document.querySelectorAll('.m6 .rb')]
+  const chips = [...document.querySelectorAll('.m6 .src span')]
+  const pl = [...document.querySelectorAll('.m6 .prof .fl')]
+  const typeField = (K, f) => { f.innerHTML = '<span class="k"></span><span class="v"></span>'; f.querySelector('.k').textContent = f.dataset.k; K.type(f.querySelector('.v'), f.dataset.v, 300, true) }
+  const G = (ms, p) => K => K.glitch(ms, p)
+  const H = K => K.snd.heart()
+
+  K.run({
+    music: 'dread',
+    stateClasses: ['hl', 'dim', 'x', 'comp', 'big', 'full'],
+    beats: [
+      { label: 'interception', min: 900, cues: [[100, K => K.crt()], [300, K => K.on('void')], [550, K => K.on('icpt')], [700, G(260, .7)]] },
+      { who: 'PHONE', say: '« Ils sont tous morts ? — Oui. Il ne reste que vous. »', post: 250,
+        cues: [[500, G(140, .6)], [1300, H], [1700, G(220, .85)], [2500, G(90, .5)], [2900, H], [3400, G(160, .7)]] },
+      { who: 'PHONE', say: '« Alors trouvez-moi ce sniper. CE SOIR. »', post: 400,
+        cues: [[0, K => K.lost(180)], [900, G(120, .6)], [2050, K => { K.shake(); K.glitch(300, 1); H(K) }], [2700, G(140, .7)]] },
+      { label: 'le dossier', pre: 350, say: 'C\'est lui. Celui qui paie tous les autres. Et pour la première fois… je n\'ai rien.', post: 300,
+        cues: [
+          [0, G(520, 1)], [150, K => K.on('icpt', 'off')], [400, K => { K.on('dossier'); K.snd.paper() }],
+          [750, K => { K.on('vph'); K.snd.shutter(); K.glitch(160, .6) }],
+          ...keys.map((k, i) => [1000 + i * 230, K => K.type(k, k.dataset.k, 260, true)]),
+          ...bars.map((b, i) => [1600 + i * 400, K => { K.on(b); K.snd.marker() }]),
+          [2200, K => { K.on('vtag'); K.snd.beep(320); K.snd.beep(260, .12) }], [2500, H], [3500, H], [3900, G(180, .7)],
+          [4000, K => { K.on('srch'); K.on('src'); K.type('srcn', '…', 200); K.snd.paper() }],
+          [4900, K => { K.on('stamp'); K.snd.stamp(); K.shake(); K.glitch(220, .85) }],
+        ] },
+      { say: 'Pas de nom. Pas de visage. Même mes meilleures sources se taisent.', post: 300,
+        cues: [
+          [0, K => { K.on('f0', 'hl'); K.snd.beep(900) }],
+          [900, K => { K.off('f0', 'hl'); K.on('vph', 'hl'); K.snd.beep(700); K.glitch(260, .9) }],
+          [1800, K => K.off('vph', 'hl')],
+          ...chips.map((s, i) => [2000 + i * 330, K => { K.on(s, 'x'); K.snd.marker() }]), [3000, H],
+          [3900, K => { K.type('srcn', '0', 60); K.snd.beep(260); K.snd.beep(200, .1) }],
+        ] },
+      { label: 'l\'invitation', say: 'Juste ça : une invitation. Une fête, ce soir. Vingt-quatre invités.', post: 300,
+        cues: [[0, K => { K.glitch(300, .8); K.on('dossier', 'side') }], [250, K => { K.on('invit'); K.snd.paper(); K.snd.slap() }], [800, H], [1900, G(120, .5)],
+          [2950, K => { K.on('gtag'); K.counter('gtn', 0, 24, 900, '', 4) }]] },
+      // pre : le plan et la piste vivent ~1 s avant que les danseurs ne s'éteignent sur « Il ne danse pas »
+      { label: 'la fête', pre: 900, say: 'Il ne danse pas. Il téléphone. C\'est tout ce que je sais.', post: 300,
+        cues: [[0, G(450, .95)], [150, K => { K.on('dossier', 'out'); K.on('gtag', 'out'); K.on('invit', 'side') }],
+          [400, K => { K.on('plan'); K.snd.sweep() }], [700, K => { K.on('guests'); K.counter('gn', 0, 24, 700, '', 4) }],
+          [2000, K => K.on('prof')], [2150, K => typeField(K, pl[0])], [2300, K => K.on('guests', 'dim')],
+          [2800, K => { typeField(K, pl[1]); K.snd.beep(1200) }], [3600, K => { typeField(K, pl[2]); H(K) }], [4200, G(150, .6)]] },
+      { label: 'la verrière', say: 'Je t\'ai trouvé la verrière d\'en face. Vue sur toute la salle.', post: 300,
+        cues: [[0, G(300, .8)], [300, K => { K.on('verr'); K.snd.ping() }], [650, K => { K.on('post'); K.snd.beep(1400) }],
+          [1000, K => typeField(K, pl[3])], [2450, K => { K.on('cone'); K.snd.sweep() }],
+          [2750, K => { K.on('distg'); K.counter('dist', 0, 38, 900, ' m', 4) }], [2900, K => typeField(K, pl[4])]] },
+      { label: 'traçage', say: 'Ils sont remontés jusqu\'à moi, Viktor. Je quitte la ville cette nuit.', post: 300,
+        cues: [[0, K => { K.glitch(650, 1); K.snd.alarm() }],
+          [100, K => { K.on('radio', 'comp'); K.on('trace'); K.on('hb'); K.counter('tp', 0, 87, 4200, ' %', 10) }],
+          ...[300, 1000, 1650, 2250, 2800, 3300, 3750, 4150].map(t => [t, H]),
+          [2200, K => { K.shake(); K.glitch(300, .9) }], [3500, G(220, .75)]] },
+      { say: '… Termine ça. Pour ta femme. Pour ta fille.', post: 400,
+        cues: [[0, K => { K.on('plan', 'dim'); K.on('prof', 'dim'); K.on('trace', 'full'); K.counter('tp', 87, 100, 2600, ' %') }],
+          [300, H], [1500, H], [2000, G(120, .5)], [2700, H]] },
+      { label: 'carton-titre', min: 3200, cues: [
+          [0, K => { K.$('sub').textContent = ''; K.off('radio'); K.music(null); K.lost(1300); H(K) }],
+          [1300, K => { ['plan', 'invit', 'prof', 'trace'].forEach(id => K.on(id, 'out')); K.off('hb'); K.on('void', 'big') }],
+          [1600, K => K.title()], [2800, K => K.black()]] },
+    ],
+  })
+</script>
+</body>
+</html>

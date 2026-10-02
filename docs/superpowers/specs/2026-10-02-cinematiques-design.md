@@ -40,7 +40,7 @@ Ce que le joueur doit ressentir : un écran de surveillance qui grésille, des d
 
 ## 4. Contenu
 
-Les maquettes validées servent de référence exacte (textes, timing, mise en page). Elles sont dans `.superpowers/briefings/` : `kit.css`, `kit.js`, `prologue.html`, `briefing-m1.html` à `briefing-m6.html`, `epilogue.html`, et `img/`.
+Les maquettes validées servent de référence exacte (textes, timing, mise en page). Elles sont dans `docs/superpowers/maquettes/cinematiques/` : `kit.css`, `kit.js`, `prologue.html`, `briefing-m1.html` à `briefing-m6.html`, `epilogue.html`, et `img/`.
 
 | Cinématique | Pièce centrale | Durée |
 |---|---|---|
@@ -172,4 +172,4 @@ Une étape = un ensemble vérifié, commité, puis jouable par Rayan avant la su
 - **Distances de tir des briefings** à aligner avec la refonte du gameplay.
 - **Le build Electron** charge les modèles en chemin absolu `/models/` : ça casse sous `file://` (bug connu). Les nouvelles images utiliseront des chemins relatifs à la base Vite pour ne pas reproduire le problème.
 - **Durée du prologue complet** (environ 1 min de cinématique + 2 à 4 min d'enquête) : on garde toujours la possibilité de passer.
-- **Les maquettes ne sont pas versionnées** (dossier local `.superpowers/`, environ 5 Mo d'images). → À décider avec Rayan : les verser au dépôt dans `docs/`, ou s'appuyer sur le portage de l'étape 1.
+- ~~Maquettes non versionnées~~ → **réglé** : elles sont versionnées dans `docs/superpowers/maquettes/cinematiques/` (environ 2,7 Mo, seulement les images utilisées), et le convertisseur lit cette copie.

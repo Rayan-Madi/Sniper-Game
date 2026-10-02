@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Briefing M3 — Le passeur</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  /* M3 — Le port de nuit sous la pluie : « les deux visages du quai 4 ».
+     Bleu froid + vert vision nocturne + orange thermique. Le récit tient sur les deux cibles :
+     Vosko (agrandissement caméra → fiche), Mira (idem, en miroir), puis le duo côte à côte.
+     Le conteneur n'est plus qu'une pièce à conviction, le choix moral une seule réplique. */
+  .m3 { --ice: #6cc8ff; --heat: #ff8a2a; --blood: #e04848; }
+  .m3 .bg { background:
+      radial-gradient(ellipse at 50% 40%, rgba(30,60,110,.32) 0%, transparent 65%),
+      linear-gradient(rgba(108,200,255,.04) 1px, transparent 1px) 0 0 / 3.2cqw 3.2cqw,
+      linear-gradient(90deg, rgba(108,200,255,.04) 1px, transparent 1px) 0 0 / 3.2cqw 3.2cqw; }
+
+  /* ── canaux de surveillance (onglets en haut à gauche) ── */
+  .m3 .chans { position: absolute; top: 1.3cqw; left: 2.5cqw; display: flex; gap: .5cqw; opacity: 0; transition: opacity .4s; z-index: 7; }
+  .m3 .chans.on { opacity: 1; }
+  .m3 .chans.out { opacity: 0; }
+  .m3 .ch { font-size: 1.1cqw; letter-spacing: .14em; padding: .3cqw .7cqw; border: 1px solid rgba(108,200,255,.25); color: rgba(160,205,235,.5); white-space: nowrap; }
+  .m3 .ch.act { background: var(--ice); color: #061018; border-color: var(--ice); text-shadow: none; font-weight: bold; }
+
+  /* ── pluie en surimpression ── */
+  .m3 .rain { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity 1.5s; overflow: hidden; }
+  .m3 .rain.on { opacity: 1; }
+  .m3 .rain.soft { opacity: .55; }
+  .m3 .rain::before, .m3 .rain::after { content: ''; position: absolute; inset: 0; }
+  .m3 .rain::before { opacity: .32; animation: m3-rainA .42s linear infinite;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><g stroke='rgb(205,225,255)' stroke-width='1.1' stroke-linecap='round'><path d='M20 5 L14 23 M64 18 L58 36 M102 8 L96 26 M38 50 L32 68 M88 58 L82 76 M12 86 L6 104 M56 92 L50 110 M110 78 L104 96'/></g></svg>") 0 0 / 11cqw 11cqw; }
+  .m3 .rain::after { opacity: .22; animation: m3-rainB .6s linear infinite;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><g stroke='rgb(170,200,245)' stroke-width='1' stroke-linecap='round'><path d='M15 8 L11.7 18 M48 30 L44.7 40 M80 12 L76.7 22 M30 62 L26.7 72 M66 70 L62.7 80 M92 46 L88.7 56 M8 84 L4.7 94'/></g></svg>") 0 0 / 6cqw 6cqw; }
+  @keyframes m3-rainA { to { background-position: -11cqw 33cqw; } }
+  @keyframes m3-rainB { to { background-position: -6cqw 18cqw; } }
+  .m3 .blinkr { animation: k-blink 1.4s steps(2) infinite; }
+
+  /* ── A. plan large du port, puis poussée vers les deux silhouettes du quai 4 ── */
+  .m3 .vista { position: absolute; left: 3cqw; top: 4.8cqw; width: 94cqw; height: 41.3cqw; overflow: hidden; background: #02040a;
+      border: 1px solid rgba(108,200,255,.25); opacity: 0; transition: opacity .7s, transform .5s cubic-bezier(.7,0,.2,1); }
+  .m3 .vista.on { opacity: 1; }
+  .m3 .vista.out { opacity: 0; transform: scaleY(.02); }
+  .m3 .vista svg { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: 59.5% 69.7%; }
+  .m3 .vista.push svg { transform: scale(1.08); transition: transform 7s linear; }
+  .m3 .vista.zoom svg { transform: scale(2.7); transition: transform .8s cubic-bezier(.7,0,.2,1); }
+  .m3 .vista .vh { position: absolute; top: .9cqw; left: 1.2cqw; font-size: 1.15cqw; letter-spacing: .25em; color: var(--ice); }
+  .m3 .vista .vt { position: absolute; top: .9cqw; right: 1.2cqw; font-size: 1.15cqw; letter-spacing: .2em; color: rgba(215,220,207,.7); }
+  .m3 .vista .vt b { color: var(--blood); font-weight: normal; animation: k-blink 1s steps(2) infinite; }
+  .m3 .vista .vc { position: absolute; left: 1.6cqw; bottom: 1.5cqw; transition: opacity .3s; }
+  .m3 .vista.zoom .vc { opacity: 0; }
+  .m3 .vista .vc .a { font-size: 2.6cqw; letter-spacing: .32em; color: #f1f4ea; min-height: 3.4cqw; }
+  .m3 .vista .vc .b { font-size: 1.2cqw; letter-spacing: .22em; color: var(--ice); margin-top: .3cqw; min-height: 1.7cqw; }
+
+  /* ── B. agrandissement caméra : vignette pixelisée → zoom → passage net → verrouillage ── */
+  .m3 .feed { position: absolute; top: 4.8cqw; width: 33cqw; height: 41.25cqw; overflow: hidden; z-index: 3; background: #010401;
+      border: 1px solid rgba(120,255,140,.32); opacity: 0;
+      transition: opacity .3s, transform .5s cubic-bezier(.7,0,.2,1), left .9s cubic-bezier(.7,0,.2,1), top .9s cubic-bezier(.7,0,.2,1), width .9s cubic-bezier(.7,0,.2,1), height .9s cubic-bezier(.7,0,.2,1); }
+  .m3 #camA { left: 3cqw; --ox: 56%; --oy: 30%; --zi: 9.3% 13.7% 21.7% 17.4%; --li: 12% 10% 47% 42%; }
+  .m3 #camB { left: 64cqw; background: #01030a; border-color: rgba(108,200,255,.4); --ox: 50%; --oy: 32%; --zi: 9.9% 15.5% 21.1% 15.5%; --li: 9% 14% 42% 27%; }
+  .m3 .feed.on { opacity: 1; }
+  .m3 #camA.mini { left: 33.4cqw; top: 6cqw; width: 14.4cqw; height: 18cqw; }
+  .m3 #camB.mini { left: 52.2cqw; top: 6cqw; width: 14.4cqw; height: 18cqw; }
+  .m3 .feed.dim { opacity: .5; }
+  .m3 .feed.out { opacity: 0; transform: scaleY(.02); }
+  .m3 .zw { position: absolute; inset: 0; transform-origin: var(--ox) var(--oy); transition: transform .7s cubic-bezier(.7,0,.2,1); }
+  .m3 .feed.zoom .zw { transform: scale(1.45); }
+  .m3 .zw img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(1.9) contrast(1.3); }
+  .m3 .zw img.lo { image-rendering: pixelated; }
+  .m3 .hw { position: absolute; inset: 0; clip-path: inset(0 0 100% 0); }
+  .m3 .feed.enh .hw { clip-path: inset(0 0 0 0); transition: clip-path 1.2s steps(9, end); }
+  .m3 .zf { position: absolute; inset: 2.5%; border: .16cqw dashed rgba(230,255,235,.95); opacity: 0; transition: inset .75s cubic-bezier(.7,0,.2,1), opacity .25s; }
+  .m3 .zf.on { opacity: 1; }
+  .m3 .zf.tight { inset: var(--zi); }
+  .m3 .feed.zoom .zf { opacity: 0; transition: opacity .3s .45s; }
+  .m3 .zf b { position: absolute; left: -1px; top: 100%; margin-top: .35cqw; font-size: 1.15cqw; letter-spacing: .14em; padding: .15cqw .5cqw; background: rgba(230,255,235,.95); color: #031006; text-shadow: none; white-space: nowrap; }
+  .m3 .feed .tn { position: absolute; inset: 0; background: #4dff7c; mix-blend-mode: multiply; }
+  .m3 #camB .tn { background: #7fc6ff; }
+  .m3 .feed .gw { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, rgba(110,255,140,.16), transparent 70%); mix-blend-mode: screen; }
+  .m3 #camB .gw { background: radial-gradient(ellipse at 50% 40%, rgba(130,195,255,.15), transparent 70%); }
+  .m3 .feed .sb { position: absolute; left: 0; right: 0; top: 0; height: .3cqw; background: #eafff0; box-shadow: 0 0 1cqw .35cqw rgba(140,255,170,.75); opacity: 0; }
+  .m3 #camB .sb { background: #eef7ff; box-shadow: 0 0 1cqw .35cqw rgba(140,200,255,.75); }
+  .m3 .feed.enh .sb { animation: m3-sb 1.2s steps(9, end) forwards; }
+  @keyframes m3-sb { 0% { top: 0; opacity: 1 } 99% { top: 100%; opacity: 1 } 100% { top: 100%; opacity: 0 } }
+  .m3 .feed .sl3 { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.35) 0 1px, transparent 1px 3px); }
+  .m3 .feed .vg { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 50%, rgba(0,6,2,.8) 100%); }
+  .m3 .feed .roll { position: absolute; left: 0; right: 0; height: 3cqw; top: -4cqw; background: linear-gradient(180deg, transparent, rgba(160,255,180,.1), transparent); animation: m3-roll 3.2s linear infinite; }
+  @keyframes m3-roll { to { top: 44cqw } }
+  .m3 .feed .fx { position: absolute; inset: 0; background: #f2fff4; opacity: 0; pointer-events: none; }
+  .m3 .feed .fx.on { animation: m3-fx .5s ease-out forwards; }
+  @keyframes m3-fx { 0% { opacity: .9 } 100% { opacity: 0 } }
+  .m3 .feed .hud { position: absolute; font-size: 1.2cqw; letter-spacing: .14em; color: #c8ffd4; text-shadow: 0 0 .4cqw rgba(80,255,120,.7); white-space: nowrap; transition: opacity .3s; }
+  .m3 #camB .hud { color: #d6ecff; text-shadow: 0 0 .4cqw rgba(110,180,255,.7); }
+  .m3 .feed .hud.tl { top: 1cqw; left: 1.2cqw; } .m3 .feed .hud.tr { top: 1cqw; right: 1.2cqw; }
+  .m3 .feed .hud.bl { bottom: 1cqw; left: 1.2cqw; } .m3 .feed .hud.br { bottom: 1cqw; right: 1.2cqw; }
+  .m3 .feed .hud b { color: #fff; font-weight: bold; }
+  .m3 .feed.mini .hud, .m3 .feed.mini .co { opacity: 0; }
+  /* crochets de verrouillage + étiquette */
+  .m3 .lk { position: absolute; inset: 8% 5% 9% 5%; opacity: 0; transition: inset .6s cubic-bezier(.7,0,.2,1), opacity .2s; }
+  .m3 .lk.on { opacity: 1; }
+  .m3 .lk.lock { inset: var(--li); }
+  .m3 .lk::before, .m3 .lk::after, .m3 .lk i::before, .m3 .lk i::after { content: ''; position: absolute; width: 24%; height: 20%; border: .28cqw solid var(--heat); }
+  .m3 .lk::before { left: 0; top: 0; border-right: 0; border-bottom: 0; } .m3 .lk::after { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+  .m3 .lk i::before { left: 0; bottom: 0; border-right: 0; border-top: 0; } .m3 .lk i::after { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+  .m3 .feed.mini .lk::before, .m3 .feed.mini .lk::after, .m3 .feed.mini .lk i::before, .m3 .feed.mini .lk i::after { border-width: .2cqw; }
+  .m3 .lk .idt { position: absolute; left: 0; top: 100%; margin-top: .45cqw; background: var(--heat); color: #140800; font-size: 1.15cqw; font-weight: bold; padding: .15cqw .55cqw;
+      letter-spacing: .12em; white-space: nowrap; text-shadow: none; opacity: 0; transition: opacity .2s; }
+  .m3 .lk .idt.on { opacity: 1; }
+  .m3 .feed.mini .lk .idt { opacity: 0; }
+  /* annotations « comment le reconnaître » */
+  .m3 .co { position: absolute; inset: 0; transition: opacity .3s; }
+  .m3 .co svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .m3 .cg .cl { fill: none; stroke: var(--heat); stroke-width: 2.2; stroke-dasharray: 100; stroke-dashoffset: 100; }
+  .m3 .cg.on .cl { transition: stroke-dashoffset .45s ease-out; stroke-dashoffset: 0; }
+  .m3 .cg .cd { fill: var(--heat); opacity: 0; }
+  .m3 .cg.on .cd { opacity: 1; transition: opacity .2s .4s; }
+  .m3 .co .lb { position: absolute; font-size: 1.2cqw; letter-spacing: .1em; font-weight: bold; color: #140800; background: var(--heat); padding: .2cqw .55cqw;
+      white-space: nowrap; text-shadow: none; opacity: 0; transform: translateY(.4cqw); transition: opacity .25s .25s, transform .35s .25s; }
+  .m3 .co .lb.on { opacity: 1; transform: none; }
+
+  /* ── C. fiches complètes (une cible à la fois) ── */
+  .m3 .fiche { position: absolute; top: 4.8cqw; width: 58.5cqw; height: 41.3cqw; padding: 1.3cqw 1.8cqw; z-index: 2;
+      background: linear-gradient(180deg, rgba(10,16,26,.97), rgba(6,9,15,.97)); border: 1px solid rgba(108,200,255,.3);
+      opacity: 0; transform: translateX(var(--dx, 0)); transition: opacity .4s, transform .6s cubic-bezier(.2,.8,.2,1); }
+  /* décalage d'entrée par variable : la règle .fiche.on (classes) reprend la main sur l'ID */
+  .m3 #fA { left: 38.5cqw; --dx: 3cqw; }
+  .m3 #fB { left: 3cqw; --dx: -3cqw; }
+  .m3 .fiche.on { opacity: 1; transform: none; }
+  .m3 .fiche.out { opacity: 0; }
+  .m3 .fh { display: flex; justify-content: space-between; align-items: baseline; font-size: 1.2cqw; letter-spacing: .2em; color: var(--heat); white-space: nowrap; }
+  .m3 .fh .src { font-size: 1.1cqw; color: rgba(215,220,207,.55); letter-spacing: .08em; }
+  .m3 .fn { display: flex; align-items: baseline; gap: 1.6cqw; margin-top: .6cqw; min-height: 5.2cqw; }
+  .m3 .fn .nm { font-size: 4.4cqw; font-weight: bold; letter-spacing: .14em; color: #f1f4ea; }
+  .m3 .fn .al { font-size: 1.75cqw; letter-spacing: .14em; color: var(--heat); opacity: 0; transition: opacity .3s; }
+  .m3 .fn .al.on { opacity: 1; }
+  .m3 .fs { height: 1px; background: linear-gradient(90deg, rgba(108,200,255,.55), transparent); margin: .3cqw 0 .8cqw; }
+  .m3 .kv { font-size: 1.55cqw; line-height: 2.65cqw; min-height: 2.65cqw; white-space: pre; }
+  .m3 .kv .k { color: rgba(215,220,207,.5); }
+  .m3 .kv .v { color: #f1f4ea; }
+  .m3 .kv.hot .v { color: var(--heat); font-weight: bold; }
+  .m3 .fiche .stamp { right: 3cqw; bottom: 2.6cqw; font-size: 2.6cqw; }
+  .m3 #sA { bottom: 1.4cqw; right: 2.2cqw; }   /* sous la frise 21 h → minuit, sans toucher le repère MINUIT */
+  /* qui paie traverse, qui ne paie pas est revendu */
+  .m3 .flow { margin: .3cqw 0 .6cqw 11.2cqw; }
+  .m3 .fr { display: flex; align-items: center; gap: .8cqw; height: 3cqw; opacity: 0; transform: translateX(-1cqw); transition: opacity .25s, transform .35s; }
+  .m3 .fr.on { opacity: 1; transform: none; }
+  .m3 .fr .chip { font-size: 1.3cqw; letter-spacing: .08em; padding: .2cqw .6cqw; border: 1px solid rgba(108,200,255,.6); color: var(--ice); white-space: nowrap; min-width: 14cqw; text-align: center; }
+  .m3 .fr .ar { position: relative; width: 0; height: .18cqw; background: var(--ice); transition: width .45s .15s cubic-bezier(.7,0,.2,1); }
+  .m3 .fr.on .ar { width: 7cqw; }
+  .m3 .fr .ar::after { content: ''; position: absolute; right: -.5cqw; top: 50%; transform: translateY(-50%); border-top: .45cqw solid transparent; border-bottom: .45cqw solid transparent; border-left: .7cqw solid var(--ice); }
+  .m3 .fr .rs { margin-left: .6cqw; font-size: 1.5cqw; font-weight: bold; letter-spacing: .12em; color: var(--ice); opacity: 0; transition: opacity .2s .55s; white-space: nowrap; }
+  .m3 .fr.on .rs { opacity: 1; }
+  .m3 .fr.bad .chip { border-color: rgba(224,72,72,.75); color: var(--blood); }
+  .m3 .fr.bad .ar { background: var(--blood); } .m3 .fr.bad .ar::after { border-left-color: var(--blood); }
+  .m3 .fr.bad .rs { color: var(--blood); }
+  /* routine : sur le quai jusqu'à minuit */
+  .m3 .rt { margin: .9cqw 0 0 11.2cqw; width: 38cqw; opacity: 0; transition: opacity .3s; }
+  .m3 .rt.on { opacity: 1; }
+  .m3 .rtt { display: flex; justify-content: space-between; font-size: 1.1cqw; color: rgba(215,220,207,.6); letter-spacing: .08em; }
+  .m3 .rtt .mn { color: var(--heat); font-weight: bold; }
+  .m3 .rtb { position: relative; height: 1cqw; margin-top: .35cqw; background: rgba(108,200,255,.1); border: 1px solid rgba(108,200,255,.35); }
+  .m3 .rtb i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, rgba(255,138,42,.25), var(--heat)); }
+  .m3 .rt.on .rtb i { width: 100%; transition: width 1.6s linear; }
+  .m3 .rtb b { position: absolute; right: -.15cqw; top: -.55cqw; bottom: -.55cqw; width: .3cqw; background: var(--heat); }
+  /* le registre de Mira : elle compte les têtes */
+  .m3 .reg { margin: .4cqw 0 .6cqw 11.2cqw; width: 41cqw; padding: .6cqw 1.1cqw .5cqw; background: #e4dfd0; color: #23242a; text-shadow: none;
+      transform: rotate(-.8deg); box-shadow: 0 .6cqw 1.2cqw rgba(0,0,0,.55); opacity: 0; transition: opacity .3s; }
+  .m3 .reg.on { opacity: 1; }
+  .m3 .reg .rgh { font-size: 1.15cqw; letter-spacing: .14em; font-weight: bold; border-bottom: .12cqw dashed rgba(35,36,42,.5); padding-bottom: .3cqw; white-space: nowrap; }
+  .m3 .reg .rgr { display: flex; align-items: center; gap: 1.2cqw; margin-top: .4cqw; }
+  .m3 .reg svg { width: 19cqw; height: 3.2cqw; flex: none; }
+  .m3 .reg .tk { opacity: 0; } .m3 .reg .tk.on { opacity: 1; }
+  .m3 .reg .rgn { font-size: 1.5cqw; font-weight: bold; white-space: nowrap; }
+  .m3 .reg .rgn b { color: #b4231b; opacity: 0; } .m3 .reg .rgn b.on { opacity: 1; }
+
+  /* ── D. le duo : deux fiches lisibles côte à côte, photos face à face ── */
+  .m3 .card { position: absolute; top: 4.8cqw; width: 46cqw; height: 20.4cqw; z-index: 1;
+      background: linear-gradient(180deg, rgba(12,16,24,.97), rgba(7,9,14,.97)); border: 1px solid rgba(255,138,42,.4);
+      opacity: 0; transform: translateX(var(--dx, 0)); transition: opacity .4s, transform .6s cubic-bezier(.2,.8,.2,1); }
+  .m3 #dA { left: 3cqw; padding: 1.1cqw 16.8cqw 0 1.6cqw; --dx: -2cqw; }
+  .m3 #dB { left: 51cqw; padding: 1.1cqw 1.2cqw 0 17cqw; --dx: 2cqw; }
+  .m3 .card.on { opacity: 1; transform: none; }
+  .m3 .card.dim { opacity: .5; }
+  .m3 .card.out { opacity: 0; }
+  .m3 .card .c1 { font-size: 1.15cqw; letter-spacing: .22em; color: var(--heat); white-space: nowrap; }
+  .m3 .card .cn { font-size: 2.6cqw; font-weight: bold; letter-spacing: .12em; color: #f1f4ea; margin: .25cqw 0 .45cqw; white-space: nowrap; }
+  .m3 .card .cn small { font-size: 1.2cqw; font-weight: normal; letter-spacing: .14em; color: var(--heat); margin-left: 1cqw; }
+  .m3 .card .kv { font-size: 1.4cqw; line-height: 2.3cqw; min-height: 2.3cqw; }
+  .m3 .dl { position: absolute; left: 47.8cqw; top: 15cqw; width: 4.4cqw; height: .22cqw; background: var(--heat); z-index: 4;
+      box-shadow: 0 0 .6cqw rgba(255,138,42,.7); transform: scaleX(0); transition: transform .45s cubic-bezier(.7,0,.2,1), opacity .4s; }
+  .m3 .dl.on { transform: scaleX(1); }
+  .m3 .dl.dim { opacity: .5; }
+  .m3 .dl.out { opacity: 0; }
+  .m3 .dl span { position: absolute; left: 50%; top: -2.3cqw; transform: translateX(-50%); font-size: 1.15cqw; font-weight: bold; letter-spacing: .06em; color: #140800;
+      background: var(--heat); padding: .1cqw .4cqw; white-space: nowrap; text-shadow: none; }
+  /* tactique : tu en touches un, l'autre donne l'alerte */
+  .m3 .tac { position: absolute; left: 3cqw; top: 27.4cqw; width: 94cqw; height: 18.6cqw; border: 1px solid rgba(255,138,42,.32); background: rgba(10,12,18,.95);
+      opacity: 0; transform: translateY(1.5cqw); transition: opacity .4s, transform .6s cubic-bezier(.2,.8,.2,1); }
+  .m3 .tac.on { opacity: 1; transform: none; }
+  .m3 .tac.out { opacity: 0; transform: translateY(1.5cqw); }
+  .m3 .tac .th2 { position: absolute; top: .8cqw; left: 1.2cqw; font-size: 1.2cqw; letter-spacing: .25em; color: rgba(215,220,207,.55); }
+  .m3 .tac svg { position: absolute; left: 1cqw; top: 2.8cqw; width: 46cqw; height: 15cqw; }
+  .m3 .tac .tx { position: absolute; left: 50cqw; top: 3.4cqw; right: 2cqw; }
+  .m3 .tq1 { font-size: 1.9cqw; color: #f1f4ea; letter-spacing: .1em; min-height: 2.9cqw; white-space: nowrap; }
+  .m3 .tq2 { font-size: 2.4cqw; color: var(--blood); font-weight: bold; letter-spacing: .05em; min-height: 3.4cqw; white-space: nowrap; }
+  .m3 .tq3 { font-size: 1.45cqw; color: var(--heat); letter-spacing: .14em; margin-top: 1.6cqw; min-height: 2cqw; white-space: nowrap; }
+
+  /* ── E. la seule pièce à conviction : l'extrait du manifeste ── */
+  .m3 .mx { position: absolute; left: 22cqw; top: 29cqw; width: 56cqw; padding: .9cqw 3.8cqw .8cqw; z-index: 4; text-shadow: none;
+      background:
+        linear-gradient(90deg, #e9eee0 0 2.4cqw, transparent 2.4cqw calc(100% - 2.4cqw), #e9eee0 0) 0 0 / 100% 100% no-repeat,
+        repeating-linear-gradient(180deg, #cfe2c6 0 2.5cqw, #eef2e7 2.5cqw 5cqw) 0 .9cqw / 100% 100%;
+      box-shadow: 0 .9cqw 1.8cqw rgba(0,0,0,.7); opacity: 0; --r: -1.2deg; transform: rotate(var(--r)); }
+  .m3 .mx.on { animation: k-slap .3s cubic-bezier(.3,1.4,.5,1) forwards; }
+  .m3 .mx.on.out { animation: none; opacity: 0; }
+  .m3 .mx::before, .m3 .mx::after { content: ''; position: absolute; top: 0; bottom: 0; width: 2.4cqw;
+      background: radial-gradient(circle, #06070b 0 .36cqw, rgba(6,7,11,.35) .42cqw, transparent .48cqw) 0 .3cqw / 2.4cqw 1.9cqw repeat-y; }
+  .m3 .mx::before { left: 0; border-right: .12cqw dashed rgba(40,70,40,.35); }
+  .m3 .mx::after { right: 0; border-left: .12cqw dashed rgba(40,70,40,.35); }
+  .m3 .mx .ln { position: relative; font: bold 1.6cqw/2.5cqw 'Courier New', Courier, monospace; white-space: pre; color: transparent; }
+  .m3 .mx .ln span { color: transparent; background: radial-gradient(circle, #1a1f2e 0 50%, transparent 62%) 0 0 / .19cqw .19cqw; -webkit-background-clip: text; background-clip: text; }
+  .m3 .mx .ln span.red { background-image: radial-gradient(circle, #a8120a 0 60%, transparent 70%); }
+  .m3 .mx .lie { position: relative; }
+  .m3 .mx .stk { position: absolute; left: -.3cqw; right: -.3cqw; top: 46%; height: .3cqw; background: #c01d14; transform: scaleX(0); transform-origin: left; transition: transform .35s cubic-bezier(.7,0,.2,1); }
+  .m3 .mx .stk.on { transform: none; }
+  .m3 .mx .mk { position: absolute; left: 9.6ch; top: .1cqw; height: 2.3cqw; width: 17ch; background: rgba(255,138,42,.6); mix-blend-mode: multiply; transform: scaleX(0); transform-origin: left; transition: transform .45s cubic-bezier(.7,0,.2,1); }
+  .m3 .mx .mk.on { transform: none; }
+  .m3 .mx .stamp { right: 4.2cqw; bottom: 1.3cqw; font-size: 1.9cqw; color: #d8401f; border-color: #d8401f; background: none; mix-blend-mode: multiply; }
+
+  /* ── F. plan du port, reçu du grutier, coupe de la grue, ordre de tir ── */
+  .m3 #plan { left: 3cqw; top: 4.8cqw; width: 67cqw; height: 41.3cqw; }
+  .m3 #plan .lg { position: absolute; top: .8cqw; right: 1.2cqw; font-size: 1.1cqw; letter-spacing: .15em; color: rgba(215,220,207,.65); }
+  .m3 #plan .lg .o { color: var(--heat); } .m3 #plan .lg .b { color: var(--ice); }
+  .m3 .sight { stroke-dasharray: 100; stroke-dashoffset: 100; }
+  .m3 .sight.on { transition: stroke-dashoffset 1s ease-in-out; stroke-dashoffset: 0; }
+  .m3 .rc { position: absolute; left: 72.5cqw; top: 5.4cqw; width: 24.5cqw; padding: 1.1cqw 1.3cqw 1.3cqw; background: #e4dfd0; color: #23242a; text-shadow: none;
+      font-size: 1.15cqw; line-height: 2cqw; white-space: nowrap; opacity: 0; --r: 1.6deg; transform: rotate(var(--r)); box-shadow: 0 .8cqw 1.6cqw rgba(0,0,0,.6); }
+  .m3 .rc.on { animation: k-slap .3s cubic-bezier(.3,1.4,.5,1) forwards; }
+  .m3 .rc.on.out { animation: none; opacity: 0; transition: opacity .25s; }
+  .m3 .rc .rh { font-weight: bold; font-size: 1.35cqw; letter-spacing: .12em; }
+  .m3 .rc .rs { border-top: .12cqw dashed rgba(35,36,42,.5); margin: .5cqw 0 .4cqw; }
+  .m3 .rc .rk { color: rgba(35,36,42,.55); }
+  .m3 .rc .rbar { display: inline-block; width: 7cqw; height: 1.1cqw; background: #23242a; vertical-align: middle; }
+  .m3 .rc .stamp { right: 1cqw; bottom: .9cqw; font-size: 2.1cqw; color: #c8461e; border-color: #c8461e; background: rgba(228,223,208,.25); }
+  .m3 .elev { position: absolute; left: 72.5cqw; top: 22cqw; width: 24.5cqw; height: 24.1cqw; background: rgba(10,12,18,.95); border: 1px solid rgba(108,200,255,.3);
+      opacity: 0; transform: translateY(2cqw); transition: opacity .45s, transform .6s cubic-bezier(.2,.8,.2,1); }
+  .m3 .elev.on { opacity: 1; transform: none; }
+  .m3 .elev.out { opacity: 0; transform: translateY(2cqw); }
+  .m3 .elev .eh { position: absolute; top: .8cqw; left: 1.1cqw; font-size: 1.1cqw; letter-spacing: .22em; color: var(--ice); }
+  .m3 .elev svg { position: absolute; left: .6cqw; top: 2.8cqw; width: 23.3cqw; height: 14.27cqw; }
+  .m3 .elev .ef { position: absolute; left: 1.1cqw; right: 1.1cqw; bottom: .8cqw; font-size: 1.2cqw; line-height: 2.1cqw; white-space: nowrap; }
+  .m3 .elev .ef .k { color: rgba(215,220,207,.5); } .m3 .elev .ef .v { color: var(--ice); }
+  .m3 .ord { position: absolute; left: 72.5cqw; top: 4.8cqw; width: 24.5cqw; padding: 1cqw 1.2cqw 1.1cqw; background: rgba(10,12,18,.96); border: 1px solid rgba(255,138,42,.5);
+      opacity: 0; transform: translateY(-1cqw); transition: opacity .35s, transform .5s cubic-bezier(.2,.8,.2,1); }
+  .m3 .ord.on { opacity: 1; transform: none; }
+  .m3 .ord.out { opacity: 0; }
+  .m3 .ord .oh { font-size: 1.15cqw; letter-spacing: .2em; color: var(--heat); margin-bottom: .5cqw; white-space: nowrap; }
+  .m3 .orow { display: flex; align-items: center; gap: .8cqw; font-size: 1.35cqw; line-height: 2.7cqw; white-space: nowrap; opacity: 0; transform: translateX(-.8cqw); transition: opacity .25s, transform .35s; }
+  .m3 .orow.on { opacity: 1; transform: none; }
+  .m3 .orow .num { width: 2cqw; height: 2cqw; border-radius: 50%; background: var(--heat); color: #140800; font-weight: bold; text-align: center; line-height: 2cqw; text-shadow: none; flex: none; font-size: 1.25cqw; }
+  .m3 .orow .nmv { color: #f1f4ea; font-weight: bold; letter-spacing: .1em; }
+  .m3 .orow .tg { margin-left: auto; color: var(--heat); font-size: 1.1cqw; letter-spacing: .12em; }
+  .m3 .orow.q .num { background: none; border: .16cqw solid var(--ice); color: var(--ice); line-height: 1.7cqw; }
+  .m3 .orow.q .nmv, .m3 .orow.q .tg { color: var(--ice); }
+  .m3 .ord .sep { border-top: 1px dashed rgba(108,200,255,.4); margin: .45cqw 0; }
+  .m3 .opz { display: flex; align-items: center; gap: .8cqw; margin-top: .5cqw; font-size: 1.15cqw; letter-spacing: .12em; color: rgba(215,220,207,.7); white-space: nowrap; }
+  .m3 .pz { display: inline-block; font-size: 1.9cqw; font-weight: bold; letter-spacing: .1em; color: var(--ice); border: .25cqw solid var(--ice); padding: 0 .6cqw;
+      text-shadow: none; opacity: 0; transform: rotate(-6deg) scale(2.2); }
+  .m3 .pz.on { animation: m3-pz .22s cubic-bezier(.6,0,.9,.4) forwards; }
+  @keyframes m3-pz { to { opacity: .95; transform: rotate(-6deg) scale(1); } }
+  .m3 .opz .tc { color: #f1f4ea; opacity: 0; transition: opacity .4s; }
+  .m3 .opz .tc.on { opacity: 1; }
+
+  /* ── carton-titre aux couleurs de la mission ── */
+  .m3 .title .t1 { color: var(--ice); }
+  .m3 .title .ln { background: linear-gradient(90deg, var(--ice), var(--heat)); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="st m3" id="st">
+    <div class="bg"></div>
+    <div class="scene" id="scene">
+
+      <div class="chans" id="chans">
+        <span class="ch" id="ch1">01 PORT</span><span class="ch" id="ch2">02 CIBLE 1</span><span class="ch" id="ch3">03 CIBLE 2</span><span class="ch" id="ch4">04 MANIFESTE</span><span class="ch" id="ch5">05 PLAN</span>
+      </div>
+
+      <!-- A. le port, de nuit -->
+      <div class="vista" id="port">
+        <svg viewBox="0 0 940 413">
+          <defs>
+            <linearGradient id="m3sky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#02040a"/><stop offset=".66" stop-color="#0c1830"/><stop offset=".72" stop-color="#050a16"/><stop offset="1" stop-color="#02040a"/>
+            </linearGradient>
+            <radialGradient id="m3lamp"><stop offset="0" stop-color="#ffc070" stop-opacity=".85"/><stop offset=".22" stop-color="#ff8a2a" stop-opacity=".3"/><stop offset="1" stop-color="#ff8a2a" stop-opacity="0"/></radialGradient>
+            <linearGradient id="m3refl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9a40" stop-opacity=".5"/><stop offset="1" stop-color="#ff9a40" stop-opacity="0"/></linearGradient>
+          </defs>
+          <rect width="940" height="413" fill="url(#m3sky)"/>
+          <g id="m3port"></g>
+          <g transform="translate(487 264.5)"><g class="pop" id="fret">
+            <path d="M-36 -11 V-18 H-28 M28 -18 H36 V-11 M36 11 V18 H28 M-28 18 H-36 V11" stroke="#e04848" stroke-width="2" fill="none"/>
+            <text x="-36" y="-25" font-size="12" fill="#e04848" font-family="Courier New" font-weight="bold" letter-spacing="3">FRET</text>
+          </g></g>
+          <g transform="translate(559 288)"><g class="pop" id="tgt">
+            <path d="M-15 -9 V-15 H-9 M9 -15 H15 V-9 M15 9 V15 H9 M-9 15 H-15 V9" stroke="#ff8a2a" stroke-width="1.6" fill="none"/>
+            <text x="-15" y="-20" font-size="11" fill="#ff8a2a" font-family="Courier New" font-weight="bold" letter-spacing="1.5">2 CIBLES</text>
+          </g></g>
+        </svg>
+        <div class="vh">FLUX 01 · CAM PANORAMIQUE</div>
+        <div class="vt"><b>●</b> DIRECT · 23:41:07</div>
+        <div class="vc"><div class="a" id="pcA" data-reset></div><div class="b" id="pcB" data-reset></div></div>
+      </div>
+
+      <!-- B. caméras : Vosko (vision nocturne) puis Mira (surveillance froide) -->
+      <div class="feed" id="camA">
+        <div class="zw"><img class="lo" src="img/portrait-passeur-cam-lo.png" alt=""><div class="zf" id="zfA"><b>ZOOM ×8</b></div></div>
+        <div class="hw"><div class="zw"><img src="img/portrait-passeur-cam.png" alt=""></div></div>
+        <div class="tn"></div><div class="gw"></div><div class="sb"></div><div class="roll"></div><div class="sl3"></div><div class="vg"></div>
+        <div class="fx" id="fxA"></div>
+        <div class="co">
+          <svg viewBox="0 0 400 500">
+            <g class="cg" id="coA1"><path class="cl" pathLength="100" d="M128 398 L150 398 L172 366"/><circle class="cd" cx="172" cy="366" r="5"/></g>
+            <g class="cg" id="coA2"><path class="cl" pathLength="100" d="M150 76 L176 76 L208 112"/><circle class="cd" cx="208" cy="112" r="5"/></g>
+          </svg>
+          <div class="lb" id="lbA1" style="left:3%;top:77%">COSTUME SOMBRE</div>
+          <div class="lb" id="lbA2" style="left:3%;top:12.3%">CHEVEUX PLAQUÉS</div>
+        </div>
+        <div class="lk" id="lkA"><i></i><div class="idt" id="idA">IDENTIFIÉ · VOSKO</div></div>
+        <div class="hud tl"><span class="rec">●</span> CAM 4 · 23:52</div>
+        <div class="hud tr">VISION NOCTURNE</div>
+        <div class="hud bl"><span id="stA" data-reset></span><b id="pcA2" data-reset></b></div>
+        <div class="hud br">ZOOM ×<span id="zxA" data-reset></span></div>
+      </div>
+
+      <div class="feed" id="camB">
+        <div class="zw"><img class="lo" src="img/portrait-seconde-cam-lo.png" alt=""><div class="zf" id="zfB"><b>ZOOM ×8</b></div></div>
+        <div class="hw"><div class="zw"><img src="img/portrait-seconde-cam.png" alt=""></div></div>
+        <div class="tn"></div><div class="gw"></div><div class="sb"></div><div class="roll"></div><div class="sl3"></div><div class="vg"></div>
+        <div class="fx" id="fxB"></div>
+        <div class="co">
+          <svg viewBox="0 0 400 500">
+            <g class="cg" id="coB1"><path class="cl" pathLength="100" d="M248 392 L232 392 L214 362"/><circle class="cd" cx="214" cy="362" r="5"/></g>
+            <g class="cg" id="coB2"><path class="cl" pathLength="100" d="M84 86 L84 104 L118 118"/><circle class="cd" cx="118" cy="118" r="5"/></g>
+          </svg>
+          <div class="lb" id="lbB1" style="right:3%;top:76%">T-SHIRT CLAIR</div>
+          <div class="lb" id="lbB2" style="left:3%;top:12.3%">CHIGNON</div>
+        </div>
+        <div class="lk" id="lkB"><i></i><div class="idt" id="idB">IDENTIFIÉE · MIRA</div></div>
+        <div class="hud tl"><span class="rec">●</span> CAM 4-B · 23:54</div>
+        <div class="hud tr">IR · N&amp;B</div>
+        <div class="hud bl"><span id="stB" data-reset></span><b id="pcB2" data-reset></b></div>
+        <div class="hud br">ZOOM ×<span id="zxB" data-reset></span></div>
+      </div>
+
+      <!-- C. fiche complète : Vosko -->
+      <div class="fiche" id="fA">
+        <div class="fh"><span>CIBLE 01 · PRIORITÉ 1</span><span class="src">SOURCE : UN DOCKER · 1 500 €</span></div>
+        <div class="fn"><span class="nm" id="nmA" data-reset></span><span class="al" id="alA">« LE PASSEUR »</span></div>
+        <div class="fs"></div>
+        <div class="kv" data-reset data-k="RÔLE ...... " data-v="PASSEUR · RÉSEAU DU PORT"></div>
+        <div class="kv" data-reset data-k="TARIF ..... " data-v="4 000 € LA TÊTE"></div>
+        <div class="flow">
+          <div class="fr" id="frA1"><span class="chip">ILS PAIENT</span><i class="ar"></i><span class="rs">TRAVERSENT</span></div>
+          <div class="fr bad" id="frA2"><span class="chip">NE PAIENT PAS</span><i class="ar"></i><span class="rs">REVENDUS</span></div>
+        </div>
+        <div class="kv hot" data-reset data-k="SIGNE ..... " data-v="COSTUME SOMBRE · CHEVEUX PLAQUÉS"></div>
+        <div class="kv" data-reset data-k="ROUTINE ... " data-v="QUAI 4 · JAMAIS PARTI AVANT MINUIT"></div>
+        <div class="kv" data-reset data-k="            " data-v="VÉRIFIE LE CHARGEMENT LUI-MÊME"></div>
+        <div class="rt" id="rtA">
+          <div class="rtt"><span>21 H</span><span>22 H</span><span>23 H</span><span class="mn">MINUIT</span></div>
+          <div class="rtb"><i></i><b></b></div>
+        </div>
+        <div class="stamp" id="sA">CIBLE 1</div>
+      </div>
+
+      <!-- C'. fiche complète : Mira -->
+      <div class="fiche" id="fB">
+        <div class="fh"><span>CIBLE 02 · PRIORITÉ 2</span><span class="src">SOURCE : UN DOUANIER · 3 000 €</span></div>
+        <div class="fn"><span class="nm" id="nmB" data-reset></span><span class="al" id="alB">« LA SECONDE »</span></div>
+        <div class="fs"></div>
+        <div class="kv" data-reset data-k="RÔLE ...... " data-v="SECONDE DE VOSKO"></div>
+        <div class="kv" data-reset data-k="TÂCHE ..... " data-v="COMPTE LES TÊTES · TIENT LE REGISTRE"></div>
+        <div class="reg" id="regB">
+          <div class="rgh">REGISTRE · QUAI 4 · CETTE NUIT</div>
+          <div class="rgr"><svg viewBox="0 0 190 32" id="tally"></svg><span class="rgn"><span id="rgn" data-reset></span> <b id="rge">· 0 ERREUR</b></span></div>
+        </div>
+        <div class="kv hot" data-reset data-k="SIGNE ..... " data-v="T-SHIRT CLAIR · CHIGNON"></div>
+        <div class="kv" data-reset data-k="ROUTINE ... " data-v="TOUJOURS À DEUX PAS DE VOSKO"></div>
+        <div class="kv" data-reset data-k="            " data-v="QUAI 4 · NE PART QU'AVEC LUI"></div>
+        <div class="stamp" id="sB">CIBLE 2</div>
+      </div>
+
+      <!-- D. le duo -->
+      <div class="card" id="dA">
+        <div class="c1">CIBLE 01 · PRIORITÉ 1</div>
+        <div class="cn">VOSKO<small>LE PASSEUR</small></div>
+        <div class="kv" data-reset data-k="TARIF ... " data-v="4 000 € LA TÊTE"></div>
+        <div class="kv hot" data-reset data-k="SIGNE ... " data-v="COSTUME SOMBRE"></div>
+        <div class="kv hot" data-reset data-k="          " data-v="CHEVEUX PLAQUÉS"></div>
+        <div class="kv" data-reset data-k="QUAI 4 .. " data-v="JUSQU'À MINUIT"></div>
+        <div class="kv" data-reset data-k="CHARGE .. " data-v="VÉRIFIÉE PAR LUI"></div>
+      </div>
+      <div class="card" id="dB">
+        <div class="c1">CIBLE 02 · PRIORITÉ 2</div>
+        <div class="cn">MIRA<small>LA SECONDE</small></div>
+        <div class="kv" data-reset data-k="RÔLE .... " data-v="COMPTE LES TÊTES"></div>
+        <div class="kv hot" data-reset data-k="SIGNE ... " data-v="T-SHIRT CLAIR"></div>
+        <div class="kv hot" data-reset data-k="          " data-v="CHIGNON"></div>
+        <div class="kv" data-reset data-k="POSTE ... " data-v="À 2 PAS DE VOSKO"></div>
+        <div class="kv" data-reset data-k="ERREURS . " data-v="AUCUNE"></div>
+      </div>
+      <div class="dl" id="dl"><span>2 PAS</span></div>
+
+      <div class="tac" id="tac">
+        <div class="th2">TACTIQUE · ZONE DE CHARGEMENT</div>
+        <svg viewBox="0 0 460 150">
+          <defs><clipPath id="m3tc"><circle r="17"/></clipPath></defs>
+          <path d="M10 132 H450" stroke="rgba(215,220,207,.28)" stroke-width="1.2" stroke-dasharray="6 4" fill="none"/>
+          <g transform="translate(150 76)"><g class="pop" id="tvV">
+            <image href="img/portrait-passeur-cam.png" x="-34" y="-24" width="56" height="70" clip-path="url(#m3tc)" style="filter: grayscale(1) brightness(1.6) contrast(1.2)"/>
+            <circle r="18" fill="none" stroke="#ff8a2a" stroke-width="2.4"/>
+            <text y="-27" text-anchor="middle" font-size="13" fill="#ff8a2a" font-family="Courier New" font-weight="bold" letter-spacing="1.5">VOSKO</text>
+          </g></g>
+          <g transform="translate(290 76)"><g class="pop" id="tvM">
+            <image href="img/portrait-seconde-cam.png" x="-34" y="-27" width="56" height="70" clip-path="url(#m3tc)" style="filter: grayscale(1) brightness(1.6) contrast(1.2)"/>
+            <circle r="18" fill="none" stroke="#ff8a2a" stroke-width="2.4"/>
+            <text y="-27" text-anchor="middle" font-size="13" fill="#ff8a2a" font-family="Courier New" font-weight="bold" letter-spacing="1.5">MIRA</text>
+          </g></g>
+          <g class="pop" id="tvD" stroke="rgba(215,220,207,.7)" stroke-width="1.2" fill="none">
+            <path d="M150 104 V122 M290 104 V122 M150 114 H290" stroke-dasharray="3 3"/>
+            <text x="220" y="108" text-anchor="middle" font-size="13" fill="#f1f4ea" stroke="none" font-family="Courier New" letter-spacing="1">≈ 2 PAS</text>
+          </g>
+          <g transform="translate(150 76)"><g class="pop" id="tvR" stroke="#e04848" stroke-width="1.8" fill="none">
+            <circle r="27"/><path d="M-36 0 H-20 M20 0 H36 M0 -36 V-20 M0 20 V36"/>
+            <text x="-62" y="5" text-anchor="end" font-size="13" fill="#e04848" stroke="none" font-family="Courier New" font-weight="bold">TIR 1</text>
+          </g></g>
+          <g transform="translate(290 76)"><g class="pop" id="tvA" fill="none" stroke="#e04848">
+            <path d="M24 -16 A29 29 0 0 1 24 16" stroke-width="2"/><path d="M33 -24 A41 41 0 0 1 33 24" stroke-width="1.8" stroke-opacity=".7"/><path d="M42 -32 A53 53 0 0 1 42 32" stroke-width="1.5" stroke-opacity=".45"/>
+            <text class="blinkr" x="62" y="6" font-size="16" fill="#e04848" stroke="none" font-family="Courier New" font-weight="bold" letter-spacing="2">ALERTE</text>
+          </g></g>
+        </svg>
+        <div class="tx">
+          <div class="tq1" id="tq1" data-reset></div>
+          <div class="tq2" id="tq2" data-reset></div>
+          <div class="tq3" id="tq3" data-reset></div>
+        </div>
+      </div>
+
+      <!-- E. l'extrait du manifeste -->
+      <div class="mx" id="mx">
+        <div class="ln"><span>MANIFESTE · NAVIRE KALINA · QUAI 4</span></div>
+        <div class="ln"><span>CONT. MSKU 441907-3 · </span><span class="red">ROUGE</span></div>
+        <div class="ln"><span>CONTENU : </span><span class="lie">PIÈCES DÉTACHÉES<i class="stk" id="stk"></i></span><span>  </span><span class="red" id="tru" data-reset></span><i class="mk" id="mk"></i></div>
+        <div class="ln"><span>CONTRÔLE DOUANE : CONFORME</span></div>
+        <div class="ln"><span>CHARGEMENT VÉRIFIÉ PAR : </span><span class="red">VOSKO</span></div>
+        <div class="stamp" id="fst">FALSIFIÉ</div>
+      </div>
+
+      <!-- F. plan du port -->
+      <div class="panel" id="plan">
+        <div class="ph">PLAN · QUAI 4 · NUIT</div>
+        <div class="lg"><span class="o">●</span> CIBLES ×2 &nbsp; <span class="b">■</span> TON POSTE</div>
+        <svg viewBox="0 0 670 413">
+          <defs><clipPath id="m3pc"><circle r="11"/></clipPath><clipPath id="m3pc2"><circle r="29"/></clipPath></defs>
+          <rect x="0" y="300" width="670" height="113" fill="rgba(60,120,200,.07)"/>
+          <g class="fadein" id="m3waves" stroke="rgba(108,200,255,.2)" stroke-width="1"></g>
+          <g fill="none" stroke="rgba(215,220,207,.5)" stroke-width="1.3">
+            <path class="draw" pathLength="100" d="M0 300 H670"/>
+            <path class="draw" pathLength="100" d="M16 40 H534 V212 H16 Z"/>
+            <path class="draw" pathLength="100" d="M30 318 H560 Q612 354 560 390 H30 Z"/>
+          </g>
+          <g class="fadein" id="m3yard" fill="rgba(215,220,207,.07)" stroke="rgba(215,220,207,.3)" stroke-width=".8"></g>
+          <g class="fadein" stroke="rgba(215,220,207,.22)" stroke-width="1" stroke-dasharray="6 4" fill="none"><path d="M8 262 H462 M8 294 H462"/></g>
+          <g class="fadein" fill="rgba(215,220,207,.35)" id="m3boll"></g>
+          <g class="fadein" fill="rgba(215,220,207,.06)" stroke="rgba(215,220,207,.22)" stroke-width=".8">
+            <rect x="446" y="330" width="32" height="48"/><rect x="482" y="330" width="32" height="48"/><rect x="518" y="330" width="32" height="48"/>
+            <text x="42" y="360" font-size="12" fill="rgba(215,220,207,.45)" stroke="none" font-family="Courier New" letter-spacing="3">KALINA</text>
+            <text x="22" y="252" font-size="13" fill="rgba(215,220,207,.6)" stroke="none" font-family="Courier New" letter-spacing="5">QUAI 4</text>
+          </g>
+          <g fill="none" stroke="rgba(215,220,207,.5)" stroke-width="1.1">
+            <path class="draw" pathLength="100" d="M68 256 h44 v44 h-44 Z M83 205 h14 v195 h-14 Z"/>
+            <path class="draw" pathLength="100" d="M178 256 h44 v44 h-44 Z M193 205 h14 v195 h-14 Z"/>
+            <path class="draw" pathLength="100" d="M288 256 h44 v44 h-44 Z M303 205 h14 v195 h-14 Z" stroke="rgba(108,200,255,.75)"/>
+          </g>
+          <g class="fadein" font-family="Courier New" font-size="11.5" fill="rgba(215,220,207,.55)">
+            <text x="100" y="410">G1</text><text x="210" y="410">G2</text><text x="320" y="410" fill="#6cc8ff">GRUE 3</text>
+          </g>
+          <!-- zone de chargement : le conteneur rouge et les deux cibles -->
+          <g class="pop" id="zone">
+            <rect x="466" y="216" width="196" height="82" fill="rgba(255,138,42,.06)" stroke="#ff8a2a" stroke-width="1.2" stroke-dasharray="5 4"/>
+            <text x="472" y="230" font-size="11.5" fill="#ff8a2a" font-family="Courier New" letter-spacing="1">ZONE DE CHARGEMENT</text>
+            <rect x="474" y="250" width="52" height="14" fill="rgba(224,72,72,.35)" stroke="#e04848" stroke-width="1.4"/>
+            <path d="M487 253 V261 M500 253 V261 M513 253 V261" stroke="#e04848" stroke-width=".8"/>
+          </g>
+          <g transform="translate(600 254)"><g class="pop" id="pv">
+            <circle class="pulse" r="12" fill="none" stroke="#ff8a2a" stroke-width="1"/>
+            <image href="img/portrait-passeur-cam.png" x="-26.6" y="-18.8" width="44" height="55" clip-path="url(#m3pc)" style="filter: grayscale(1) brightness(1.6) contrast(1.2)"/>
+            <circle r="11" fill="none" stroke="#ff8a2a" stroke-width="2"/>
+            <text x="-15" y="4" text-anchor="end" font-size="12" fill="#ff8a2a" font-family="Courier New" font-weight="bold" stroke="#0a0c12" stroke-width="3" paint-order="stroke">VOSKO</text>
+          </g></g>
+          <g transform="translate(632 270)"><g class="pop" id="pm">
+            <circle class="pulse" r="12" fill="none" stroke="#ff8a2a" stroke-width="1"/>
+            <image href="img/portrait-seconde-cam.png" x="-26.6" y="-21.6" width="44" height="55" clip-path="url(#m3pc)" style="filter: grayscale(1) brightness(1.6) contrast(1.2)"/>
+            <circle r="11" fill="none" stroke="#ff8a2a" stroke-width="2"/>
+            <text y="24" text-anchor="middle" font-size="12" fill="#ff8a2a" font-family="Courier New" font-weight="bold" stroke="#0a0c12" stroke-width="3" paint-order="stroke">MIRA</text>
+          </g></g>
+          <path class="sight" id="sight" pathLength="100" d="M310 325 L616 262" stroke="#6cc8ff" stroke-width="1.5" fill="none"/>
+          <text class="pop" id="pdist" x="420" y="290" font-size="13" fill="#6cc8ff" font-family="Courier New" stroke="#0a0c12" stroke-width="3" paint-order="stroke">155 m</text>
+          <g class="pop" id="poste">
+            <rect x="303" y="318" width="14" height="14" fill="rgba(108,200,255,.3)" stroke="#6cc8ff" stroke-width="1.4"/>
+            <circle class="pulse" cx="310" cy="325" r="9" fill="none" stroke="#6cc8ff" stroke-width="1"/>
+            <text x="324" y="331" font-size="12.5" fill="#6cc8ff" font-family="Courier New" font-weight="bold" stroke="#0a0c12" stroke-width="3" paint-order="stroke">TON POSTE</text>
+            <text x="324" y="345" font-size="11.5" fill="rgba(108,200,255,.85)" font-family="Courier New" stroke="#0a0c12" stroke-width="3" paint-order="stroke">CABINE GRUE 3 · 41 m</text>
+          </g>
+          <!-- l'ordre de tir, puis le cadenas -->
+          <g class="pop" id="b1"><circle cx="620" cy="240" r="8" fill="#ff8a2a"/><text x="620" y="244.5" text-anchor="middle" font-size="12" fill="#140800" font-family="Courier New" font-weight="bold">1</text></g>
+          <g class="pop" id="b2"><circle cx="652" cy="256" r="8" fill="#ff8a2a"/><text x="652" y="260.5" text-anchor="middle" font-size="12" fill="#140800" font-family="Courier New" font-weight="bold">2</text></g>
+          <!-- détail ×2 de la zone de chargement (dernier temps) : les deux cibles en grand -->
+          <g class="pop" id="det">
+            <path d="M232 204 L466 216 M528 204 L662 216" stroke="rgba(255,138,42,.55)" stroke-width="1" stroke-dasharray="4 3" fill="none"/>
+            <rect x="232" y="54" width="296" height="150" fill="rgba(10,12,18,.97)" stroke="rgba(255,138,42,.6)" stroke-width="1.2"/>
+            <text x="241" y="71" font-size="11.5" fill="rgba(241,237,227,.6)" font-family="Courier New" letter-spacing="1.5">DÉTAIL ×2 · ZONE DE CHARGEMENT</text>
+            <path d="M240 180 H520" stroke="rgba(215,220,207,.3)" stroke-width="1" stroke-dasharray="5 4" fill="none"/>
+            <rect x="246" y="140" width="84" height="26" fill="rgba(224,72,72,.3)" stroke="#e04848" stroke-width="1.6"/>
+            <path d="M267 145 V161 M288 145 V161 M309 145 V161" stroke="#e04848" stroke-width="1"/>
+            <text x="288" y="131" text-anchor="middle" font-size="11.5" fill="rgba(224,72,72,.9)" font-family="Courier New" letter-spacing="1">CONT. ROUGE</text>
+            <g transform="translate(392 128)">
+              <image href="img/portrait-passeur-cam.png" x="-70" y="-50" width="116" height="145" clip-path="url(#m3pc2)" style="filter: grayscale(1) brightness(1.6) contrast(1.2)"/>
+              <circle r="30" fill="none" stroke="#ff8a2a" stroke-width="2.6"/>
+              <text y="48" text-anchor="middle" font-size="13" fill="#ff8a2a" font-family="Courier New" font-weight="bold" letter-spacing="1.5">VOSKO</text>
+            </g>
+            <g transform="translate(478 140)">
+              <image href="img/portrait-seconde-cam.png" x="-70" y="-57" width="116" height="145" clip-path="url(#m3pc2)" style="filter: grayscale(1) brightness(1.6) contrast(1.2)"/>
+              <circle r="30" fill="none" stroke="#ff8a2a" stroke-width="2.6"/>
+              <text y="48" text-anchor="middle" font-size="13" fill="#ff8a2a" font-family="Courier New" font-weight="bold" letter-spacing="1.5">MIRA</text>
+            </g>
+          </g>
+          <g class="pop" id="db1"><circle cx="428" cy="104" r="10" fill="#ff8a2a"/><text x="428" y="109" text-anchor="middle" font-size="14" fill="#140800" font-family="Courier New" font-weight="bold">1</text></g>
+          <g class="pop" id="db2"><circle cx="514" cy="116" r="10" fill="#ff8a2a"/><text x="514" y="121" text-anchor="middle" font-size="14" fill="#140800" font-family="Courier New" font-weight="bold">2</text></g>
+          <g transform="translate(330 153)"><g class="pop" id="dlk">
+            <circle class="pulse" r="12" fill="none" stroke="#6cc8ff" stroke-width="1.2"/>
+            <circle r="11" fill="#0a0c12" stroke="#6cc8ff" stroke-width="1.8"/>
+            <text y="5.5" text-anchor="middle" font-size="15" fill="#6cc8ff" font-family="Courier New" font-weight="bold">?</text>
+            <text x="-42" y="40" text-anchor="middle" font-size="11.5" fill="#6cc8ff" font-family="Courier New" letter-spacing="1">CADENAS</text>
+          </g></g>
+          <g transform="translate(526 257)"><g class="pop" id="lockmk">
+            <circle class="pulse" r="9" fill="none" stroke="#6cc8ff" stroke-width="1"/>
+            <circle r="8" fill="#0a0c12" stroke="#6cc8ff" stroke-width="1.4"/>
+            <text y="4.5" text-anchor="middle" font-size="12" fill="#6cc8ff" font-family="Courier New" font-weight="bold">?</text>
+            <text x="-26" y="-12" text-anchor="middle" font-size="11.5" fill="#6cc8ff" font-family="Courier New" stroke="#0a0c12" stroke-width="3" paint-order="stroke">CADENAS</text>
+          </g></g>
+        </svg>
+      </div>
+      <div class="rc" id="rc">
+        <div class="rh">REÇU N° 0417</div>
+        <div class="rs"></div>
+        <div><span class="rk">OBJET ... </span>CABINE GRUE 3</div>
+        <div><span class="rk">DURÉE ... </span>UNE NUIT</div>
+        <div><span class="rk">ACCÈS ... </span>21 H → 6 H</div>
+        <div><span class="rk">MONTANT . </span><span class="rbar"></span> €</div>
+        <div><span class="rk">CLIENT .. </span>A.</div>
+        <div class="stamp" id="rstamp">PAYÉ</div>
+      </div>
+      <div class="ord" id="ord">
+        <div class="oh">ORDRE DE TIR</div>
+        <div class="orow" id="or1"><span class="num">1</span><span class="nmv">VOSKO</span><span class="tg">CONTRAT</span></div>
+        <div class="orow" id="or2"><span class="num">2</span><span class="nmv">MIRA</span><span class="tg">CONTRAT</span></div>
+        <div class="sep"></div>
+        <div class="orow q" id="or3"><span class="num">?</span><span class="nmv">LE CADENAS</span><span class="tg">OPTION</span></div>
+        <div class="opz"><span>PRIME</span><span class="pz" id="pz">0 €</span><span class="tc" id="tch">TON CHOIX</span></div>
+      </div>
+      <div class="elev" id="elev">
+        <div class="eh">COUPE · GRUE 3</div>
+        <svg viewBox="0 0 245 150">
+          <g fill="none" stroke="rgba(215,220,207,.5)" stroke-width="1.2">
+            <path class="draw" pathLength="100" d="M4 140 H241"/>
+            <path class="draw" pathLength="100" d="M30 140 V50 M72 140 V50 M30 50 H72 M30 92 H72 M30 92 L72 50 M4 42 H150 M4 47 H150 M51 42 L51 8 L6 42 M51 8 L90 42"/>
+          </g>
+          <g class="fadein">
+            <rect x="208" y="126" width="30" height="14" fill="rgba(224,72,72,.4)" stroke="#e04848" stroke-width="1.2"/>
+            <g fill="#ff8a2a"><circle cx="186" cy="128.5" r="2.6"/><rect x="183.2" y="131.5" width="5.6" height="8.5" rx="1.5"/><circle cx="197" cy="128.5" r="2.6"/><rect x="194.2" y="131.5" width="5.6" height="8.5" rx="1.5"/></g>
+            <path d="M103 57 L190 126" stroke="#6cc8ff" stroke-width="1.2" stroke-dasharray="4 3" fill="none"/>
+          </g>
+          <g class="pop" id="ecab">
+            <rect x="97" y="47" width="12" height="10" fill="rgba(108,200,255,.35)" stroke="#6cc8ff" stroke-width="1.2"/>
+            <text x="94" y="36" font-size="12" fill="#6cc8ff" font-family="Courier New" font-weight="bold">TON POSTE</text>
+          </g>
+        </svg>
+        <div class="ef">
+          <div><span class="k">HAUTEUR .... </span><span class="v" id="eh" data-reset></span></div>
+          <div><span class="k">DISTANCE ... </span><span class="v" id="ed" data-reset></span></div>
+        </div>
+      </div>
+
+      <div class="rain" id="rain"></div>
+      <div class="radio" id="radio"></div>
+      <div class="sub" id="sub"></div>
+      <div class="title" id="title"><div class="t1">MISSION 03</div><div class="ln"></div><div class="t2">LE PORT</div></div>
+    </div>
+  </div>
+</div>
+<script src="kit.js"></script>
+<script>
+  // ── construction des décors SVG (déterministe) ──
+  const NS = 'http://www.w3.org/2000/svg'
+  const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e }
+  let sd = 11; const rnd = () => (sd = sd * 16807 % 2147483647) / 2147483647
+
+  ;(function buildPort() {
+    const g = document.getElementById('m3port'), GL = 296
+    const sky = mk('g', { fill: '#071022' }, g)
+    for (let x = 0; x < 940;) { const w = 16 + rnd() * 38, h = 6 + rnd() * 30; mk('rect', { x, y: 268 - h, width: w, height: h + 2 }, sky)
+      if (rnd() < .55) mk('rect', { x: x + 3 + rnd() * (w - 8), y: 268 - h + 3 + rnd() * (h - 6), width: 2, height: 2, fill: '#ffb35a', opacity: .45 }, g); x += w + 2 }
+    mk('rect', { x: 0, y: 268, width: 940, height: 32, fill: '#050a14' }, g)
+    mk('path', { d: 'M0 300 H940', stroke: '#1e3a62', 'stroke-width': 1.5 }, g)
+    // piles de conteneurs (le rouge : x 460, 2e niveau)
+    const xs = [12, 68, 124, 180, 236, 292, 348, 404, 460, 516, 572, 628, 684, 740, 796, 852, 908], hs = [2, 3, 1, 0, 2, 4, 3, 0, 2, 3, 1, 2, 0, 3, 2, 4, 1]
+    const cg = mk('g', { 'stroke-width': 1 }, g)
+    xs.forEach((x, i) => { for (let t = 0; t < hs[i]; t++) {
+      const red = i === 8 && t === 1, y = GL - 21 * (t + 1)
+      mk('rect', { x, y, width: 54, height: 21, fill: red ? '#3d1012' : '#0b1426', stroke: red ? '#b03a34' : '#1c3356' }, cg)
+      mk('path', { d: `M${x + 13} ${y + 3} V${y + 18} M${x + 27} ${y + 3} V${y + 18} M${x + 41} ${y + 3} V${y + 18}`, stroke: red ? '#6a1e1e' : '#132540' }, cg) } })
+    // grues portuaires (silhouettes tracées)
+    ;[[150, .95], [330, 1], [640, 1], [830, .88]].forEach(([x0, s]) => {
+      const P = (dx, dy) => `${(x0 + dx * s).toFixed(1)} ${(GL + dy * s).toFixed(1)}`
+      const d = `M${P(-32, 0)} L${P(-32, -150)} M${P(32, 0)} L${P(32, -150)} M${P(-32, -150)} L${P(32, -150)} M${P(-32, -95)} L${P(32, -95)} M${P(-32, -95)} L${P(32, -150)}` +
+        ` M${P(-120, -160)} L${P(170, -160)} M${P(-120, -154)} L${P(170, -154)} M${P(-12, -160)} L${P(0, -225)} L${P(12, -160)} M${P(0, -225)} L${P(-120, -160)} M${P(0, -225)} L${P(170, -160)} M${P(0, -225)} L${P(80, -160)}`
+      mk('path', { class: 'draw', pathLength: 100, d, stroke: '#2f5688', 'stroke-width': 1.7, fill: 'none' }, g)
+      mk('rect', { x: x0 + 60 * s, y: GL - 154 * s, width: 13 * s, height: 11 * s, fill: '#0b1426', stroke: '#2f5688' }, g)
+      mk('circle', { cx: x0, cy: GL - 225 * s, r: 2.4, fill: '#ff3b3b', class: 'blinkr' }, g) })
+    // lampadaires, halos, reflets
+    ;[40, 262, 430, 560, 720, 900].forEach(x => {
+      mk('path', { d: `M${x} ${GL} V202 h6`, stroke: '#122036', 'stroke-width': 2, fill: 'none' }, g)
+      mk('polygon', { points: `${x + 2},204 ${x + 10},204 ${x + 46},${GL} ${x - 34},${GL}`, fill: 'rgba(255,150,60,.05)' }, g)
+      mk('circle', { cx: x + 6, cy: 203, r: 46, fill: 'url(#m3lamp)' }, g)
+      mk('circle', { cx: x + 6, cy: 203, r: 2.6, fill: '#ffe0b0' }, g)
+      mk('rect', { x: x, y: 302, width: 12, height: 92, fill: 'url(#m3refl)', opacity: .6 }, g)
+      for (let k = 0; k < 6; k++) { const w = 6 + rnd() * 18; mk('rect', { x: x + 6 - w / 2 + (rnd() - .5) * 8, y: 306 + rnd() * 96, width: w, height: 1.6, fill: '#ff9a40', opacity: .2 + rnd() * .3 }, g) } })
+    // les deux silhouettes du quai 4, sous le lampadaire : costume sombre / t-shirt clair
+    ;[[552, '#05080f'], [566, '#a9b0ba']].forEach(([x, body]) => {
+      const f = mk('g', { transform: `translate(${x} ${GL})`, stroke: 'rgba(255,170,90,.7)', 'stroke-width': .7 }, g)
+      mk('path', { d: 'M-3.6 0 V-8 Q-3.6 -11.5 0 -11.5 Q3.6 -11.5 3.6 -8 V0 Z', fill: body }, f)
+      mk('circle', { cx: 0, cy: -14, r: 2.3, fill: '#0d1320' }, f) })
+    const wv = mk('g', { stroke: 'rgba(108,200,255,.13)', 'stroke-width': 1 }, g)
+    for (let k = 0; k < 70; k++) { const x = rnd() * 940, y = 306 + rnd() * 104, w = 8 + rnd() * 26; mk('path', { d: `M${x.toFixed(0)} ${y.toFixed(0)} h${w.toFixed(0)}` }, wv) }
+  })()
+
+  ;(function buildPlan() {
+    const yard = document.getElementById('m3yard')
+    ;[48, 92, 136, 176].forEach(y0 => [0, 17].forEach(dy => [26, 81, 136, 191, 256, 311, 366, 421, 476].forEach(x => { if (rnd() < .82) mk('rect', { x, y: y0 + dy, width: 50, height: 14 }, yard) })))
+    const boll = document.getElementById('m3boll'); for (let x = 20; x < 670; x += 45) mk('circle', { cx: x, cy: 305, r: 2.2 }, boll)
+    const wv = document.getElementById('m3waves')
+    for (let k = 0; k < 26; k++) { const x = rnd() * 640, y = 304 + rnd() * 106; if (y > 312 && y < 396 && x < 600) continue; mk('path', { d: `M${x.toFixed(0)} ${y.toFixed(0)} q5 -3 10 0 t10 0`, fill: 'none' }, wv) }
+  })()
+
+  ;(function buildTally() {                                   // 14 traits : 5 + 5 + 4
+    const sv = document.getElementById('tally')
+    for (let i = 0; i < 14; i++) {
+      const gI = Math.floor(i / 5), p = i % 5, x0 = 8 + gI * 66
+      const d = p < 4 ? `M${x0 + p * 11} 4 V28` : `M${x0 - 6} 24 L${x0 + 40} 8`
+      mk('path', { d, class: 'tk', stroke: '#23242a', 'stroke-width': 2.6, 'stroke-linecap': 'round', fill: 'none' }, sv)
+    }
+  })()
+
+  // ── mise en scène ──
+  const F = sel => [...document.querySelectorAll(sel)]
+  const typeKV = (K, f, dur = 300) => { f.innerHTML = '<span class="k"></span><span class="v"></span>'; f.querySelector('.k').textContent = f.dataset.k; K.type(f.querySelector('.v'), f.dataset.v, dur, true) }
+  const chan = (K, ...ns) => { F('.m3 .ch').forEach(c => c.classList.remove('act')); ns.forEach(n => K.on('ch' + n, 'act')) }
+  const fAk = F('#fA .kv'), fBk = F('#fB .kv'), dAk = F('#dA .kv'), dBk = F('#dB .kv'), tks = F('#tally .tk')
+  // agrandissement d'une image de caméra : pixelisée → cadre de zoom → ×8 → passage net → crochets → identifié
+  const enhance = (s, t0) => [
+    [t0, K => { K.on('cam' + s); K.snd.crt(); K.type('zx' + s, '1', 30); K.type('st' + s, 'SIGNAL 40×50 px', 300) }],
+    [t0 + 250, K => { K.on('zf' + s); K.snd.beep(900) }],
+    [t0 + 350, K => { K.on('zf' + s, 'tight'); K.snd.sweep() }],
+    [t0 + 1050, K => { K.on('cam' + s, 'zoom'); K.counter('zx' + s, 1, 8, 600, '', 1); K.type('st' + s, 'AMÉLIORATION… ', 300) }],
+    [t0 + 1500, K => { K.on('cam' + s, 'enh'); K.counter('pc' + s + '2', 0, 100, 1200, ' %', 10) }],
+    [t0 + 2750, K => { K.on('fx' + s); K.snd.shutter(); K.type('st' + s, 'IMAGE NETTE · ', 200) }],
+    [t0 + 2850, K => { K.on('lk' + s); K.snd.beep(1100) }],
+    [t0 + 3050, K => { K.on('lk' + s, 'lock'); K.snd.beep(1400) }],
+    [t0 + 3400, K => { K.on('id' + s); K.snd.beep(1800); K.snd.beep(1800, .09) }],
+  ]
+
+  K.run({
+    music: 'somber',
+    stateClasses: ['act', 'push', 'zoom', 'soft', 'tight', 'enh', 'mini', 'dim'],
+    beats: [
+      { label: 'le port', min: 900, cues: [
+          [100, K => K.crt()],
+          [400, K => { K.on('chans'); chan(K, 1); K.on('port'); K.on('rain'); K.snd.rumble(2600) }],
+          [550, K => K.on('port', 'push')],
+          [650, K => K.type('pcA', 'PORT DE COMMERCE', 700, true)] ] },
+      { say: 'Le port. Ici, des êtres humains deviennent du fret.', post: 250,
+        cues: [[150, K => K.type('pcB', 'TERMINAL 4 · QUAI 4 · PLUIE · 6 °C', 900)],
+          [1700, K => { K.on('fret'); K.snd.marker(); K.snd.beep(900) }],
+          [2450, K => { K.on('tgt'); K.snd.beep(1300); K.snd.beep(1600, .08) }],
+          [3000, K => { K.on('port', 'zoom'); K.snd.sweep() }] ] },
+      { label: 'cible 1 · vosko', say: 'Vosko. Le passeur. Il fait traverser ceux qui paient… et revend les autres.', post: 250,
+        cues: [
+          [0, K => { K.glitch(420, .95); K.on('port', 'out'); chan(K, 2); K.on('rain', 'soft') }],
+          ...enhance('A', 150),
+          [300, K => { K.on('fA'); K.snd.paper() }],
+          [600, K => K.type('nmA', 'VOSKO', 420, true)],
+          [1150, K => K.on('alA')],
+          [1650, K => typeKV(K, fAk[0])],
+          [2050, K => typeKV(K, fAk[1])],
+          [2500, K => { K.on('frA1'); K.snd.slap() }],
+          [3700, K => { K.on('frA2'); K.snd.marker() }] ] },
+      { say: 'Costume sombre, cheveux plaqués. Il ne quitte jamais le quai avant minuit.', post: 250,
+        cues: [
+          [100, K => { K.on('coA1'); K.on('lbA1'); K.snd.marker() }],
+          [250, K => typeKV(K, fAk[2], 600)],
+          [1000, K => { K.on('coA2'); K.on('lbA2'); K.snd.marker() }],
+          [2100, K => typeKV(K, fAk[3], 500)],
+          [2400, K => { K.on('rtA'); K.snd.clock() }], [2800, K => K.snd.clock()], [3200, K => K.snd.clock()], [3600, K => K.snd.clock()],
+          [4000, K => { K.snd.clock(); K.snd.beep(1600) }],
+          [3200, K => typeKV(K, fAk[4], 500)],
+          [4300, K => { K.on('sA'); K.snd.stamp(); K.shake() }] ] },
+      { label: 'cible 2 · mira', say: 'Mira, sa seconde. C\'est elle qui compte les têtes. Elle ne se trompe jamais.', post: 250,
+        cues: [
+          [0, K => { K.glitch(450, 1); K.on('camA', 'out'); K.on('fA', 'out'); chan(K, 3) }],
+          ...enhance('B', 200),
+          [300, K => { K.on('fB'); K.snd.paper() }],
+          [550, K => K.type('nmB', 'MIRA', 360, true)],
+          [700, K => K.on('camA', 'mini')],
+          [1000, K => K.on('alB')],
+          [1300, K => typeKV(K, fBk[0])],
+          [1550, K => typeKV(K, fBk[1], 450)],
+          [1750, K => { K.on('regB'); K.snd.paper() }],
+          ...tks.map((t, i) => [1900 + i * 80, K => { K.on(t); K.snd.tick(); if (i % 5 === 4) K.snd.count() }]),
+          [3050, K => K.type('rgn', '= 14 TÊTES', 360, true)],
+          [3500, K => typeKV(K, fBk[2], 450)],
+          [3750, K => { K.on('rge'); K.snd.beep(1500); K.snd.beep(1900, .08) }],
+          [3950, K => { K.on('coB1'); K.on('lbB1'); K.snd.marker() }],
+          [4350, K => { K.on('coB2'); K.on('lbB2'); K.snd.marker() }],
+          [4500, K => typeKV(K, fBk[3], 450)],
+          [4650, K => typeKV(K, fBk[4], 400)],
+          [4900, K => { K.on('sB'); K.snd.stamp(); K.shake() }] ] },
+      { label: 'le duo', say: 'Toujours à deux pas l\'un de l\'autre. Tu en touches un, l\'autre donne l\'alerte.', post: 250,
+        cues: [
+          [0, K => { K.glitch(380, .9); K.on('fB', 'out'); chan(K, 2, 3); K.on('camB', 'mini') }],
+          [150, K => { K.on('dA'); K.on('dB'); K.snd.paper() }],
+          [250, K => { K.off('camA', 'out'); K.snd.crt() }],
+          ...dAk.map((f, i) => [350 + i * 170, K => typeKV(K, f, 260)]),
+          ...dBk.map((f, i) => [450 + i * 170, K => typeKV(K, f, 260)]),
+          [1400, K => { K.on('dl'); K.snd.marker() }],
+          [1700, K => { K.on('tac'); K.snd.sweep() }],
+          [1950, K => { K.on('tvV'); K.on('tvM'); K.snd.ping() }],
+          [2250, K => K.on('tvD')],
+          [2650, K => K.type('tq1', 'TU EN TOUCHES UN ▸', 450, true)],
+          [2900, K => { K.on('tvR'); K.snd.beep(1400); K.snd.beep(1400, .1) }],
+          [3550, K => { K.on('tvA'); K.snd.alarm(); K.glitch(180, .55) }],
+          [3600, K => K.type('tq2', 'L\'AUTRE DONNE L\'ALERTE', 600, true)],
+          [4450, K => K.type('tq3', '→ DEUX TIRS · SANS TEMPS MORT', 600)] ] },
+      { label: 'le conteneur', say: 'Sur le papier : pièces détachées. En vrai, quatorze personnes dans le conteneur rouge.', post: 250,
+        cues: [
+          [0, K => { K.glitch(320, .8); K.on('tac', 'out'); chan(K, 4); ['dA', 'dB', 'camA', 'camB', 'dl'].forEach(id => K.on(id, 'dim')) }],
+          [300, K => { K.on('mx'); K.snd.paper(); K.snd.slap() }],
+          [1000, K => { K.on('mk'); K.snd.marker() }],
+          [2500, K => { K.on('stk'); K.glitch(200, .6); K.snd.marker() }],
+          [2800, K => K.type('tru', '14 PERSONNES', 650, true)],
+          [3800, K => { K.on('fst'); K.snd.stamp(); K.shake() }] ] },
+      { label: 'plan : la grue', say: 'J\'ai payé le grutier. Sa cabine est à toi pour la nuit.', post: 250,
+        cues: [
+          [0, K => { K.glitch(420, .95); ['camA', 'camB', 'dA', 'dB', 'dl', 'mx'].forEach(id => K.on(id, 'out')); chan(K, 5) }],
+          [250, K => { K.on('plan'); K.snd.sweep() }],
+          [450, K => { K.on('rc'); K.snd.slap(); K.snd.paper() }],
+          [800, K => K.on('zone')],
+          [950, K => { K.on('pv'); K.on('pm'); K.snd.ping() }],
+          [1250, K => { K.on('rstamp'); K.snd.stamp(); K.shake() }],
+          [1750, K => { K.on('poste'); K.snd.beep(1400); K.snd.beep(1800, .08) }],
+          [2050, K => K.on('sight')],
+          [2400, K => { K.on('pdist'); K.on('elev'); K.on('ecab'); K.counter('eh', 0, 41, 700, ' m', 4); K.counter('ed', 0, 155, 900, ' m', 15) }] ] },
+      { label: 'le choix', say: 'Eux deux d\'abord. Le cadenas… ça, personne ne me le paie. C\'est toi qui vois.', post: 600,
+        cues: [
+          [0, K => { K.on('rc', 'out'); K.on('ord'); K.on('det'); K.snd.slap(); K.snd.sweep() }],
+          [250, K => { K.on('or1'); K.on('b1'); K.on('db1'); K.snd.beep(1400) }],
+          [650, K => { K.on('or2'); K.on('b2'); K.on('db2'); K.snd.beep(1700) }],
+          [1600, K => { K.on('or3'); K.on('lockmk'); K.on('dlk'); K.snd.ping() }],
+          [2800, K => { K.on('pz'); K.snd.stamp() }],
+          [4000, K => { K.on('tch'); K.snd.heart() }],
+          [4900, K => K.snd.heart()] ] },
+      { label: 'carton-titre', min: 2700, cues: [
+          [0, K => { K.$('sub').textContent = ''; K.off('radio'); K.music(null); K.lost(400) }],
+          [400, K => ['plan', 'elev', 'ord', 'chans'].forEach(id => K.on(id, 'out'))],
+          [600, K => K.title()], [1900, K => K.black()]] },
+    ],
+  })
+</script>
+</body>
+</html>
