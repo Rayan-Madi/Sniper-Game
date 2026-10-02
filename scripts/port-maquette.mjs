@@ -15,16 +15,22 @@ export function portMaquette(html, { name, imgExt = {} }) {
   const css = [...doc.querySelectorAll('style')].map(s => s.textContent).join('\n')
   const script = [...doc.querySelectorAll('script:not([src])')].map(s => s.textContent).join('\n')
   const fix = s => s.replace(/(["'(\s])img\/([a-z0-9_-]+)\.png/g, (m, pre, base) => `${pre}briefing/img/${base}.${imgExt[base] || 'png'}`)
+  const out = { css: fix(css), html: fix(st.innerHTML), script: fix(script) }
+  // garde contre une réécriture muette : un chemin `img/…` que le regex ne reconnaît pas serait servi à la racine (404)
+  for (const [partie, texte] of Object.entries(out)) {
+    const oubli = texte.match(/(?<!briefing\/)\bimg\/[^\s"'()`]+\.(?:png|jpe?g|webp)/i)
+    if (oubli) throw new Error(`${name} : image non réécrite vers briefing/img dans le ${partie} : ${oubli[0]}`)
+  }
   return [
     `// Généré par scripts/port-maquette.mjs depuis docs/superpowers/maquettes/cinematiques/${name}.html — ne pas modifier à la main.`,
     `export const stClass = ${JSON.stringify(st.className)}`,
-    `export const css = ${JSON.stringify(fix(css))}`,
-    `export const html = ${JSON.stringify(fix(st.innerHTML))}`,
+    `export const css = ${JSON.stringify(out.css)}`,
+    `export const html = ${JSON.stringify(out.html)}`,
     `export function start(K, ctx = {}) {`,
     `  const location = { search: ctx.search || '', href: 'http://briefing.local/' + (ctx.search || '') }`,
     `  const setTimeout = (fn, ms = 0) => K.at(ms, fn)            // minuteurs de la scène suivis par le kit :`,
     `  const requestAnimationFrame = fn => K.at(16, fn)           // annulés quand on passe ou démonte`,
-    fix(script),
+    out.script,
     `}`,
     ``,
   ].join('\n')

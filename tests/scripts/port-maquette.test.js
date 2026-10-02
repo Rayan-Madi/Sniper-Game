@@ -45,6 +45,20 @@ describe('portMaquette', () => {
     expect(ats).toEqual([30, 16])
   })
 
+  // Garde contre une réécriture muette : un chemin que le regex ne reconnaît pas resterait en `img/…`
+  // et serait servi par le jeu à la racine (404). Mieux vaut échouer à la génération.
+  it('refuse une image restée hors de briefing/ après la réécriture (html, css ou script)', () => {
+    expect(() => portMaquette(FIXTURE.replace('img/portrait-a.png', 'img/Portrait-A.png'), { name: 'm9' })).toThrow(/m9.*img\/Portrait-A\.png/)
+    expect(() => portMaquette(FIXTURE.replace('url(img/fond.png)', 'url(img/Fond.png)'), { name: 'm9' })).toThrow(/img\/Fond\.png/)
+    const dansScript = FIXTURE.replace('K.run(', 'new Image().src = `img/Autre.png`; K.run(')
+    expect(() => portMaquette(dansScript, { name: 'm9' })).toThrow(/img\/Autre\.png/)
+  })
+
+  it('ne confond pas les chemins déjà réécrits avec des oublis', () => {
+    expect(() => portMaquette(FIXTURE, { name: 'm9' })).not.toThrow()
+    expect(() => portMaquette(FIXTURE, { name: 'm9', imgExt: { 'portrait-a': 'jpg', fond: 'jpg' } })).not.toThrow()
+  })
+
   it('refuse une maquette sans #st', () => {
     expect(() => portMaquette('<html><body></body></html>', { name: 'vide' })).toThrow(/#st/)
   })

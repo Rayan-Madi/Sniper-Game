@@ -11,7 +11,12 @@ registerScene('test', async () => fakeScene)
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
 
 const FAKE = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] }
-beforeEach(() => { vi.useFakeTimers(FAKE); document.body.innerHTML = '<div id="briefing-root" hidden></div>' })
+const GRACE = 500   // SKIP_GRACE_MS : aucun passage par le joueur avant ce délai
+// L'état du module (cinématique en cours) survit à un test : on purge celle qu'un test précédent a laissée jouer.
+beforeEach(async () => {
+  vi.useFakeTimers(FAKE); document.body.innerHTML = '<div id="briefing-root" hidden></div>'
+  if (isCinematicPlaying()) (await playCinematic('test', {})).cancel()
+})
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.body.innerHTML = ''; document.head.innerHTML = '' })
 
 describe('playCinematic', () => {
@@ -31,9 +36,10 @@ describe('playCinematic', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it.each(['Escape', 'Enter', 'Space'])('passe avec %s : fondu de 400 ms, puis onDone une seule fois', async code => {
+  it.each(['Escape', 'Enter', 'NumpadEnter', 'Space'])('passe avec %s : fondu de 400 ms, puis onDone une seule fois', async code => {
     const onDone = vi.fn()
     await playCinematic('test', { onDone })
+    await vi.advanceTimersByTimeAsync(GRACE)   // délai de grâce écoulé
     document.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true }))
     expect(document.getElementById('briefing-root').classList.contains('k-leaving')).toBe(true)
     await vi.advanceTimersByTimeAsync(400); await flush()
@@ -46,15 +52,78 @@ describe('playCinematic', () => {
   it('passe au clic', async () => {
     const onDone = vi.fn()
     await playCinematic('test', { onDone })
+    await vi.advanceTimersByTimeAsync(GRACE)
     document.getElementById('briefing-root').click()
     await vi.advanceTimersByTimeAsync(400); await flush()
     expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  // Délai de grâce : le second clic d'un double-clic sur le bouton de lancement ne doit pas passer la scène.
+  describe('délai de grâce de 500 ms', () => {
+    const longScene = { ...fakeScene, start(K) { K.run({ beats: [{ min: 5000 }] }) } }
+    registerScene('longue', async () => longScene)
+
+    it('un clic à +100 ms est ignoré, un clic à +600 ms fait passer', async () => {
+      const onDone = vi.fn()
+      await playCinematic('longue', { onDone })
+      const root = document.getElementById('briefing-root')
+      await vi.advanceTimersByTimeAsync(100)
+      root.click()
+      expect(root.classList.contains('k-leaving')).toBe(false)
+      await vi.advanceTimersByTimeAsync(500); await flush()   // +600 ms, fondu non lancé
+      expect(onDone).not.toHaveBeenCalled()
+      expect(isCinematicPlaying()).toBe(true)
+      root.click()
+      expect(root.classList.contains('k-leaving')).toBe(true)
+      await vi.advanceTimersByTimeAsync(400); await flush()
+      expect(onDone).toHaveBeenCalledTimes(1)
+    })
+
+    it('pendant la grâce, la touche de passage est avalée (le jeu ne la voit pas) sans faire passer', async () => {
+      const other = vi.fn()
+      document.addEventListener('keydown', other)
+      await playCinematic('longue', {})
+      await vi.advanceTimersByTimeAsync(100)
+      const key = new KeyboardEvent('keydown', { code: 'Escape', bubbles: true, cancelable: true })
+      document.body.dispatchEvent(key)
+      expect(key.defaultPrevented).toBe(true)
+      expect(other).not.toHaveBeenCalled()
+      expect(document.getElementById('briefing-root').classList.contains('k-leaving')).toBe(false)
+      document.removeEventListener('keydown', other)
+    })
+
+    it('handle.stop() reste immédiat, grâce ou pas', async () => {
+      const onDone = vi.fn()
+      const handle = await playCinematic('longue', { onDone })
+      handle.stop()
+      expect(document.getElementById('briefing-root').classList.contains('k-leaving')).toBe(true)
+      await vi.advanceTimersByTimeAsync(400); await flush()
+      expect(onDone).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('une touche maintenue (repeat) est avalée mais ne fait pas passer', async () => {
+    const other = vi.fn()
+    document.addEventListener('keydown', other)
+    const onDone = vi.fn()
+    await playCinematic('test', { onDone })
+    await vi.advanceTimersByTimeAsync(GRACE)
+    const root = document.getElementById('briefing-root')
+    const key = new KeyboardEvent('keydown', { code: 'Enter', repeat: true, bubbles: true, cancelable: true })
+    document.body.dispatchEvent(key)
+    expect(key.defaultPrevented).toBe(true)
+    expect(other).not.toHaveBeenCalled()
+    expect(root.classList.contains('k-leaving')).toBe(false)
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', bubbles: true, cancelable: true }))
+    expect(root.classList.contains('k-leaving')).toBe(true)
+    document.removeEventListener('keydown', other)
   })
 
   it('la touche qui fait passer ne parvient pas aux autres écouteurs du jeu', async () => {
     const other = vi.fn()
     document.addEventListener('keydown', other)
     await playCinematic('test', {})
+    await vi.advanceTimersByTimeAsync(GRACE)
     // la touche part du body, comme en jeu : l'écouteur en capture sur document passe avant les autres
     document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true, cancelable: true }))
     expect(other).not.toHaveBeenCalled()
@@ -148,5 +217,103 @@ describe('playCinematic', () => {
     expect(root.hidden).toBe(true)
     expect(isCinematicPlaying()).toBe(false)
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  // Conteneur noir dès le chargement : l'image 3D figée ne doit pas se voir pendant que la scène se charge.
+  describe('pendant le chargement de la scène', () => {
+    const rootEl = () => document.getElementById('briefing-root')
+
+    it('affiche le conteneur noir tout de suite, avant que le module soit chargé', async () => {
+      let load
+      registerScene('differee', () => new Promise(r => { load = () => r(fakeScene) }))
+      const p = playCinematic('differee', {})
+      expect(rootEl().hidden).toBe(false)
+      expect(rootEl().innerHTML).toBe('')
+      load(); await p
+      expect(rootEl().hidden).toBe(false)
+      expect(rootEl().querySelector('#scene')).not.toBeNull()
+    })
+
+    it('un chargement qui échoue recache le conteneur, puis relance l\'erreur', async () => {
+      let fail
+      registerScene('echec', () => new Promise((_, reject) => { fail = () => reject(new Error('réseau')) }))
+      const p = playCinematic('echec', {})
+      expect(rootEl().hidden).toBe(false)
+      fail()
+      await expect(p).rejects.toThrow('réseau')
+      expect(rootEl().hidden).toBe(true)
+    })
+
+    it('un chargement dépassé par une demande plus récente qui échoue ne touche pas au conteneur', async () => {
+      let fail
+      registerScene('echecLent', () => new Promise((_, reject) => { fail = () => reject(new Error('réseau')) }))
+      const lent = playCinematic('echecLent', {})
+      await playCinematic('test', {})   // la demande suivante se charge et se monte avant l'échec de la première
+      fail()
+      await expect(lent).rejects.toThrow('réseau')
+      expect(rootEl().hidden).toBe(false)
+      expect(isCinematicPlaying()).toBe(true)
+    })
+
+    it('un chargement qui échoue pendant qu\'une cinématique est en cours ne cache pas son conteneur', async () => {
+      let fail
+      registerScene('echecEnCours', () => new Promise((_, reject) => { fail = () => reject(new Error('réseau')) }))
+      await playCinematic('test', {})
+      const p = playCinematic('echecEnCours', {})
+      fail()
+      await expect(p).rejects.toThrow('réseau')
+      expect(rootEl().hidden).toBe(false)
+      expect(rootEl().querySelector('#scene')).not.toBeNull()
+      expect(isCinematicPlaying()).toBe(true)
+    })
+  })
+
+  // Le maître du kit doit être débranché du maître du jeu dans tous les cas de sortie (spec §9).
+  describe('avec un contexte audio injecté', () => {
+    const param = () => ({ value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn() })
+    const node = () => ({ connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), gain: param(), frequency: param(), Q: param() })
+    function fakeAudio() {
+      const ctx = {
+        state: 'running', currentTime: 0, sampleRate: 100,
+        createGain: vi.fn(node), createOscillator: vi.fn(node), createBufferSource: vi.fn(node), createBiquadFilter: vi.fn(node),
+        createBuffer: vi.fn(() => ({ getChannelData: () => new Float32Array(200) })),
+      }
+      return { ctx, dest: node() }
+    }
+    const masterOf = audio => audio.ctx.createGain.mock.results[0].value   // premier nœud créé par le kit
+
+    it('fin normale : le maître du kit est débranché', async () => {
+      const audio = fakeAudio()
+      await playCinematic('test', { audio })
+      const master = masterOf(audio)
+      expect(master.connect).toHaveBeenCalledWith(audio.dest)
+      await vi.advanceTimersByTimeAsync(1000); await flush()
+      await vi.advanceTimersByTimeAsync(300)   // fondu du son avant le débranchement
+      expect(master.disconnect).toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('passage par le joueur : le maître du kit est débranché', async () => {
+      const audio = fakeAudio()
+      await playCinematic('test', { audio })
+      await vi.advanceTimersByTimeAsync(GRACE)
+      document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true, cancelable: true }))
+      await vi.advanceTimersByTimeAsync(400); await flush()
+      await vi.advanceTimersByTimeAsync(300)
+      expect(masterOf(audio).disconnect).toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('annulation par une seconde cinématique : le maître de la première est débranché', async () => {
+      const first = fakeAudio(), second = fakeAudio()
+      await playCinematic('test', { audio: first })
+      await playCinematic('test', { audio: second })
+      await vi.advanceTimersByTimeAsync(300)
+      expect(masterOf(first).disconnect).toHaveBeenCalled()
+      expect(masterOf(second).disconnect).not.toHaveBeenCalled()   // la seconde joue encore
+      await vi.advanceTimersByTimeAsync(2000); await flush()
+      expect(masterOf(second).disconnect).toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(0)
+    })
   })
 })

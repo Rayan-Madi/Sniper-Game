@@ -14,7 +14,7 @@ const lire = chemin => readFileSync(join(RACINE, chemin), 'utf8')
 // playCinematic, qui enveloppe chaque scène dans <div id="st">.
 const IDS_INJECTES = {
   'src/briefing/kit.js': ['k-crt', 'k-bf', 'k-lost', 'k-black', 'k-glf', 'k-glt', 'k-gld', 'k-glo1', 'k-glo2', 'k-replay', 'k-lbl'],
-  'src/briefing/index.js': ['st'],
+  'src/briefing/index.js': ['st', 'k-kit-css'],
 }
 
 function ajouter(table, id, fichier) {
@@ -66,7 +66,8 @@ describe('ids des cinématiques et du jeu', () => {
   it('la liste des ids injectés correspond à ce que le moteur injecte vraiment', () => {
     for (const [fichier, ids] of Object.entries(IDS_INJECTES)) {
       const source = lire(fichier)
-      for (const id of ids) expect(source.includes(`id="${id}"`), `id injecté « ${id} » absent de ${fichier}`).toBe(true)
+      // posé soit par un attribut id="…" dans un gabarit, soit par une affectation `.id = '…'`
+      for (const id of ids) expect(source.includes(`id="${id}"`) || new RegExp(`\\.id\\s*=\\s*['"]${id}['"]`).test(source), `id injecté « ${id} » absent de ${fichier}`).toBe(true)
     }
   })
 
