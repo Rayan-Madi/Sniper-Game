@@ -117,4 +117,59 @@ describe('kit des cinématiques', () => {
     const K = createKit({ root: mountScene() })
     expect(() => { K.snd.boom(); K.snd.stamp(); K.music('tense'); K.music(null) }).not.toThrow()
   })
+
+  it('une erreur du séquenceur est consignée dans K.errors et la séquence se termine quand même', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const K = createKit({ root: mountScene() })
+      let done = false
+      K.run({ beats: [], reset: () => { throw new Error('scène cassée') } }).then(() => { done = true })
+      await flush()
+      expect(K.errors).toHaveLength(1)
+      expect(K.errors[0]).toContain('scène cassée')
+      expect(done).toBe(true)
+    } finally { spy.mockRestore() }
+  })
+
+  describe('avec un contexte audio injecté', () => {
+    // Faux AudioContext minimal : assez pour que sound.js construise ses graphes, sans rien produire.
+    const param = () => ({ value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn() })
+    const node = () => ({ connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), gain: param(), frequency: param(), Q: param() })
+    function fakeAudio(state) {
+      const ctx = {
+        state, currentTime: 0, sampleRate: 100,
+        createGain: vi.fn(node), createOscillator: vi.fn(node), createBufferSource: vi.fn(node), createBiquadFilter: vi.fn(node),
+        createBuffer: vi.fn(() => ({ getChannelData: () => new Float32Array(200) })),
+      }
+      return { ctx, dest: node() }
+    }
+
+    it('branche le nœud maître du kit sur la destination fournie', () => {
+      const audio = fakeAudio('running')
+      createKit({ root: mountScene(), audio })
+      const master = audio.ctx.createGain.mock.results[0].value
+      expect(master.connect).toHaveBeenCalledWith(audio.dest)
+    })
+
+    it('reste silencieux tant que le contexte n\'est pas démarré (état suspended)', () => {
+      const audio = fakeAudio('suspended')
+      const K = createKit({ root: mountScene(), audio })
+      K.snd.boom(); K.snd.stamp(); K.music('tense')
+      expect(audio.ctx.createOscillator).not.toHaveBeenCalled()
+      expect(audio.ctx.createBufferSource).not.toHaveBeenCalled()
+      expect(audio.ctx.createBiquadFilter).not.toHaveBeenCalled()
+      expect(audio.ctx.createGain).toHaveBeenCalledTimes(1)   // le seul nœud : le maître
+    })
+
+    it('destroy() débranche le maître et ne laisse aucun minuteur, même musique en cours', () => {
+      const audio = fakeAudio('running')
+      const K = createKit({ root: mountScene(), audio })
+      K.music('tense')
+      expect(audio.ctx.createOscillator).toHaveBeenCalled()
+      K.destroy()
+      const master = audio.ctx.createGain.mock.results[0].value
+      expect(master.disconnect).toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+  })
 })

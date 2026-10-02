@@ -185,12 +185,16 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
     S.music(null)
     if (id === runId) resolveDone()
   }
-  K.run = c => { cfg = c; start(); return K.finished }
-  $('k-replay').addEventListener('click', () => { if (cfg) start() })
+  // Échec « ouvert » : une erreur du séquenceur est consignée dans K.errors et la séquence se termine,
+  // pour que le jeu continue au lieu de rester bloqué sur un écran noir.
+  const launch = () => start().catch(e => { fail(e && e.stack || e); resolveDone() })
+  K.run = c => { cfg = c; launch(); return K.finished }
+  $('k-replay').addEventListener('click', () => { if (cfg) launch() })
 
   K.destroy = () => {
     if (destroyed) return
-    runId++; clearAll(); S.destroy(); destroyed = true
+    // S.destroy() coupe la musique, ce qui programme un minuteur : il faut annuler les minuteurs APRÈS.
+    runId++; S.destroy(); clearAll(); destroyed = true
   }
   return K
 }
