@@ -522,6 +522,7 @@ function startLevel(n) {
 }
 
 function showMenu() {
+  missionToken++   // la mission est abandonnée : ses minuteurs de fin (kill-cam, civil abattu) ne doivent plus tomber sur le menu
   for (const npc of npcs) scene.remove(npc.mesh)
   clearConvoy()
   npcs = []; targets = []; guards = []; civilians = []
