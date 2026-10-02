@@ -4,7 +4,7 @@
 
 **Goal:** Jouer dans le jeu, à la place des cinématiques 3D de mission et de fin, les 6 briefings et l'épilogue en motion design validés en maquette. Ils doivent pouvoir se passer au clavier, ne se jouer qu'au premier essai, mettre en pause le rendu 3D et respecter le volume du jeu.
 
-**Architecture:** Le moteur des maquettes (`.superpowers/briefings/kit.js`) devient deux modules ES : `src/briefing/kit.js` (séquenceur et habillage) et `src/briefing/sound.js` (son procédural branché sur `src/audio.js`). Un convertisseur transforme chaque maquette HTML en module de scène (`src/briefing/scenes/*.js`) sans la réécrire à la main. `playCinematic(id, …)` (`src/briefing/index.js`) monte une scène dans `#briefing-root`, au-dessus du canvas, gère « passer » et le démontage. `main.js` l'appelle à la place de `startLevelCinematic` et de `startEndingCinematic`.
+**Architecture:** Le moteur des maquettes (`docs/superpowers/maquettes/cinematiques/kit.js`) devient deux modules ES : `src/briefing/kit.js` (séquenceur et habillage) et `src/briefing/sound.js` (son procédural branché sur `src/audio.js`). Un convertisseur transforme chaque maquette HTML en module de scène (`src/briefing/scenes/*.js`) sans la réécrire à la main. `playCinematic(id, …)` (`src/briefing/index.js`) monte une scène dans `#briefing-root`, au-dessus du canvas, gère « passer » et le démontage. `main.js` l'appelle à la place de `startLevelCinematic` et de `startEndingCinematic`.
 
 **Tech Stack:** JavaScript ES modules, Vite 8, Three.js 0.185 (inchangé). Ajouts en devDependencies seulement : Vitest + jsdom. PowerShell 5.1 + System.Drawing, pour recompresser les images une fois.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Les textes, timings et mises en page des scènes sont **ceux des maquettes**, à l'identique. Les maquettes de `.superpowers/briefings/` sont la source et **ne se modifient pas**.
+- Les textes, timings et mises en page des scènes sont **ceux des maquettes**, à l'identique. Les maquettes de `docs/superpowers/maquettes/cinematiques/` sont la source et **ne se modifient pas**.
 - Aucune nouvelle dépendance d'exécution. Seuls `vitest` et `jsdom` sont ajoutés, en `devDependencies`.
 - Chemins d'assets **relatifs** (`briefing/img/…`), compatibles avec `base: './'` et le build Electron. Jamais de `/…` absolu.
 - Poids ajouté au téléchargement : **< 1,5 Mo** au total.
@@ -243,7 +243,7 @@ Expected: FAIL, avec « Failed to load url ../../src/briefing/kit.js » (ou « C
 - [ ] **Step 4 : Écrire `src/briefing/sound.js`**
 
 ```js
-// Son procédural des cinématiques — mêmes recettes que les maquettes (.superpowers/briefings/kit.js).
+// Son procédural des cinématiques — mêmes recettes que les maquettes (docs/superpowers/maquettes/cinematiques/kit.js).
 // Branché sur le contexte et le nœud maître de src/audio.js : le volume du jeu s'applique.
 // Sans contexte audio (tests, son indisponible), toutes les fonctions sont muettes.
 
@@ -370,7 +370,7 @@ export function createSound(audio, { at, every, stopEvery }) {
 - [ ] **Step 5 : Écrire `src/briefing/kit.js`**
 
 ```js
-// Moteur des cinématiques « dossier du fixeur », porté des maquettes (.superpowers/briefings/kit.js).
+// Moteur des cinématiques « dossier du fixeur », porté des maquettes (docs/superpowers/maquettes/cinematiques/kit.js).
 // Une cinématique est une suite de TEMPS : chaque temps peut faire parler quelqu'un (bips synthétiques
 // + sous-titre tapé) et déclencher des effets à des instants relatifs à son début. Un temps dure le temps
 // de sa réplique. freeze = ms : sans glitch, tout se fige à cet instant (captures de contrôle).
@@ -572,7 +572,7 @@ Note pour le relecteur : `wait` pour un temps sans réplique et avec `min: 0` r�
 
 - [ ] **Step 6 : Créer `src/briefing/kit.css`**
 
-Copier `.superpowers/briefings/kit.css` vers `src/briefing/kit.css`, puis dans la copie :
+Copier `docs/superpowers/maquettes/cinematiques/kit.css` vers `src/briefing/kit.css`, puis dans la copie :
 1. supprimer les 3 premières règles qui ne concernent pas la scène : `* { box-sizing… }` (garder `.st *` plus bas), `html, body { … }` et `.wrap { … }` ;
 2. supprimer tout le bloc `/* ── barre de contrôle sous la scène ── */` (les règles `.kctrl…`) ;
 3. ajouter à la fin :
@@ -682,7 +682,7 @@ Expected: FAIL, car le module `../../scripts/port-maquette.mjs` est introuvable.
 - [ ] **Step 3 : Écrire `scripts/port-maquette.mjs`**
 
 ```js
-// Convertit une maquette de cinématique (.superpowers/briefings/*.html) en module de scène du jeu.
+// Convertit une maquette de cinématique (docs/superpowers/maquettes/cinematiques/*.html) en module de scène du jeu.
 // Le module exporte la classe de la scène, son CSS, le HTML de #st et start(K, ctx) qui exécute le
 // script de la maquette avec le K fourni (ctx.search remplace location.search ; setTimeout et
 // requestAnimationFrame passent par K.at pour être annulés au démontage).
@@ -700,7 +700,7 @@ export function portMaquette(html, { name, imgExt = {} }) {
   const script = [...doc.querySelectorAll('script:not([src])')].map(s => s.textContent).join('\n')
   const fix = s => s.replace(/(["'(\s])img\/([a-z0-9_-]+)\.png/g, (m, pre, base) => `${pre}briefing/img/${base}.${imgExt[base] || 'png'}`)
   return [
-    `// Généré par scripts/port-maquette.mjs depuis .superpowers/briefings/${name}.html — ne pas modifier à la main.`,
+    `// Généré par scripts/port-maquette.mjs depuis docs/superpowers/maquettes/cinematiques/${name}.html — ne pas modifier à la main.`,
     `export const stClass = ${JSON.stringify(st.className)}`,
     `export const css = ${JSON.stringify(fix(css))}`,
     `export const html = ${JSON.stringify(fix(st.innerHTML))}`,
@@ -718,7 +718,7 @@ const SCENES = { m1: 'briefing-m1', m2: 'briefing-m2', m3: 'briefing-m3', m4: 'b
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const repo = join(dirname(fileURLToPath(import.meta.url)), '..')
-  const src = join(repo, '.superpowers', 'briefings')
+  const src = join(repo, 'docs', 'superpowers', 'maquettes', 'cinematiques')
   const imgDir = join(repo, 'public', 'briefing', 'img')
   const out = join(repo, 'src', 'briefing', 'scenes')
   mkdirSync(out, { recursive: true })
@@ -744,7 +744,7 @@ Expected: PASS, 5 tests.
 # Les vignettes pixelisees (*-lo.png) sont copiees telles quelles.
 # Usage (racine du depot) : powershell -ExecutionPolicy Bypass -File scripts/compress-briefing-img.ps1
 param(
-  [string]$Src = ".superpowers/briefings/img",
+  [string]$Src = "docs/superpowers/maquettes/cinematiques/img",
   [string]$Dst = "public/briefing/img",
   [int]$Quality = 80,
   [int]$MaxWidth = 360
@@ -1317,7 +1317,7 @@ import { join } from 'node:path'
 const [id, ...instants] = process.argv.slice(2)
 if (!id || !instants.length) { console.error('Usage : node scripts/shots.mjs <id> <ms> [<ms>…]'); process.exit(1) }
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
-// MAQUETTE=1 : capture la maquette d'origine (npx vite .superpowers/briefings --port 5193) au lieu du jeu
+// MAQUETTE=1 : capture la maquette d'origine (npx vite docs/superpowers/maquettes/cinematiques --port 5193) au lieu du jeu
 const MAQ = !!process.env.MAQUETTE
 const BASE = process.env.BASE_URL || (MAQ ? 'http://localhost:5193/' : 'http://localhost:5173/')
 const page = MAQ ? (id === 'epilogue' ? 'epilogue.html' : `briefing-${id}.html`) : ''
@@ -1372,7 +1372,7 @@ node scripts/shots.mjs epilogue 6000 24000 40000
 PARAMS=port=libres node scripts/shots.mjs epilogue 24000
 ```
 
-Puis capturer les maquettes d'origine aux mêmes instants, pour comparer. Dans un second terminal, lancer `npx vite .superpowers/briefings --port 5193 --strictPort`, puis relancer les mêmes commandes préfixées par `MAQUETTE=1` (par exemple `MAQUETTE=1 node scripts/shots.mjs m3 8500 23000 29000 39000`). Les fichiers sortent en `shots/maquette-<id>-<ms>.png`.
+Puis capturer les maquettes d'origine aux mêmes instants, pour comparer. Dans un second terminal, lancer `npx vite docs/superpowers/maquettes/cinematiques --port 5193 --strictPort`, puis relancer les mêmes commandes préfixées par `MAQUETTE=1` (par exemple `MAQUETTE=1 node scripts/shots.mjs m3 8500 23000 29000 39000`). Les fichiers sortent en `shots/maquette-<id>-<ms>.png`.
 
 Ouvrir chaque paire de PNG (jeu et maquette) et les comparer. Ce qui est attendu :
 - même composition et mêmes textes ;

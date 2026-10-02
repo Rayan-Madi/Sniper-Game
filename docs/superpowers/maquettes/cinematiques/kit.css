@@ -1,0 +1,155 @@
+/* Kit commun des briefings « dossier du fixeur » — maquettes.
+   Tout est dimensionné en cqw (largeur de la scène 16:9) : la maquette tient à toute taille. */
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #050608; color: #d7dccf; font-family: system-ui, sans-serif; }
+.wrap { width: min(100%, calc((100vh - 56px) * 16 / 9)); margin: 0 auto; padding: 8px 10px; }
+
+.st { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: #06070b; container-type: inline-size;
+      font-family: 'Courier New', Courier, monospace; color: #d7dccf; border-radius: 8px; }
+.st .bg { position: absolute; inset: 0; background:
+    radial-gradient(ellipse at 50% 45%, rgba(40,52,70,.35) 0%, transparent 65%),
+    linear-gradient(rgba(120,160,140,.045) 1px, transparent 1px) 0 0 / 3.2cqw 3.2cqw,
+    linear-gradient(90deg, rgba(120,160,140,.045) 1px, transparent 1px) 0 0 / 3.2cqw 3.2cqw; }
+.st .scene { position: absolute; inset: 0; text-shadow: .12cqw 0 rgba(255,40,60,.35), -.12cqw 0 rgba(0,210,255,.35); }
+
+/* ── habillage « signal » : scanlines, ligne de tracking, vignette, grain, scintillement ── */
+.st .flick { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 17; pointer-events: none; animation: k-flick 5s infinite; }
+@keyframes k-flick { 0%,6%,9%,61%,64%,100% { opacity: 0 } 7% { opacity: .08 } 8% { opacity: .02 } 62% { opacity: .11 } 63% { opacity: .03 } }
+.st .blackframe { position: absolute; inset: 0; background: #000; z-index: 18; opacity: 0; pointer-events: none; }
+.st .blackframe.on { opacity: 1; }
+.st .scan { position: absolute; inset: 0; z-index: 19; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px); }
+.st .track { position: absolute; left: 0; right: 0; height: 4cqw; top: -5cqw; z-index: 19; pointer-events: none;
+    background: linear-gradient(180deg, transparent, rgba(220,235,255,.07) 40%, rgba(220,235,255,.12) 50%, rgba(220,235,255,.07) 60%, transparent); animation: k-track 6.5s linear infinite; }
+@keyframes k-track { 0% { top: -5cqw } 100% { top: 60cqw } }
+.st .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.75) 100%); pointer-events: none; z-index: 20; }
+.st .grain { position: absolute; inset: -50%; z-index: 21; pointer-events: none; opacity: .09;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    animation: k-grain .5s steps(4) infinite; }
+.st.gl .grain { opacity: .32; }
+@keyframes k-grain { 0% { transform: translate(0,0) } 25% { transform: translate(-3%,2%) } 50% { transform: translate(2%,-3%) } 75% { transform: translate(-2%,-1%) } }
+.st.shake .scene { animation: k-shake .28s linear; }
+@keyframes k-shake { 0%,100% { transform: none } 20% { transform: translate(-.4cqw,.2cqw) } 40% { transform: translate(.35cqw,-.25cqw) } 60% { transform: translate(-.2cqw,.3cqw) } 80% { transform: translate(.2cqw,-.1cqw) } }
+@keyframes k-blink { 50% { opacity: 0 } }
+
+/* ── allumage CRT, signal perdu, noir final ── */
+.st .crt { position: absolute; left: 50%; top: 50%; height: 2px; width: 0; background: #e8efe0; transform: translate(-50%,-50%); z-index: 15; opacity: 0; }
+.st .crt.on { animation: k-crt .55s ease-out forwards; }
+@keyframes k-crt { 0% { width: 0; opacity: 1 } 60% { width: 100%; height: 2px; opacity: 1 } 100% { width: 100%; height: 0; opacity: 0 } }
+.st .lost { position: absolute; inset: 0; z-index: 22; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1cqw; opacity: 0; pointer-events: none;
+    background: rgba(4,5,8,.55); font-size: 3.4cqw; letter-spacing: .35em; color: #f1f4ea; }
+.st .lost small { font-size: 1.4cqw; letter-spacing: .3em; color: #e04848; }
+.st .lost.on { opacity: 1; animation: k-blink .18s steps(2) infinite; }
+.st .black { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity .5s; z-index: 30; pointer-events: none; }
+.st .black.on { opacity: 1; }
+
+/* ── panneau d'interception téléphonique ── */
+.st .icpt { position: absolute; left: 15cqw; right: 15cqw; top: 15cqw; opacity: 0; transition: opacity .35s, transform .5s cubic-bezier(.7,0,.2,1); }
+.st .icpt.on { opacity: 1; }
+.st .icpt.off { opacity: 0; transform: scaleY(.02); }
+.st .ih { font-size: 1.9cqw; letter-spacing: .25em; color: rgba(215,220,207,.7); display: flex; gap: 1.2cqw; align-items: center; }
+.st .rec { color: #e04848; animation: k-blink 1s steps(2) infinite; }
+.st .wave { display: flex; align-items: center; gap: .45cqw; height: 11cqw; margin: 2.2cqw 0; }
+.st .wave i { flex: 1; background: #e04848; height: 6%; border-radius: 1px; opacity: .85; transition: height .09s; }
+.st .trans { font-size: 2.6cqw; min-height: 3.4cqw; color: #f1f4ea; letter-spacing: .03em; }
+.st .who { font-size: 1.6cqw; color: rgba(215,220,207,.5); margin-top: 1.2cqw; letter-spacing: .15em; }
+
+/* ── dossier ── */
+.st .dossier { position: absolute; top: 7.1cqw; left: 20cqw; width: 60cqw; padding: 1.8cqw 2cqw; border: 1px solid rgba(215,220,207,.28);
+    background: linear-gradient(180deg, rgba(16,19,27,.97), rgba(10,12,18,.97)); opacity: 0; transform: translateY(2cqw);
+    transition: opacity .45s, transform .6s cubic-bezier(.2,.8,.2,1), left .9s cubic-bezier(.7,0,.2,1), width .9s cubic-bezier(.7,0,.2,1), top .9s cubic-bezier(.7,0,.2,1); }
+.st .dossier.on { opacity: 1; transform: none; }
+.st .dossier.out { opacity: 0; transform: translateX(-3cqw); }
+.st .dtab { position: absolute; top: -2.6cqw; left: -1px; font-size: 1.6cqw; letter-spacing: .25em; padding: .5cqw 1.4cqw; background: #e04848; color: #0b0c10; font-weight: bold; text-shadow: none; }
+.st .drow { display: flex; gap: 2.2cqw; }
+.st .photo { position: relative; width: 16cqw; aspect-ratio: 4 / 5; flex: none; overflow: hidden; background: #0e1320; }
+.st .photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%;
+    filter: grayscale(1) contrast(1.35) brightness(.9); transform: scale(1.12); opacity: 0; }
+.st .photo.dev img { animation: k-develop 1s ease-out forwards; }
+@keyframes k-develop { 0% { opacity: 1; filter: grayscale(1) brightness(3.5) blur(6px); transform: scale(1.25) } 100% { opacity: 1; filter: grayscale(1) contrast(1.35) brightness(.9) blur(0); transform: scale(1.12) } }
+.st .photo .tint { position: absolute; inset: 0; background: #2d7f86; mix-blend-mode: color; opacity: .55; }
+.st .photo .lines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px); }
+.st .photo .cam { position: absolute; left: .8cqw; bottom: .7cqw; font-size: 1.1cqw; color: #e8efe0; text-shadow: 0 0 2px #000; opacity: 0; }
+.st .photo .cam b { color: #e04848; font-weight: normal; animation: k-blink 1s steps(2) infinite; }
+.st .photo.dev .cam { opacity: .85; transition: opacity .3s .6s; }
+.st .brk { position: absolute; inset: 4%; transition: all .7s cubic-bezier(.7,0,.2,1); opacity: 0; }
+.st .brk::before, .st .brk::after, .st .brk span::before, .st .brk span::after { content: ''; position: absolute; width: 22%; height: 22%; border: .3cqw solid #e04848; }
+.st .brk::before { left: 0; top: 0; border-right: 0; border-bottom: 0 } .st .brk::after { right: 0; top: 0; border-left: 0; border-bottom: 0 }
+.st .brk span::before { left: 0; bottom: 0; border-right: 0; border-top: 0 } .st .brk span::after { right: 0; bottom: 0; border-left: 0; border-top: 0 }
+.st .brk.on { opacity: 1; }
+.st .brk.lock { inset: 14% 27% 42% 27%; }
+.st .idtag { position: absolute; left: 27%; top: 4%; font-size: 1.1cqw; background: #e04848; color: #0b0c10; padding: .15cqw .5cqw; opacity: 0; transition: opacity .2s; font-weight: bold; text-shadow: none; }
+.st .idtag.on { opacity: 1; }
+.st .fields { flex: 1; padding-top: .4cqw; }
+.st .fl { font-size: 1.6cqw; line-height: 2.05; white-space: nowrap; min-height: 3.3cqw; }
+.st .fl .k { color: rgba(215,220,207,.5); }
+.st .redact { display: inline-block; height: 1.6cqw; width: 0; background: #d7dccf; vertical-align: middle; transition: width .45s cubic-bezier(.7,0,.2,1); }
+.st .redact.on { width: 14cqw; }
+.st .stamp { position: absolute; font-size: 3.2cqw; font-weight: bold; letter-spacing: .18em; color: #e04848; text-shadow: none;
+    border: .4cqw solid #e04848; padding: .2cqw 1.3cqw; background: rgba(12,14,20,.5); opacity: 0; transform: rotate(-11deg) scale(2.4); z-index: 3; }
+.st .stamp.on { animation: k-stamp .22s cubic-bezier(.6,0,.9,.4) forwards; }
+@keyframes k-stamp { 0% { opacity: 0; transform: rotate(-11deg) scale(2.4) } 100% { opacity: .95; transform: rotate(-11deg) scale(1) } }
+
+/* ── pièces à conviction (photos scotchées) ── */
+.st .ev-h { font-size: 1.3cqw; letter-spacing: .3em; color: #e04848; margin: 1.5cqw 0 .9cqw; opacity: 0; transition: opacity .3s; }
+.st .ev-h.on { opacity: 1; }
+.st .ev { display: flex; gap: 1.3cqw; }
+.st .evp { flex: 1; position: relative; opacity: 0; --r: -1.5deg; }
+.st .evp .pic { position: relative; aspect-ratio: 4 / 3; overflow: hidden; background: #111; border: .45cqw solid #d9d6cc; box-shadow: 0 .6cqw 1.4cqw rgba(0,0,0,.6); }
+.st .evp img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(.8) contrast(1.55) brightness(.6) sepia(.12); transform: scale(1.5); }
+.st .evp .pic::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(0,0,0,.6) 100%); }
+.st .evp .flash { position: absolute; inset: 0; background: #fff; opacity: 0; z-index: 2; }
+.st .evp .tape { position: absolute; top: -.9cqw; left: 50%; width: 6cqw; height: 1.8cqw; transform: translateX(-50%) rotate(-3deg); background: rgba(225,215,170,.55); z-index: 3; }
+.st .evp .cap { font-size: 1.1cqw; margin-top: .5cqw; color: rgba(215,220,207,.75); white-space: nowrap; min-height: 1.5cqw; }
+.st .evp.on { animation: k-slap .3s cubic-bezier(.3,1.4,.5,1) forwards; }
+.st .evp.on .flash { animation: k-flash .45s ease-out; }
+@keyframes k-slap { 0% { opacity: 0; transform: rotate(calc(var(--r) * 4)) scale(1.35) } 100% { opacity: 1; transform: rotate(var(--r)) scale(1) } }
+@keyframes k-flash { 0% { opacity: .95 } 100% { opacity: 0 } }
+
+/* ── panneau plan / carte ── */
+.st .panel { position: absolute; border: 1px solid rgba(215,220,207,.28); background: rgba(10,12,18,.95); opacity: 0; transform: translateX(3cqw);
+    transition: opacity .5s, transform .7s cubic-bezier(.2,.8,.2,1); }
+.st .panel.on { opacity: 1; transform: none; }
+.st .panel.out { opacity: 0; transform: translateX(3cqw); }
+.st .panel > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.st .panel .ph { position: absolute; top: .8cqw; left: 1.2cqw; font-size: 1.3cqw; letter-spacing: .25em; color: rgba(215,220,207,.55); }
+.st .draw { stroke-dasharray: 400; stroke-dashoffset: 400; }
+.st .on .draw, .st .draw.on { transition: stroke-dashoffset 1.4s ease-out; stroke-dashoffset: 0; }
+.st .fadein { opacity: 0; } .st .on .fadein, .st .fadein.on { transition: opacity .8s .5s; opacity: 1; }
+.st .pulse { transform-box: fill-box; transform-origin: center; animation: k-pulse 1.3s ease-out infinite; }
+@keyframes k-pulse { 0% { transform: scale(1); opacity: .9 } 100% { transform: scale(2.4); opacity: 0 } }
+.st .pop { opacity: 0; transform: translateY(-6px); transition: opacity .25s, transform .45s cubic-bezier(.3,1.6,.5,1); }
+.st .pop.on { opacity: 1; transform: none; }
+
+/* ── radio du fixeur + sous-titres ── */
+.st .sub { position: absolute; left: 4cqw; right: 4cqw; bottom: 2.4cqw; text-align: center; font-size: 1.95cqw; line-height: 1.4; color: #f1f4ea; min-height: 3cqw; z-index: 8; }
+.st .sub .spk { color: #f0c040; letter-spacing: .25em; font-size: 1.5cqw; margin-right: 1.2cqw; }
+.st .sub .spk.phone { color: #e04848; }
+.st .sub .spk.inner { color: #cfd6e6; }
+.st .sub .tx { background: rgba(0,0,0,.55); padding: .15cqw .6cqw; }
+.st .radio { position: absolute; top: 1.4cqw; right: 2cqw; font-size: 1.2cqw; letter-spacing: .22em; color: rgba(215,220,207,.75); display: flex; align-items: center; gap: .9cqw; opacity: 0; transition: opacity .3s; z-index: 7; }
+.st .radio.on { opacity: 1; }
+.st .radio .dot { color: #f0c040; animation: k-blink 1.2s steps(2) infinite; }
+.st .radio .eq { display: flex; gap: .22cqw; height: 1.5cqw; align-items: flex-end; }
+.st .radio .eq i { width: .32cqw; height: 15%; background: #f0c040; }
+.st .radio.talk .eq i { animation: k-eq .38s ease-in-out infinite alternate; }
+.st .radio.talk .eq i:nth-child(2) { animation-delay: -.12s } .st .radio.talk .eq i:nth-child(3) { animation-delay: -.25s } .st .radio.talk .eq i:nth-child(4) { animation-delay: -.07s } .st .radio.talk .eq i:nth-child(5) { animation-delay: -.3s }
+@keyframes k-eq { from { height: 15% } to { height: 100% } }
+
+/* ── carton-titre ── */
+.st .title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2cqw; opacity: 0; transition: opacity .6s; z-index: 6; }
+.st .title.on { opacity: 1; }
+.st .title .t1 { font-size: 1.8cqw; letter-spacing: .6em; color: #e04848; }
+.st .title .ln { height: 2px; width: 0; background: #e04848; transition: width .8s cubic-bezier(.7,0,.2,1); }
+.st .title.on .ln { width: 30cqw; }
+.st .title .t2 { font-size: 5.2cqw; letter-spacing: .4em; color: #f1f4ea; padding-left: .4em; text-align: center; }
+
+/* ── barre de contrôle sous la scène ── */
+.kctrl { display: flex; align-items: center; gap: .6rem; margin-top: .5rem; font-size: .78rem; color: #9aa0a6; flex-wrap: wrap; }
+.kctrl button, .kctrl select { background: #1d1f24; color: #e8eaed; border: 1px solid #3a3d44; border-radius: 6px; padding: .28rem .7rem; cursor: pointer; font-size: .78rem; }
+.kctrl button.hot { border-color: #f0c040; color: #f0c040; }
+.kctrl label { display: flex; align-items: center; gap: .3rem; }
+.kctrl .lbl { margin-left: auto; font-family: 'Courier New', monospace; }
+
+/* ── pas de transitions au chargement ni une fois figé (captures automatiques) ── */
+.st.k-preload, .st.k-preload * { transition: none !important; }
+.st.k-frozen, .st.k-frozen * { transition: none !important; animation-duration: 0s !important; animation-delay: 0s !important; }

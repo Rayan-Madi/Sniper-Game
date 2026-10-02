@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Briefing M2 — Les frères</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  /* M2 — Les frères Sanctechair : « les jumeaux de la chair ». L'écran est fendu en deux, tout est en miroir. */
+  .m2 { --bred: #c3141c; --bred2: #ef3b3b; --paper: #f1ede3; --ink: #231d1b; --beige: #d9c19a; --white: #f4f2ec; --amber: #f0c040; }
+
+  /* ── l'écran fendu : deux moitiés opaques qui s'écartent, une fente rouge au milieu ── */
+  .m2 .halves { position: absolute; inset: 0; }
+  .m2 .seam { position: absolute; left: 49.3cqw; width: 1.4cqw; top: -1cqw; bottom: -1cqw; opacity: 0; transition: opacity .3s;
+      background: linear-gradient(90deg, transparent, rgba(239,59,59,.6) 40%, #ff9c9c 50%, rgba(239,59,59,.6) 60%, transparent);
+      -webkit-mask-image: linear-gradient(180deg, #000 0, #000 44cqw, transparent 48cqw); mask-image: linear-gradient(180deg, #000 0, #000 44cqw, transparent 48cqw); }
+  .m2 .seam.on { opacity: 1; }
+  .m2 .half { position: absolute; top: -1cqw; bottom: -1cqw; width: 51cqw; transition: transform .45s cubic-bezier(.2,.9,.25,1);
+      background-color: #08070a;
+      background-image: radial-gradient(ellipse at var(--gx) 46%, rgba(92,26,30,.42) 0%, transparent 62%),
+        linear-gradient(rgba(170,110,110,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(170,110,110,.05) 1px, transparent 1px);
+      background-size: 100% 100%, 3.2cqw 3.2cqw, 3.2cqw 3.2cqw; }
+  .m2 .half.l { left: -1cqw; width: 51.3cqw; --gx: 100%; background-position: 0 0, 1cqw 1cqw, 1cqw 1cqw; }
+  .m2 .half.r { left: 50cqw; --gx: 0%; background-position: 0 0, -1.6cqw 1cqw, -1.6cqw 1cqw; }
+  .m2 .half::after { content: ''; position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(239,59,59,.6); opacity: 0; transition: opacity .3s;
+      -webkit-mask-image: linear-gradient(180deg, #000 0, #000 45cqw, transparent 49cqw); mask-image: linear-gradient(180deg, #000 0, #000 45cqw, transparent 49cqw); }
+  .m2 .half.l::after { right: .3cqw; } .m2 .half.r::after { left: 0; }
+  .m2 .halves.on .half::after { opacity: 1; }
+  .m2 .halves.on .half.l { transform: translate(-.6cqw, -.3cqw); }
+  .m2 .halves.on .half.r { transform: translate(.3cqw, .3cqw); }
+  .m2 .cut { position: absolute; left: 49.85cqw; width: .3cqw; top: 0; height: 56.25cqw; background: #fff; z-index: 5; opacity: 0;
+      box-shadow: 0 0 1cqw .35cqw rgba(239,59,59,.9); transform-origin: 50% 0; transform: scaleY(0); }
+  .m2 .cut.on { animation: m2-cut .6s cubic-bezier(.5,0,.2,1) forwards; }
+  @keyframes m2-cut { 0% { transform: scaleY(0); opacity: 1 } 20% { transform: scaleY(1); opacity: 1 } 100% { transform: scaleY(1); opacity: 0 } }
+  .m2 .flash2 { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 5; }
+  .m2 .flash2.on { animation: m2-flash .4s ease-out forwards; }
+  @keyframes m2-flash { 0% { opacity: 0 } 18% { opacity: .5 } 100% { opacity: 0 } }
+
+  /* ── deux dossiers en miroir ── */
+  .m2 .dossier { top: 14cqw; width: 41cqw; padding: 1.6cqw; border-color: rgba(239,59,59,.3);
+      background: linear-gradient(180deg, rgba(27,14,16,.97), rgba(15,9,11,.97)); transition: opacity .35s, transform .75s cubic-bezier(.16,.9,.24,1), top .8s cubic-bezier(.7,0,.2,1); }
+  .m2 .dossier.side { top: 7.1cqw; }
+  .m2 .dossier.da { left: 3cqw; transform: translateX(-34cqw); }
+  .m2 .dossier.db { left: 56cqw; transform: translateX(34cqw); }
+  .m2 .dossier.da.on, .m2 .dossier.db.on { transform: none; }
+  .m2 .dossier.da.out { opacity: 0; transform: translateX(-12cqw); }
+  .m2 .dossier.db.out { opacity: 0; transform: translateX(12cqw); }
+  .m2 .dtab { background: var(--bred); color: var(--paper); display: flex; align-items: center; gap: .7cqw; }
+  .m2 .db .dtab { left: auto; right: -1px; }
+  .m2 .dtab .hk { width: .9cqw; height: 1.8cqw; color: var(--paper); }
+  .m2 .drow { gap: 1.8cqw; }
+  .m2 .photo { width: 11cqw; background: #cbc6bc; }
+  .m2 .photo img { filter: saturate(.9) contrast(1.1) brightness(.93); object-position: 50% 10%; }
+  .m2 .photo.dev img { animation: m2-dev 1s ease-out forwards; }
+  @keyframes m2-dev { 0% { opacity: 1; filter: saturate(0) brightness(3) blur(6px); transform: scale(1.25) } 100% { opacity: 1; filter: saturate(.9) contrast(1.1) brightness(.93) blur(0); transform: scale(1.12) } }
+  .m2 .photo .tint { background: #7a1016; mix-blend-mode: multiply; opacity: .08; }
+  .m2 .photo .lines { opacity: .4; }
+  .m2 .brk::before, .m2 .brk::after, .m2 .brk span::before, .m2 .brk span::after { border-color: var(--bred2); }
+  .m2 #phA .brk.lock { inset: 16% 34% 49% 27%; }
+  .m2 #phB .brk.lock { inset: 15% 27% 48% 30%; }
+  .m2 .idtag { left: 50%; transform: translateX(-50%); top: 3%; white-space: nowrap; background: var(--bred); color: var(--paper); }
+  .m2 .fl { font-size: 1.45cqw; min-height: 2.97cqw; }
+  .m2 .fl .v { color: var(--paper); }
+  /* estampille sanitaire ovale (tampon de boucherie) */
+  .m2 .est { position: absolute; top: 9.4cqw; width: 10.4cqw; height: 6.2cqw; border: .32cqw solid var(--bred2); border-radius: 50%; color: var(--bred2);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; text-shadow: none; z-index: 3;
+      background: rgba(244,242,236,.12); opacity: 0; transform: rotate(var(--sr)) scale(2.4); font-weight: bold; }
+  .m2 .est b { font-size: 2cqw; letter-spacing: .18em; padding-left: .18em; margin: .25cqw 0; }
+  .m2 .est small { font-size: .9cqw; letter-spacing: .14em; padding-left: .14em; font-weight: bold; }
+  .m2 .est.on { animation: m2-stamp .22s cubic-bezier(.6,0,.9,.4) forwards; }
+  @keyframes m2-stamp { to { opacity: .95; transform: rotate(var(--sr)) scale(1) } }
+  .m2 .da .est { left: 28.4cqw; --sr: -12deg; }
+  .m2 .db .est { left: 1.8cqw; --sr: 12deg; }
+
+  /* ── le lien entre les deux photos ── */
+  .m2 .mid { position: absolute; inset: 0; transform: translateY(6.9cqw); transition: opacity .35s, transform .8s cubic-bezier(.7,0,.2,1); }
+  .m2 .mid.side { transform: none; }
+  .m2 .mid.out { opacity: 0; }
+  .m2 .link { position: absolute; left: 42.4cqw; width: 15.2cqw; top: 15.5cqw; height: .2cqw; background: var(--bred2); z-index: 4;
+      box-shadow: 0 0 .6cqw rgba(239,59,59,.7); transform: scaleX(0); transition: transform .5s cubic-bezier(.7,0,.2,1); }
+  .m2 .link.on { transform: scaleX(1); }
+  .m2 .link::before, .m2 .link::after { content: ''; position: absolute; top: 50%; width: .8cqw; height: .8cqw; border-radius: 50%; background: var(--bred2); transform: translate(-50%, -50%); }
+  .m2 .link::before { left: 0; } .m2 .link::after { left: 100%; }
+  .m2 .lnk { position: absolute; left: 50cqw; transform: translateX(-50%); white-space: nowrap; z-index: 4; background: #0b0708; padding: .15cqw .45cqw; }
+  .m2 .lnk.t { top: 13.3cqw; font-size: 1.1cqw; letter-spacing: .1em; color: var(--bred2); opacity: 0; transition: opacity .3s; }
+  .m2 .lnk.t.on { opacity: 1; }
+  .m2 .lnk.b { top: 16.5cqw; font-size: 1cqw; letter-spacing: .1em; color: rgba(241,237,227,.8); }
+  .m2 .lnk.b:empty { padding: 0; }
+
+  /* ── pièces à conviction : étiquettes de balance suspendues à des crochets ── */
+  .m2 .evid { position: absolute; inset: 0; transition: opacity .4s, transform .6s cubic-bezier(.5,0,.8,.4); }
+  .m2 .evid.out { opacity: 0; transform: translateY(3cqw); }
+  .m2 .tkh { position: absolute; top: 25.3cqw; font-size: 1.2cqw; letter-spacing: .25em; color: var(--bred2); opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  .m2 .tkh.on { opacity: 1; }
+  .m2 .tkh.l { right: 51.5cqw; }
+  .m2 .tkh.r { left: 51.5cqw; }
+  .m2 .rail { position: absolute; top: 28.4cqw; width: 38cqw; height: .45cqw; border-radius: .2cqw; transform: scaleX(0); transition: transform .6s cubic-bezier(.7,0,.2,1);
+      background: linear-gradient(180deg, #c9ced3, #6d7379 60%, #3c4045); box-shadow: 0 .3cqw .6cqw rgba(0,0,0,.6); }
+  .m2 .rail.l { left: 6cqw; transform-origin: 100% 50%; }
+  .m2 .rail.r { left: 56cqw; transform-origin: 0 50%; }
+  .m2 .rail.on { transform: scaleX(1); }
+  .m2 .hooks { position: absolute; inset: 0; opacity: 0; transform: translateY(-.8cqw); transition: opacity .3s .25s, transform .4s .25s cubic-bezier(.3,1.6,.5,1); }
+  .m2 .hooks.on { opacity: 1; transform: none; }
+  .m2 .hook { position: absolute; top: 27.8cqw; width: 2cqw; height: 4.4cqw; color: #b9bec4; overflow: visible; }
+  .m2 .hook.r { transform: scaleX(-1); }
+  .m2 .tk { position: absolute; top: 31.2cqw; width: 15cqw; opacity: 0; transform-origin: 50% .45cqw; transform: translateY(-3cqw);
+      font-family: Consolas, 'Lucida Console', 'Courier New', monospace; color: var(--ink); text-shadow: none; filter: drop-shadow(0 .5cqw .7cqw rgba(0,0,0,.65)); }
+  .m2 .tk.on { animation: m2-hang 1s cubic-bezier(.3,.7,.4,1) forwards; }
+  @keyframes m2-hang { 0% { opacity: 0; transform: translateY(-3cqw) rotate(0) } 25% { opacity: 1; transform: translateY(0) rotate(calc(var(--r) * -4)) }
+      50% { transform: rotate(calc(var(--r) * 2.5)) } 72% { transform: rotate(calc(var(--r) * -1.2)) } 100% { opacity: 1; transform: rotate(var(--r)) } }
+  .m2 .tkp { position: relative; background: linear-gradient(180deg, #f6f3ea, #e9e4d6); padding: 1.05cqw .9cqw .65cqw; }
+  .m2 .tkp::before { content: ''; position: absolute; left: 50%; top: .25cqw; width: .45cqw; height: .45cqw; border-radius: 50%; background: #1a1416; transform: translateX(-50%); }
+  .m2 .tkp::after { content: ''; position: absolute; left: 0; right: 0; bottom: -.5cqw; height: .5cqw;
+      background: linear-gradient(135deg, #e9e4d6 .25cqw, transparent 0) 0 0 / .5cqw .5cqw, linear-gradient(-135deg, #e9e4d6 .25cqw, transparent 0) 0 0 / .5cqw .5cqw; }
+  .m2 .tk .th { font-size: .82cqw; letter-spacing: .06em; text-align: center; padding-bottom: .3cqw; border-bottom: 1px dashed rgba(35,29,27,.55); font-weight: bold; }
+  .m2 .tk .tl { font-size: 1.45cqw; font-weight: bold; text-align: center; margin: .2cqw 0 .15cqw; letter-spacing: .02em; }
+  .m2 .tk .tr { display: flex; justify-content: space-between; align-items: center; font-size: 1cqw; line-height: 1.35; }
+  .m2 .tk .rd { display: inline-block; width: 5.2cqw; height: .95cqw; background: var(--ink); }
+  .m2 .tk .tt { display: flex; justify-content: space-between; font-size: 1.15cqw; font-weight: bold; border-top: 1px dashed rgba(35,29,27,.55); margin-top: .3cqw; padding-top: .25cqw; }
+  .m2 .tk .bcr { display: flex; align-items: center; justify-content: space-between; height: 2.1cqw; margin: .3cqw 0 .15cqw; }
+  .m2 .tk .bc { width: 5.6cqw; height: 1.4cqw; opacity: .85;
+      background: repeating-linear-gradient(90deg, #1b1716 0 .12cqw, transparent .12cqw .22cqw, #1b1716 .22cqw .4cqw, transparent .4cqw .47cqw, #1b1716 .47cqw .53cqw, transparent .53cqw .7cqw, #1b1716 .7cqw .9cqw, transparent .9cqw 1cqw); }
+  .m2 .tk .tf { font-size: .78cqw; text-align: center; letter-spacing: .04em; color: rgba(35,29,27,.8); }
+  .m2 .tk .tst { font-size: 1.15cqw; font-weight: bold; letter-spacing: .1em; color: var(--bred); line-height: 1.2; margin-right: .2cqw;
+      border: .2cqw solid var(--bred); padding: 0 .4cqw; mix-blend-mode: multiply; opacity: 0; transform: rotate(-8deg) scale(2); }
+  .m2 .tk .tst.on { animation: m2-ink .2s cubic-bezier(.6,0,.9,.4) forwards; }
+  @keyframes m2-ink { to { opacity: .9; transform: rotate(-8deg) scale(1) } }
+
+  /* ── plan : vue de dessus (gauche) et vue en coupe (droite), en miroir ── */
+  .m2 .panel { top: 7.1cqw; width: 45.5cqw; height: 39.4cqw; border-color: rgba(239,59,59,.3); background: rgba(14,9,11,.96); }
+  .m2 .panel.pl { left: 3cqw; transform: translateX(-5cqw); }
+  .m2 .panel.pr { left: 51.5cqw; transform: translateX(5cqw); }
+  .m2 .panel.pl.on, .m2 .panel.pr.on { transform: none; }
+  .m2 .panel.pl.out { transform: translateX(-5cqw); }
+  .m2 .panel.pr.out { transform: translateX(5cqw); }
+  .m2 .panel .ph { color: rgba(241,237,227,.6); }
+  .m2 .draw { stroke-dasharray: 1200; stroke-dashoffset: 1200; }
+  .m2 .sl { stroke-dasharray: 270; stroke-dashoffset: 270; }
+  .m2 .sl.on { transition: stroke-dashoffset 1s ease-in-out; stroke-dashoffset: 0; }
+  .m2 .fig .bd, .m2 .fig .hd { fill: rgba(215,220,207,.07); stroke: rgba(215,220,207,.45); stroke-width: 1.2; transition: fill .5s, stroke .5s; }
+  .m2 #fL.on .bd, .m2 #dL.on .bd { fill: var(--white); stroke: var(--white); }
+  .m2 #fM.on .bd, .m2 #dM.on .bd { fill: var(--beige); stroke: var(--beige); }
+  .m2 #fL.on .hd, .m2 #fM.on .hd, .m2 #dL.on .hd, .m2 #dM.on .hd { fill: rgba(215,220,207,.35); stroke: rgba(241,237,227,.8); }
+  .m2 .blink { animation: k-blink .9s steps(2) infinite; }
+
+  /* ── carton-titre aux couleurs de la mission ── */
+  .m2 .title .t1 { color: var(--bred2); }
+  .m2 .title .ln { background: var(--bred2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="st m2" id="st">
+    <div class="bg"></div>
+    <div class="scene" id="scene">
+
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="m2-hook" viewBox="0 0 20 44">
+          <path d="M4.5 12 C2.5 4.5 15.5 2 15 9 C14.6 13 10 13.5 10 17.5 V32 C10 40.5 2 40.5 2.6 34 L5 29.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        </symbol>
+      </svg>
+
+      <!-- l'écran fendu en deux -->
+      <div class="halves" id="halves">
+        <div class="seam" id="seam"></div>
+        <div class="half l"></div><div class="half r"></div>
+      </div>
+
+      <!-- dossier A : Luc, l'aîné (photo côté centre) -->
+      <div class="dossier da" id="dosA">
+        <div class="dtab"><svg class="hk"><use href="#m2-hook" width="100%" height="100%"/></svg>DOSSIER 02-A</div>
+        <div class="drow">
+          <div class="fields">
+            <div class="fl" data-reset data-k="NOM ..... " data-v="LUC SANCTECHAIR"></div>
+            <div class="fl" data-reset data-k="MÉTIER .. " data-v="BOUCHER"></div>
+            <div class="fl" data-reset data-k="RÔLE .... " data-v="L'AÎNÉ"></div>
+            <div class="fl" data-reset data-k="SIGNE ... " data-v="POLO BLANC" data-col="#f4f2ec"></div>
+          </div>
+          <div class="photo" id="phA">
+            <img src="img/portrait-freres-a.png" alt="">
+            <div class="tint"></div><div class="lines"></div>
+            <div class="brk" id="brkA"><span></span></div>
+            <div class="idtag" id="idA">ID · 98 %</div>
+          </div>
+        </div>
+        <div class="est" id="estA"><small>FR</small><b>CIBLE</b><small>02-A</small></div>
+      </div>
+
+      <!-- dossier B : Marc, le cadet (photo côté centre) -->
+      <div class="dossier db" id="dosB">
+        <div class="dtab">DOSSIER 02-B<svg class="hk" style="transform:scaleX(-1)"><use href="#m2-hook" width="100%" height="100%"/></svg></div>
+        <div class="drow">
+          <div class="photo" id="phB">
+            <img src="img/portrait-freres-b.png" alt="">
+            <div class="tint"></div><div class="lines"></div>
+            <div class="brk" id="brkB"><span></span></div>
+            <div class="idtag" id="idB">ID · 96 %</div>
+          </div>
+          <div class="fields">
+            <div class="fl" data-reset data-k="NOM ..... " data-v="MARC SANCTECHAIR"></div>
+            <div class="fl" data-reset data-k="MÉTIER .. " data-v="BOUCHER"></div>
+            <div class="fl" data-reset data-k="RÔLE .... " data-v="LE CADET"></div>
+            <div class="fl" data-reset data-k="SIGNE ... " data-v="POLO BEIGE" data-col="#d9c19a"></div>
+          </div>
+        </div>
+        <div class="est" id="estB"><small>FR</small><b>CIBLE</b><small>02-B</small></div>
+      </div>
+
+      <!-- le lien rouge entre les deux visages -->
+      <div class="mid" id="mid">
+        <div class="link" id="link"></div>
+        <div class="lnk t" id="lnkT">LIEN : FRÈRES</div>
+        <div class="lnk b" id="lnkB" data-reset></div>
+      </div>
+
+      <!-- pièces à conviction : étiquettes de balance -->
+      <div class="evid" id="evid">
+        <div class="tkh l" id="tkhL">PIÈCES À CONVICTION</div>
+        <div class="tkh r" id="tkhR">ÉTIQUETTES DE BALANCE</div>
+        <div class="rail l" id="railL"></div><div class="rail r" id="railR"></div>
+        <div class="hooks" id="hooks">
+          <svg class="hook" style="left:14.9cqw"><use href="#m2-hook" width="100%" height="100%"/></svg>
+          <svg class="hook" style="left:33.9cqw"><use href="#m2-hook" width="100%" height="100%"/></svg>
+          <svg class="hook r" style="left:64.1cqw"><use href="#m2-hook" width="100%" height="100%"/></svg>
+          <svg class="hook r" style="left:83.1cqw"><use href="#m2-hook" width="100%" height="100%"/></svg>
+        </div>
+        <div class="tk" id="tk1" style="left:8cqw; --r:-1.6deg"><div class="tkp">
+          <div class="th">BOUCHERIE SANCTECHAIR</div><div class="tl">LOT n° 0417</div>
+          <div class="tr"><span>ESPÈCE</span><i class="rd"></i></div><div class="tr"><span>POIDS</span><span>61,4 kg</span></div><div class="tr"><span>PRIX/kg</span><span>12,00 €</span></div>
+          <div class="tt"><span>TOTAL</span><span>736,80 €</span></div><div class="bcr"><div class="bc"></div><div class="tst" id="tk1s">VENDU</div></div><div class="tf">14/08 · 23:12 · BAL. 02</div></div></div>
+        <div class="tk" id="tk2" style="left:27cqw; --r:1.2deg"><div class="tkp">
+          <div class="th">BOUCHERIE SANCTECHAIR</div><div class="tl">LOT n° 0422</div>
+          <div class="tr"><span>ESPÈCE</span><i class="rd"></i></div><div class="tr"><span>POIDS</span><span>48,9 kg</span></div><div class="tr"><span>PRIX/kg</span><span>12,00 €</span></div>
+          <div class="tt"><span>TOTAL</span><span>586,80 €</span></div><div class="bcr"><div class="bc"></div><div class="tst" id="tk2s">VENDU</div></div><div class="tf">29/08 · 23:40 · BAL. 02</div></div></div>
+        <div class="tk" id="tk3" style="left:58cqw; --r:-1.1deg"><div class="tkp">
+          <div class="th">BOUCHERIE SANCTECHAIR</div><div class="tl">LOT n° 0431</div>
+          <div class="tr"><span>ESPÈCE</span><i class="rd"></i></div><div class="tr"><span>POIDS</span><span>73,2 kg</span></div><div class="tr"><span>PRIX/kg</span><span>14,00 €</span></div>
+          <div class="tt"><span>TOTAL</span><span>1 024,80 €</span></div><div class="bcr"><div class="bc"></div><div class="tst" id="tk3s">VENDU</div></div><div class="tf">06/09 · 00:15 · BAL. 01</div></div></div>
+        <div class="tk" id="tk4" style="left:77cqw; --r:1.7deg"><div class="tkp">
+          <div class="th">BOUCHERIE SANCTECHAIR</div><div class="tl">LOT n° 0438</div>
+          <div class="tr"><span>ESPÈCE</span><i class="rd"></i></div><div class="tr"><span>POIDS</span><span>55,0 kg</span></div><div class="tr"><span>PRIX/kg</span><span>12,00 €</span></div>
+          <div class="tt"><span>TOTAL</span><span>660,00 €</span></div><div class="bcr"><div class="bc"></div><div class="tst" id="tk4s">RÉSERVÉ</div></div><div class="tf">19/09 · 23:05 · BAL. 01</div></div></div>
+      </div>
+
+      <!-- plan, vue de dessus -->
+      <div class="panel pl" id="plan">
+        <div class="ph">VUE DE DESSUS · LA PLACE</div>
+        <svg viewBox="0 0 455 394">
+          <defs>
+            <pattern id="m2-pave" width="14" height="14" patternUnits="userSpaceOnUse"><circle cx="7" cy="7" r=".9" fill="rgba(215,220,207,.18)"/></pattern>
+            <pattern id="m2-awn" width="14" height="10" patternUnits="userSpaceOnUse"><rect width="7" height="10" fill="#c3141c"/><rect x="7" width="7" height="10" fill="#e9e4d8"/></pattern>
+            <clipPath id="m2-cp"><circle cx="0" cy="0" r="11.5"/></clipPath>
+            <marker id="m2-arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#ef3b3b"/></marker>
+            <radialGradient id="m2-glow"><stop offset="0" stop-color="rgba(240,200,120,.35)"/><stop offset="1" stop-color="rgba(240,200,120,0)"/></radialGradient>
+          </defs>
+          <rect class="fadein" x="20" y="125" width="415" height="175" fill="url(#m2-pave)"/>
+          <g fill="none" stroke="rgba(215,220,207,.45)" stroke-width="1.4">
+            <path class="draw" d="M20 45 H140 V105 H20Z M335 45 H435 V105 H335Z M20 320 H170 V385 H20Z M340 320 H435 V385 H340Z M180 320 H330 V385 H180Z"/>
+            <path class="draw" d="M20 125 H435 M20 300 H435" stroke="rgba(215,220,207,.25)"/>
+          </g>
+          <g class="fadein">
+            <rect x="150" y="45" width="150" height="60" fill="rgba(195,20,28,.13)"/>
+            <rect x="158" y="105" width="134" height="8" fill="url(#m2-awn)"/>
+            <use href="#m2-hook" x="160" y="52" width="13" height="29" style="color:#ef3b3b"/>
+            <text x="182" y="73" font-size="14" fill="#ef3b3b" font-family="Courier New" letter-spacing="2" font-weight="bold">BOUCHERIE</text>
+            <text x="182" y="92" font-size="10" fill="rgba(241,237,227,.6)" font-family="Courier New" letter-spacing="2">SANCTECHAIR</text>
+            <circle cx="30" cy="290" r="14" fill="url(#m2-glow)"/><circle cx="30" cy="290" r="2.5" fill="#f0d9a0"/>
+            <circle cx="425" cy="290" r="14" fill="url(#m2-glow)"/><circle cx="425" cy="290" r="2.5" fill="#f0d9a0"/>
+            <circle cx="30" cy="135" r="12" fill="url(#m2-glow)"/><circle cx="30" cy="135" r="2.5" fill="#f0d9a0"/>
+            <circle cx="425" cy="135" r="12" fill="url(#m2-glow)"/><circle cx="425" cy="135" r="2.5" fill="#f0d9a0"/>
+            <text x="50" y="293" font-size="11" fill="rgba(215,220,207,.45)" font-family="Courier New" letter-spacing="4">LA PLACE</text>
+          </g>
+          <path class="draw" d="M150 45 H300 V105 H150Z" fill="none" stroke="#ef3b3b" stroke-width="1.6"/>
+          <!-- zone d'encaissement + gardes -->
+          <g class="pop" id="zone">
+            <ellipse cx="226" cy="152" rx="46" ry="26" fill="rgba(239,59,59,.08)" stroke="#ef3b3b" stroke-width="1.2" stroke-dasharray="5 4"/>
+            <text x="222" y="196" text-anchor="end" font-size="11" fill="#ef3b3b" font-family="Courier New" letter-spacing="1.5">ENCAISSEMENT · 23 H</text>
+          </g>
+          <g class="pop" id="guards" font-family="Courier New" font-size="9" fill="rgba(215,220,207,.6)" text-anchor="middle">
+            <circle cx="160" cy="216" r="6" fill="#16101a" stroke="rgba(215,220,207,.6)" stroke-width="1.2"/><text x="160" y="235">GARDE</text>
+            <circle cx="300" cy="216" r="6" fill="#16101a" stroke="rgba(215,220,207,.6)" stroke-width="1.2"/><text x="300" y="235">GARDE</text>
+          </g>
+          <!-- ton poste : le toit d'en face -->
+          <g class="pop" id="post">
+            <rect x="180" y="320" width="150" height="65" fill="rgba(240,192,64,.07)" stroke="#f0c040" stroke-width="1.2" stroke-dasharray="5 4"/>
+            <text x="186" y="335" font-size="10" fill="#f0c040" font-family="Courier New" letter-spacing="1">TOIT</text>
+            <rect x="294" y="336" width="12" height="12" fill="none" stroke="#f0c040" stroke-width="1.6"/><circle cx="300" cy="342" r="2.6" fill="#f0c040"/>
+            <text x="255" y="376" text-anchor="middle" font-size="12" fill="#f0c040" font-family="Courier New" letter-spacing="1">TON POSTE</text>
+          </g>
+          <line class="sl" id="sl" x1="300" y1="342" x2="228" y2="170" stroke="#f0c040" stroke-width="1.3"/>
+          <text id="dist" x="272" y="262" font-size="16" fill="#f0c040" font-family="Courier New" data-reset></text>
+          <!-- les deux cibles -->
+          <line class="pop" id="plink" x1="217.5" y1="152" x2="234.5" y2="152" stroke="#ef3b3b" stroke-width="2"/>
+          <g transform="translate(205 152)"><g class="pop" id="pinL">
+            <circle class="pulse" r="12.5" fill="none" stroke="#f4f2ec" stroke-width="1"/>
+            <image href="img/portrait-freres-a.png" x="-17" y="-13" width="36" height="45" clip-path="url(#m2-cp)" style="filter: saturate(.5) contrast(1.1)"/>
+            <circle r="12" fill="none" stroke="#f4f2ec" stroke-width="2.6"/>
+          </g></g>
+          <g transform="translate(247 152)"><g class="pop" id="pinM">
+            <circle class="pulse" r="12.5" fill="none" stroke="#d9c19a" stroke-width="1"/>
+            <image href="img/portrait-freres-b.png" x="-18.5" y="-12" width="36" height="45" clip-path="url(#m2-cp)" style="filter: saturate(.5) contrast(1.1)"/>
+            <circle r="12" fill="none" stroke="#d9c19a" stroke-width="2.6"/>
+          </g></g>
+          <text id="lbL" x="172" y="156" text-anchor="end" font-size="12" fill="#f4f2ec" font-family="Courier New" data-reset></text>
+          <text id="lbM" x="280" y="156" font-size="12" fill="#d9c19a" font-family="Courier New" data-reset></text>
+          <!-- enchaîner : 1 puis 2, l'autre fuit par la ruelle -->
+          <g transform="translate(205 152)"><g class="pop" id="retL" fill="none" stroke="#ef3b3b" stroke-width="1.3">
+            <circle r="19"/><path d="M-25 0 H-15 M15 0 H25 M0 -25 V-15 M0 15 V25"/>
+          </g></g>
+          <path class="pop" id="flee" d="M258 143 L317 116 V40" fill="none" stroke="#ef3b3b" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#m2-arr)"/>
+          <text class="pop" id="fleeT" x="333" y="34" font-size="10" fill="#ef3b3b" font-family="Courier New" letter-spacing="1">FUITE PROBABLE</text>
+          <g class="pop" id="b1"><circle cx="191" cy="137" r="7" fill="#ef3b3b"/><text x="191" y="141" text-anchor="middle" font-size="11" fill="#fff" font-family="Courier New" font-weight="bold">1</text></g>
+          <g class="pop" id="b2"><circle cx="261" cy="137" r="7" fill="#ef3b3b"/><text x="261" y="141" text-anchor="middle" font-size="11" fill="#fff" font-family="Courier New" font-weight="bold">2</text></g>
+        </svg>
+      </div>
+
+      <!-- vue en coupe : le toit d'en face, en hauteur -->
+      <div class="panel pr" id="coupe">
+        <div class="ph">VUE EN COUPE · TON POSTE</div>
+        <!-- Dessin à UNE seule échelle : 5,5 unités = 1 m. Sol y=340.
+             Toit du poste : 18 m = 99 u → y=241. Poste x=396, cibles (milieu Luc/Marc) x=165 : 42 m = 231 u.
+             Ligne de visée ≈ 21° sous l'horizontale (atan 89/231). Silhouettes légèrement grossies (pictogrammes). -->
+        <svg viewBox="0 0 455 394">
+          <defs>
+            <pattern id="m2-awn2" width="8" height="10" patternUnits="userSpaceOnUse"><rect width="4" height="10" fill="#c3141c"/><rect x="4" width="4" height="10" fill="#e9e4d8"/></pattern>
+          </defs>
+          <rect class="fadein" x="10" y="340" width="435" height="10" fill="rgba(215,220,207,.07)"/>
+          <g fill="none" stroke="rgba(215,220,207,.45)" stroke-width="1.4">
+            <path class="draw" d="M10 340 H445"/>
+            <!-- l'immeuble d'en face : 18 m -->
+            <path class="draw" d="M388 340 V241 H428 V340 M384 241 H432"/>
+            <!-- la boucherie : ≈ 12 m -->
+            <path class="draw" d="M14 340 V272 H110 V340" stroke="rgba(239,59,59,.75)"/>
+          </g>
+          <g class="fadein">
+            <g fill="rgba(215,220,207,.08)" stroke="rgba(215,220,207,.3)" stroke-width="1">
+              <rect x="26" y="280" width="16" height="12"/><rect x="54" y="280" width="16" height="12"/><rect x="82" y="280" width="16" height="12"/>
+              <rect x="22" y="313" width="80" height="25"/>
+              <rect x="394" y="248" width="11" height="11"/><rect x="411" y="248" width="11" height="11"/>
+              <rect x="394" y="273" width="11" height="11"/><rect x="411" y="273" width="11" height="11" fill="rgba(240,192,64,.22)"/>
+              <rect x="394" y="298" width="11" height="11" fill="rgba(240,192,64,.22)"/><rect x="411" y="298" width="11" height="11"/>
+              <rect x="403" y="319" width="10" height="21"/>
+            </g>
+            <rect x="20" y="297" width="84" height="12" fill="#c3141c"/>
+            <text x="62" y="306.5" text-anchor="middle" font-size="9.5" fill="#f1ede3" font-family="Courier New" letter-spacing="1.5" font-weight="bold">BOUCHERIE</text>
+            <path d="M110 309 L128 316 L128 320 L110 313Z" fill="url(#m2-awn2)"/>
+            <use href="#m2-hook" x="34" y="317" width="7" height="15" style="color:#b9bec4"/>
+            <use href="#m2-hook" x="58.5" y="317" width="7" height="15" style="color:#b9bec4"/>
+            <use href="#m2-hook" x="83" y="317" width="7" height="15" style="color:#b9bec4"/>
+            <!-- silhouettes : garde, Luc, Marc, garde (le milieu Luc/Marc est à x=165) -->
+            <g class="fig"><circle class="hd" cx="135" cy="325" r="3.5"/><path class="bd" d="M130.5 340 V333 Q130.5 330 135 330 Q139.5 330 139.5 333 V340Z"/></g>
+            <g class="fig" id="fL"><circle class="hd" cx="155" cy="325" r="3.5"/><path class="bd" d="M150.5 340 V333 Q150.5 330 155 330 Q159.5 330 159.5 333 V340Z"/></g>
+            <g class="fig" id="fM"><circle class="hd" cx="175" cy="325" r="3.5"/><path class="bd" d="M170.5 340 V333 Q170.5 330 175 330 Q179.5 330 179.5 333 V340Z"/></g>
+            <g class="fig"><circle class="hd" cx="195" cy="325" r="3.5"/><path class="bd" d="M190.5 340 V333 Q190.5 330 195 330 Q199.5 330 199.5 333 V340Z"/></g>
+          </g>
+          <!-- détail ×2,5 du groupe (le dessin principal reste à l'échelle) : gardes, Luc, Marc -->
+          <g class="pop" id="det">
+            <ellipse cx="165" cy="331" rx="42" ry="13" fill="none" stroke="#ef3b3b" stroke-width="1" stroke-dasharray="4 3" stroke-opacity=".8"/>
+            <path d="M150 244 V319" fill="none" stroke="#ef3b3b" stroke-width="1" stroke-dasharray="4 3" stroke-opacity=".6"/>
+            <rect x="110" y="146" width="210" height="98" fill="rgba(14,9,11,.96)" stroke="rgba(239,59,59,.55)" stroke-width="1"/>
+            <text x="118" y="160" font-size="10" fill="rgba(241,237,227,.55)" font-family="Courier New" letter-spacing="2">DÉTAIL ×2,5</text>
+            <path d="M118 226 H312" stroke="rgba(215,220,207,.4)" stroke-width="1.2"/>
+            <g class="fig"><circle class="hd" cx="140" cy="188.5" r="8.75"/><path class="bd" d="M128.75 226 V208.5 Q128.75 201 140 201 Q151.25 201 151.25 208.5 V226Z"/></g>
+            <g class="fig" id="dL"><circle class="hd" cx="190" cy="188.5" r="8.75"/><path class="bd" d="M178.75 226 V208.5 Q178.75 201 190 201 Q201.25 201 201.25 208.5 V226Z"/></g>
+            <g class="fig" id="dM"><circle class="hd" cx="240" cy="188.5" r="8.75"/><path class="bd" d="M228.75 226 V208.5 Q228.75 201 240 201 Q251.25 201 251.25 208.5 V226Z"/></g>
+            <g class="fig"><circle class="hd" cx="290" cy="188.5" r="8.75"/><path class="bd" d="M278.75 226 V208.5 Q278.75 201 290 201 Q301.25 201 301.25 208.5 V226Z"/></g>
+            <g font-family="Courier New" font-size="9" text-anchor="middle" letter-spacing="1">
+              <text x="140" y="238" fill="rgba(215,220,207,.55)">GARDE</text>
+              <text x="190" y="238" fill="#f4f2ec">LUC</text>
+              <text x="240" y="238" fill="#d9c19a">MARC</text>
+              <text x="290" y="238" fill="rgba(215,220,207,.55)">GARDE</text>
+            </g>
+            <g class="pop" id="dlink" fill="#ef3b3b">
+              <path d="M199 188.5 H231" stroke="#ef3b3b" stroke-width="1.6"/><circle cx="199" cy="188.5" r="2"/><circle cx="231" cy="188.5" r="2"/>
+            </g>
+          </g>
+          <g class="pop" id="post2">
+            <circle cx="396" cy="232" r="6" fill="none" stroke="#f0c040" stroke-width="1.5"/><circle cx="396" cy="232" r="2" fill="#f0c040"/>
+            <text x="396" y="216" text-anchor="middle" font-size="12" fill="#f0c040" font-family="Courier New" letter-spacing="1">TON POSTE</text>
+          </g>
+          <line class="sl" id="sl2" x1="396" y1="232" x2="165" y2="321" stroke="#f0c040" stroke-width="1.3"/>
+          <g class="pop" id="hgt" stroke="#f0c040" stroke-width="1.1">
+            <path d="M436 241 V340 M430 241 H442 M430 340 H442" fill="none" stroke-opacity=".7"/>
+            <text transform="translate(451 290.5) rotate(-90)" text-anchor="middle" font-size="13" fill="#f0c040" stroke="none" font-family="Courier New">18 m</text>
+          </g>
+          <g class="pop" id="hd" stroke="#f0c040" stroke-width="1.1">
+            <path d="M165 362 H396 M165 356 V368 M396 356 V368" fill="none" stroke-opacity=".7"/>
+            <path d="M165 343 V354 M396 343 V354" fill="none" stroke-opacity=".45" stroke-dasharray="2 2"/>
+            <text x="280.5" y="384" text-anchor="middle" font-size="13" fill="#f0c040" stroke="none" font-family="Courier New">42 m</text>
+          </g>
+          <!-- angle de tir, mesuré sur le dessin : la visée plonge doucement -->
+          <g class="pop" id="ang" stroke="#f0c040" stroke-width="1" fill="none">
+            <path d="M390 232 H338" stroke-opacity=".45" stroke-dasharray="3 3"/>
+            <path d="M352 232 A44 44 0 0 0 354.9 247.8" stroke-opacity=".8"/>
+            <text x="346" y="245" text-anchor="end" font-size="11" fill="#f0c040" stroke="none" font-family="Courier New">21°</text>
+          </g>
+          <!-- barre d'échelle : la même pour les hauteurs et les distances -->
+          <g class="pop" id="scl" font-family="Courier New">
+            <text x="440" y="58" text-anchor="end" font-size="10" fill="rgba(241,237,227,.55)" letter-spacing="2">ÉCHELLE</text>
+            <path d="M385 70 H440 M385 65 V75 M440 65 V75 M412.5 67.5 V72.5" fill="none" stroke="rgba(241,237,227,.6)" stroke-width="1.1"/>
+            <text x="378" y="74" text-anchor="end" font-size="11" fill="rgba(241,237,227,.7)">10 m</text>
+          </g>
+          <g class="pop" id="timer" font-family="Courier New">
+            <text x="28" y="66" font-size="13" fill="rgba(241,237,227,.85)" letter-spacing="2">TIR 1 → TIR 2</text>
+            <text class="blink" x="26" y="112" font-size="40" fill="#ef3b3b" font-weight="bold">&lt; 2 s</text>
+            <text x="28" y="134" font-size="11" fill="rgba(241,237,227,.6)" letter-spacing="2">ENCHAÎNE</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="cut" id="cut"></div>
+      <div class="flash2" id="flash2"></div>
+
+      <div class="radio" id="radio"></div>
+      <div class="sub" id="sub"></div>
+      <div class="title" id="title"><div class="t1">MISSION 02</div><div class="ln"></div><div class="t2">LES FRÈRES</div></div>
+    </div>
+  </div>
+</div>
+<script src="kit.js"></script>
+<script>
+  const typeField = (K, f) => {
+    f.innerHTML = '<span class="k"></span><span class="v"></span>'
+    f.querySelector('.k').textContent = f.dataset.k
+    const v = f.querySelector('.v'); if (f.dataset.col) v.style.color = f.dataset.col
+    K.type(v, f.dataset.v, 320, true)
+  }
+  const fA = [...document.querySelectorAll('#dosA .fl')], fB = [...document.querySelectorAll('#dosB .fl')]
+  const TK = ['tk1', 'tk2', 'tk3', 'tk4']
+  K.run({
+    music: 'somber',
+    beats: [
+      { label: 'le couperet', min: 1500, cues: [
+          [100, K => K.crt()],
+          [750, K => { K.on('cut'); K.on('flash2'); K.snd.thud(); K.shake(); K.glitch(320, 1) }],
+          [830, K => { K.on('halves'); K.on('seam') }]] },
+      { label: 'les frères', say: 'Les frères Sanctechair. Des bouchers. Au sens propre.',
+        cues: [
+          [0, K => { K.on('dosA'); K.snd.paper() }], [140, K => { K.on('dosB'); K.snd.paper() }],
+          [650, K => K.snd.slap()],
+          [800, K => { K.on('phA', 'dev'); K.snd.shutter() }], [1000, K => { K.on('phB', 'dev'); K.snd.shutter() }],
+          [1300, K => { K.on('link'); K.snd.marker() }], [1650, K => K.on('lnkT')],
+          [1400, K => typeField(K, fA[0])], [1650, K => typeField(K, fB[0])],
+          [2300, K => typeField(K, fA[1])], [2550, K => typeField(K, fB[1])]] },
+      { say: 'Luc, l\'aîné. Marc, le cadet. Un seul cerveau pour deux.',
+        cues: [
+          [100, K => { K.on('brkA'); K.snd.beep(1100) }], [400, K => { K.on('brkA', 'lock'); K.snd.beep(1400) }], [650, K => { K.on('idA'); K.snd.beep(1800) }],
+          [300, K => typeField(K, fA[2])], [700, K => typeField(K, fA[3])],
+          [1100, K => { K.on('brkB'); K.snd.beep(1100) }], [1400, K => { K.on('brkB', 'lock'); K.snd.beep(1400) }], [1650, K => { K.on('idB'); K.snd.beep(1800) }],
+          [1300, K => typeField(K, fB[2])], [1700, K => typeField(K, fB[3])],
+          [2150, K => K.type('lnkB', 'CERVEAU : 1', 450, true)],
+          [2700, K => { K.on('estA'); K.snd.stamp(); K.shake() }],
+          [2950, K => { K.on('estB'); K.snd.stamp(); K.shake(); K.glitch(160, .6) }]] },
+      { label: 'pièces à conviction', say: 'Ils découpent les vivants et vendent la chair au poids. Voilà leurs étiquettes.',
+        cues: [
+          [0, K => { ['dosA', 'dosB', 'mid'].forEach(id => K.on(id, 'side')); K.snd.paper() }],
+          [550, K => { K.on('tkhL'); K.on('tkhR') }], [700, K => { K.on('railL'); K.on('railR'); K.on('hooks'); K.snd.sweep() }],
+          ...TK.map((id, i) => [1150 + i * 450, K => { K.on(id); K.snd.paper(); K.snd.slap() }]),
+          ...TK.map((id, i) => [1550 + i * 450, K => { K.on(id + 's'); K.snd.stamp(); if (i === 3) { K.shake(); K.glitch(140, .5) } }])] },
+      { label: 'plan : le toit', say: 'Ce soir, ils encaissent sur la place, devant la boucherie. Je t\'ai mis sur le toit d\'en face.',
+        cues: [
+          [0, K => K.glitch(380, .95)],
+          [200, K => { K.on('dosA', 'out'); K.on('dosB', 'out'); K.on('mid', 'out'); K.on('evid', 'out'); K.snd.paper() }],
+          [650, K => { K.on('plan'); K.snd.sweep() }], [850, K => K.on('coupe')],
+          [2000, K => { K.on('zone'); K.snd.ping() }], [2400, K => K.on('guards')],
+          [3700, K => { K.on('post'); K.on('post2'); K.snd.beep(900); K.snd.beep(900, .1) }],
+          [4000, K => { K.on('sl'); K.on('sl2') }],
+          [4100, K => K.counter('dist', 0, 42, 1000, ' m', 3)],
+          [4500, K => K.on('hgt')], [4800, K => K.on('hd')], [5100, K => { K.on('ang'); K.on('scl') }]] },
+      { say: 'Polo blanc, polo beige. Ils ne se quittent jamais.',
+        cues: [
+          [0, K => K.on('det')],
+          [100, K => { K.on('pinL'); K.on('fL'); K.on('dL'); K.snd.ping() }], [550, K => { K.on('pinM'); K.on('fM'); K.on('dM'); K.snd.ping() }],
+          [350, K => K.type('lbL', 'LUC · POLO BLANC', 420, true)], [800, K => K.type('lbM', 'MARC · POLO BEIGE', 420, true)],
+          [1600, K => { K.on('plink'); K.on('dlink'); K.snd.marker() }]] },
+      { label: 'enchaîner', say: 'Tu en touches un, l\'autre court. Enchaîne, Viktor.',
+        cues: [
+          [100, K => { K.on('retL'); K.snd.beep(1400); K.snd.beep(1400, .1) }], [350, K => K.on('b1')],
+          [1100, K => { K.on('flee'); K.snd.sweep() }], [1350, K => K.on('fleeT')], [1550, K => { K.on('b2'); K.snd.beep(1800) }],
+          [2200, K => { K.on('timer'); K.snd.heart() }]] },
+      { label: 'un verre', say: '… Je te paie un verre après. Tu en auras besoin.', post: 900 },
+      { label: 'carton-titre', min: 2800, cues: [
+          [0, K => { K.$('sub').textContent = ''; K.off('radio'); K.music(null); K.lost(400) }],
+          [400, K => { K.on('plan', 'out'); K.on('coupe', 'out') }],
+          [550, K => { K.off('halves'); K.off('seam') }],
+          [700, K => K.title()], [2000, K => K.black()]] },
+    ],
+  })
+</script>
+</body>
+</html>
