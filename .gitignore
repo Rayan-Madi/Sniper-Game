@@ -19,3 +19,6 @@ Thumbs.db
 # Divers
 .claude/
 *.local
+
+# Captures des cinématiques (scripts/shots.mjs)
+shots/
