@@ -873,7 +873,8 @@ describe('playCinematic', () => {
     const other = vi.fn()
     document.addEventListener('keydown', other)
     await playCinematic('test', {})
-    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true, cancelable: true }))
+    // la touche part du body, comme en jeu : l'écouteur en capture sur document passe avant les autres
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true, cancelable: true }))
     expect(other).not.toHaveBeenCalled()
     document.removeEventListener('keydown', other)
   })
