@@ -16,6 +16,7 @@ const GRACE = 500   // SKIP_GRACE_MS : aucun passage par le joueur avant ce dél
 beforeEach(async () => {
   vi.useFakeTimers(FAKE); document.body.innerHTML = '<div id="briefing-root" hidden></div>'
   if (isCinematicPlaying()) (await playCinematic('test', {})).cancel()
+  document.head.innerHTML = ''   // la purge a pu injecter le style du kit : chaque test repart comme une première cinématique
 })
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.body.innerHTML = ''; document.head.innerHTML = '' })
 
@@ -234,6 +235,17 @@ describe('playCinematic', () => {
       expect(rootEl().querySelector('#scene')).not.toBeNull()
     })
 
+    it('le style du kit est déjà injecté pendant le chargement (conteneur plein écran et noir, même à la première cinématique)', async () => {
+      expect(document.getElementById('k-kit-css')).toBeNull()   // rien d'injecté avant : première cinématique de la session
+      let load
+      registerScene('differeeStyle', () => new Promise(r => { load = () => r(fakeScene) }))
+      const p = playCinematic('differeeStyle', {})
+      expect(rootEl().hidden).toBe(false)
+      expect(document.getElementById('k-kit-css')).not.toBeNull()
+      load(); await p
+      expect(document.querySelectorAll('#k-kit-css')).toHaveLength(1)   // idempotent
+    })
+
     it('un chargement qui échoue recache le conteneur, puis relance l\'erreur', async () => {
       let fail
       registerScene('echec', () => new Promise((_, reject) => { fail = () => reject(new Error('réseau')) }))
@@ -253,6 +265,24 @@ describe('playCinematic', () => {
       await expect(lent).rejects.toThrow('réseau')
       expect(rootEl().hidden).toBe(false)
       expect(isCinematicPlaying()).toBe(true)
+    })
+
+    it('R1 échoue pendant que R2 charge encore : le conteneur reste visible, puis R2 se monte', async () => {
+      let failR1, loadR2
+      registerScene('r1', () => new Promise((_, reject) => { failR1 = () => reject(new Error('réseau')) }))
+      registerScene('r2', () => new Promise(r => { loadR2 = () => r(fakeScene) }))
+      const onDone = vi.fn()
+      const p1 = playCinematic('r1', {})
+      const p2 = playCinematic('r2', { onDone })
+      failR1()
+      await expect(p1).rejects.toThrow('réseau')
+      expect(rootEl().hidden).toBe(false)   // R2 attend toujours : pas de flash du jeu entre les deux
+      loadR2(); await p2
+      expect(rootEl().hidden).toBe(false)
+      expect(rootEl().querySelector('#scene')).not.toBeNull()
+      expect(isCinematicPlaying()).toBe(true)
+      await vi.advanceTimersByTimeAsync(1000); await flush()
+      expect(onDone).toHaveBeenCalledTimes(1)
     })
 
     it('un chargement qui échoue pendant qu\'une cinématique est en cours ne cache pas son conteneur', async () => {

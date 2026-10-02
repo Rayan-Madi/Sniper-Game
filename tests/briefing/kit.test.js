@@ -175,13 +175,19 @@ describe('kit des cinématiques', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
 
-    it('après destroy(), plus aucun son n\'est produit pendant le fondu', async () => {
+    // garde-fou (le drapeau `dead` existait déjà) : le fondu de 300 ms ne laisse pas repartir de son
+    it('après destroy(), plus aucun nœud sonore n\'est créé, pendant ni après le fondu', async () => {
       const audio = fakeAudio('running')
       const K = createKit({ root: mountScene(), audio })
       K.destroy()
+      const noeuds = () => audio.ctx.createOscillator.mock.calls.length + audio.ctx.createBufferSource.mock.calls.length + audio.ctx.createBiquadFilter.mock.calls.length
       K.snd.boom(); K.music('tense')
-      expect(audio.ctx.createOscillator).not.toHaveBeenCalled()
+      expect(noeuds()).toBe(0)
       await vi.advanceTimersByTimeAsync(300)
+      K.snd.boom(); K.music('tense')
+      expect(noeuds()).toBe(0)
+      expect(audio.ctx.createGain).toHaveBeenCalledTimes(1)   // le seul nœud : le maître
+      expect(vi.getTimerCount()).toBe(0)
     })
   })
 })

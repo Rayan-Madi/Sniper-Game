@@ -32,6 +32,8 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
   if (!load) throw new Error('cinématique inconnue : ' + id)
   const ticket = ++generation
   // fond noir dès le chargement : l'image 3D figée du jeu ne doit pas se voir en attendant la scène
+  // (le style du kit donne au conteneur son plein écran et son fond : il doit être là avant de l'afficher)
+  ensureKitStyle()
   if (!current) root.hidden = false
   let mod
   try { mod = await load() } catch (error) {
@@ -44,7 +46,6 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
 
   // de l'annulation de la précédente jusqu'à `current = handle`, tout est synchrone
   if (current) current.cancel()
-  ensureKitStyle()
 
   let K = null, sceneStyle = null, ended = false, fadeTimer = 0, readyAt = 0
   // le démontage doit marcher même si le montage a échoué à mi-chemin
