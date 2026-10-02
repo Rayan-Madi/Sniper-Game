@@ -327,6 +327,7 @@
 <body>
   <canvas id="canvas"></canvas>
   <canvas id="scope-canvas" style="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;display:none;"></canvas>
+  <div id="briefing-root" hidden></div>
 
   <div id="hud" style="display:none;">
     <div id="hud-top">
@@ -432,6 +433,7 @@
     <div class="menu-title" style="font-size:32px;">PAUSE</div>
     <button class="btn" id="btn-resume">REPRENDRE</button>
     <button class="btn" id="btn-restart">RECOMMENCER LE NIVEAU</button>
+    <button class="btn" id="btn-rebrief-pause">REVOIR LE BRIEFING</button>
     <button class="btn" id="btn-settings-pause">PARAMÈTRES</button>
     <button class="btn btn-danger" id="btn-pause-menu">MENU PRINCIPAL</button>
   </div>
@@ -503,6 +505,7 @@
     <div class="menu-title" style="font-size:28px;color:#ff4444;">MISSION ÉCHOUÉE</div>
     <div class="menu-sub" id="game-over-reason">Vous avez été repéré</div>
     <button class="btn" id="btn-retry">RECOMMENCER</button>
+    <button class="btn" id="btn-rebrief">REVOIR LE BRIEFING</button>
     <button class="btn btn-danger" id="btn-menu">MENU PRINCIPAL</button>
   </div>
 
