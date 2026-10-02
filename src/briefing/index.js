@@ -15,6 +15,7 @@ const SCENES = {
 const SKIP_KEYS = new Set(['Escape', 'Enter', 'Space'])
 const FADE_MS = 400
 let current = null
+let generation = 0   // jeton de demande : seule la dernière cinématique demandée est montée
 
 export function registerScene(id, loader) { SCENES[id] = loader }
 export function isCinematicPlaying() { return !!current }
@@ -28,27 +29,31 @@ function ensureKitStyle() {
 export async function playCinematic(id, { onDone = () => {}, params = null, freeze = null, audio = null, root = document.getElementById('briefing-root') } = {}) {
   const load = SCENES[id]
   if (!load) throw new Error('cinématique inconnue : ' + id)
-  if (current) current.cancel()
+  const ticket = ++generation
   const mod = await load()
+  // une demande plus récente est arrivée pendant le chargement : la dernière gagne, celle-ci s'efface sans bruit
+  if (ticket !== generation) return { kit: null, stop() {}, cancel() {} }
 
+  // de l'annulation de la précédente jusqu'à `current = handle`, tout est synchrone
+  if (current) current.cancel()
   ensureKitStyle()
-  const sceneStyle = document.createElement('style'); sceneStyle.textContent = mod.css
-  document.head.appendChild(sceneStyle)
-  root.classList.remove('k-leaving')
-  root.innerHTML = `<div class="${mod.stClass}" id="st">${mod.html}</div><div class="k-skip">ÉCHAP · ENTRÉE · ESPACE — PASSER</div>`
-  root.hidden = false
-  const K = createKit({ root, audio, freeze })
 
-  let ended = false, fadeTimer = 0
+  let K = null, sceneStyle = null, ended = false, fadeTimer = 0
+  // le démontage doit marcher même si le montage a échoué à mi-chemin
   const teardown = () => {
     document.removeEventListener('keydown', onKey, true)
     root.removeEventListener('click', onClick)
     clearTimeout(fadeTimer)
-    K.destroy(); sceneStyle.remove()
+    if (K) K.destroy()
+    if (sceneStyle) sceneStyle.remove()
     root.innerHTML = ''; root.hidden = true; root.classList.remove('k-leaving')
     if (current === handle) current = null
   }
-  const finish = () => { if (ended) return; ended = true; teardown(); onDone() }
+  const finish = () => {
+    if (ended) return
+    ended = true
+    try { teardown() } finally { onDone() }
+  }
   const skip = () => {
     if (ended || root.classList.contains('k-leaving')) return
     K.destroy()
@@ -61,13 +66,26 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
     skip()
   }
   const onClick = () => skip()
-  document.addEventListener('keydown', onKey, true)
-  root.addEventListener('click', onClick)
+  const handle = { kit: null, stop: skip, cancel: () => { if (!ended) { ended = true; teardown() } } }
 
-  const handle = { kit: K, stop: skip, cancel: () => { if (!ended) { ended = true; teardown() } } }
-  current = handle
-  const search = params ? '?' + new URLSearchParams(params).toString() : ''
-  mod.start(K, { search })
-  K.finished.then(finish)
+  try {
+    sceneStyle = document.createElement('style'); sceneStyle.textContent = mod.css
+    document.head.appendChild(sceneStyle)
+    root.classList.remove('k-leaving')
+    root.innerHTML = `<div class="${mod.stClass}" id="st">${mod.html}</div><div class="k-skip">ÉCHAP · ENTRÉE · ESPACE — PASSER</div>`
+    root.hidden = false
+    K = handle.kit = createKit({ root, audio, freeze })
+    document.addEventListener('keydown', onKey, true)
+    root.addEventListener('click', onClick)
+    current = handle
+    const search = params ? '?' + new URLSearchParams(params).toString() : ''
+    mod.start(K, { search })
+    K.finished.then(finish)
+  } catch (error) {
+    // on ouvre la voie : démontage complet, onDone une fois, aucune exception pour l'appelant
+    console.error('[briefing] cinématique « ' + id + ' » abandonnée :', error)
+    try { finish() } catch (e) { console.error('[briefing] démontage après erreur :', e) }
+    return { kit: K, error, stop() {}, cancel() {} }
+  }
   return handle
 }
