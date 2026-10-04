@@ -11,7 +11,12 @@ Voir une maquette :
 npx vite docs/superpowers/maquettes/cinematiques --port 5193
 ```
 
-puis ouvrir `http://localhost:5193/briefing-m3.html` (ou `prologue.html`, `epilogue.html`).
+puis ouvrir `http://localhost:5193/briefing-m3.html` (ou `prologue-a.html`, `prologue-b.html`, `epilogue.html`).
+
+Le prologue du jeu est en deux pièces : `prologue-a.html` (l'offre, le refus, le soir du 14 mars) et
+`prologue-b.html` (le message vocal, le rappel, le tableau de chasse). L'enquête jouable s'insère entre les
+deux. `prologue.html` est l'ancienne version longue validée, gardée comme référence : elle n'est pas convertie.
+
 Paramètres utiles : `?freeze=12000` fige la scène à 12 s ; `?port=libres` choisit la variante de
 l'épilogue. « Activer le son » sous l'image : bips synthétiques et musique (son 100 % procédural).
 
