@@ -15,10 +15,12 @@ export const state = {
   currentLevel: 1,
   freedVictims: false,              // choix moral du port (mission 3) : victimes libérées ?
   briefingSeen: NO_BRIEFING_SEEN(), // briefing de chaque mission déjà vu → pas rejoué au réessai
+  prologueSeen: false,              // prologue (l'offre, le rappel, le tableau) déjà vu dans cette campagne
 }
 
 export function markBriefingSeen(index) { state.briefingSeen[index] = true }
-export function resetCampaignFlags() { state.freedVictims = false; state.briefingSeen = NO_BRIEFING_SEEN() }
+export function markPrologueSeen() { state.prologueSeen = true }
+export function resetCampaignFlags() { state.freedVictims = false; state.briefingSeen = NO_BRIEFING_SEEN(); state.prologueSeen = false }
 
 // ─── Sauvegarde de progression (mode histoire) ─────────────────────
 const SAVE_KEY = 'sniper-save'
@@ -32,6 +34,7 @@ export function saveProgress() {
       currentLevel: state.currentLevel,
       freedVictims: state.freedVictims,
       briefingSeen: state.briefingSeen,
+      prologueSeen: state.prologueSeen,
     }))
   } catch (e) { /* stockage indisponible */ }
 }
@@ -46,6 +49,7 @@ export function loadProgress() {
     state.currentLevel = d.currentLevel || 1
     state.freedVictims = !!(d.freedVictims ?? d.freed)
     state.briefingSeen = NO_BRIEFING_SEEN().map((_, i) => !!(d.briefingSeen && d.briefingSeen[i]))
+    state.prologueSeen = !!d.prologueSeen
     return true
   } catch (e) { return false }
 }

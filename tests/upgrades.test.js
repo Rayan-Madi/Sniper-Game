@@ -43,4 +43,25 @@ describe('progression de la campagne', () => {
     await reload()
     expect(window.__freedVictims).toBeUndefined()
   })
+
+  it('le prologue n\'est pas vu au départ, se sauvegarde, et une nouvelle campagne le remet à zéro', async () => {
+    expect(U.state.prologueSeen).toBe(false)
+    U.markPrologueSeen(); U.saveProgress()
+    const M = await reload()
+    expect(M.state.prologueSeen).toBe(true)
+    M.resetCampaignFlags()
+    expect(M.state.prologueSeen).toBe(false)
+  })
+
+  it('une ancienne sauvegarde sans le champ ne compte pas le prologue comme vu', async () => {
+    localStorage.setItem('sniper-save', JSON.stringify({ currentLevel: 1, briefingSeen: [true, false, false, false, false, false] }))
+    const M = await reload()
+    expect(M.state.prologueSeen).toBe(false)
+  })
+
+  it('effacer la sauvegarde remet aussi le prologue à « non vu »', () => {
+    U.markPrologueSeen()
+    U.resetProgress()
+    expect(U.state.prologueSeen).toBe(false)
+  })
 })
