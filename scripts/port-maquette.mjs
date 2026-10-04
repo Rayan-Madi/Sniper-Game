@@ -36,19 +36,29 @@ export function portMaquette(html, { name, imgExt = {} }) {
   ].join('\n')
 }
 
-const SCENES = { m1: 'briefing-m1', m2: 'briefing-m2', m3: 'briefing-m3', m4: 'briefing-m4', m5: 'briefing-m5', m6: 'briefing-m6', epilogue: 'epilogue' }
+// id de scène du jeu → maquette (sans .html) dans docs/superpowers/maquettes/cinematiques/
+export const SCENES = {
+  m1: 'briefing-m1', m2: 'briefing-m2', m3: 'briefing-m3', m4: 'briefing-m4', m5: 'briefing-m5', m6: 'briefing-m6',
+  epilogue: 'epilogue', 'prologue-a': 'prologue-a', 'prologue-b': 'prologue-b',
+}
+
+// Source du module de scène `id`, telle que la CLI l'écrit (repo = racine du dépôt).
+export function generateScene(id, repo) {
+  const file = SCENES[id]
+  if (!file) throw new Error(`scène inconnue : ${id}`)
+  const html = readFileSync(join(repo, 'docs', 'superpowers', 'maquettes', 'cinematiques', file + '.html'), 'utf8')
+  const imgDir = join(repo, 'public', 'briefing', 'img')
+  const imgExt = {}
+  for (const m of html.matchAll(/img\/([a-z0-9_-]+)\.png/g)) imgExt[m[1]] = existsSync(join(imgDir, m[1] + '.jpg')) ? 'jpg' : 'png'
+  return portMaquette(html, { name: file, imgExt })
+}
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const repo = join(dirname(fileURLToPath(import.meta.url)), '..')
-  const src = join(repo, 'docs', 'superpowers', 'maquettes', 'cinematiques')
-  const imgDir = join(repo, 'public', 'briefing', 'img')
   const out = join(repo, 'src', 'briefing', 'scenes')
   mkdirSync(out, { recursive: true })
-  for (const [id, file] of Object.entries(SCENES)) {
-    const html = readFileSync(join(src, file + '.html'), 'utf8')
-    const imgExt = {}
-    for (const m of html.matchAll(/img\/([a-z0-9_-]+)\.png/g)) imgExt[m[1]] = existsSync(join(imgDir, m[1] + '.jpg')) ? 'jpg' : 'png'
-    writeFileSync(join(out, id + '.js'), portMaquette(html, { name: file, imgExt }))
+  for (const id of Object.keys(SCENES)) {
+    writeFileSync(join(out, id + '.js'), generateScene(id, repo))
     console.log('scène générée :', id)
   }
 }

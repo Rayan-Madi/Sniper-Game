@@ -11,6 +11,8 @@ const SCENES = {
   m5: () => import('./scenes/m5.js'),
   m6: () => import('./scenes/m6.js'),
   epilogue: () => import('./scenes/epilogue.js'),
+  'prologue-a': () => import('./scenes/prologue-a.js'),
+  'prologue-b': () => import('./scenes/prologue-b.js'),
 }
 const SKIP_KEYS = new Set(['Escape', 'Enter', 'NumpadEnter', 'Space'])
 const FADE_MS = 400

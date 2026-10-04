@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { portMaquette } from '../../scripts/port-maquette.mjs'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { portMaquette, SCENES, generateScene } from '../../scripts/port-maquette.mjs'
 
 const FIXTURE = `<!DOCTYPE html><html><head><link rel="stylesheet" href="kit.css">
 <style>.m9 .x { color: red; background: url(img/fond.png) }</style></head>
@@ -61,5 +63,20 @@ describe('portMaquette', () => {
 
   it('refuse une maquette sans #st', () => {
     expect(() => portMaquette('<html><body></body></html>', { name: 'vide' })).toThrow(/#st/)
+  })
+})
+
+describe('scènes générées', () => {
+  it('connaît les deux pièces du prologue', () => {
+    expect(SCENES['prologue-a']).toBe('prologue-a')
+    expect(SCENES['prologue-b']).toBe('prologue-b')
+  })
+
+  it('chaque scène du dépôt est à jour avec sa maquette (sinon : node scripts/port-maquette.mjs)', () => {
+    const lf = s => s.replace(/\r\n/g, '\n')
+    for (const id of Object.keys(SCENES)) {
+      const fichier = join(process.cwd(), 'src', 'briefing', 'scenes', id + '.js')
+      expect(lf(readFileSync(fichier, 'utf8')), `scène « ${id} » périmée ou absente`).toBe(lf(generateScene(id, process.cwd())))
+    }
   })
 })

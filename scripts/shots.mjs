@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { SCENES } from './port-maquette.mjs'
 
 const [id, ...instants] = process.argv.slice(2)
 if (!id || !instants.length) { console.error('Usage : node scripts/shots.mjs <id> <ms> [<ms>…]'); process.exit(1) }
@@ -12,7 +13,8 @@ const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application
 // MAQUETTE=1 : capture la maquette d'origine (npx vite docs/superpowers/maquettes/cinematiques --port 5193) au lieu du jeu
 const MAQ = !!process.env.MAQUETTE
 const BASE = process.env.BASE_URL || (MAQ ? 'http://localhost:5193/' : 'http://localhost:5173/')
-const page = MAQ ? (id === 'epilogue' ? 'epilogue.html' : `briefing-${id}.html`) : ''
+if (MAQ && !SCENES[id]) { console.error(`Scène inconnue : ${id} (ids : ${Object.keys(SCENES).join(', ')})`); process.exit(1) }
+const page = MAQ ? SCENES[id] + '.html' : ''
 mkdirSync('shots', { recursive: true })
 for (const ms of instants) {
   // Chemin absolu pour --screenshot= : sous Windows, Chrome résout un chemin relatif depuis son propre dossier.

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { playCinematic, registerScene } from '../../src/briefing/index.js'
 
 // Garde-fou : une cinématique est montée dans #briefing-root, par-dessus le DOM du jeu. Si une scène
 // réutilise un id du jeu (ex. #hud, #dossier), les règles CSS `#id` d'index.html s'appliquent à ses éléments
@@ -35,12 +36,20 @@ function idsDuTexte(texte, fichier, table) {
   for (const motif of motifs) for (const m of texte.matchAll(motif)) ajouter(table, m[1], fichier)
 }
 
+function fichiersJs(dossier) {
+  const out = []
+  for (const f of readdirSync(join(RACINE, dossier), { withFileTypes: true })) {
+    const chemin = dossier + '/' + f.name
+    if (f.isDirectory()) { if (chemin !== 'src/briefing') out.push(...fichiersJs(chemin)) }
+    else if (f.name.endsWith('.js')) out.push(chemin)
+  }
+  return out
+}
+
 function idsDuJeu() {
   const table = new Map()
   idsDuTexte(lire('index.html'), 'index.html', table)
-  for (const f of readdirSync(join(RACINE, 'src'), { withFileTypes: true })) {
-    if (f.isFile() && f.name.endsWith('.js')) idsDuTexte(lire('src/' + f.name), 'src/' + f.name, table)
-  }
+  for (const f of fichiersJs('src')) idsDuTexte(lire(f), f, table)
   return table
 }
 
@@ -48,9 +57,15 @@ async function idsDesScenes() {
   const modules = import.meta.glob('../../src/briefing/scenes/*.js')
   const table = new Map()
   for (const [chemin, charger] of Object.entries(modules)) {
-    const { html } = await charger()
     const fichier = 'src/briefing/scenes/' + chemin.split('/').pop()
+    const { html } = await charger()
     for (const m of html.matchAll(/\bid="([^"]+)"/g)) ajouter(table, m[1], fichier)
+    // ids posés par le script au démarrage : on monte la scène, on relève le DOM, on la démonte
+    registerScene('ids:' + fichier, charger)
+    const root = document.createElement('div'); document.body.appendChild(root)
+    const handle = await playCinematic('ids:' + fichier, { root })
+    for (const el of root.querySelectorAll('[id]')) ajouter(table, el.id, fichier)
+    handle.cancel(); root.remove()
   }
   return table
 }
@@ -59,7 +74,7 @@ describe('ids des cinématiques et du jeu', () => {
   it('le test voit bien les ids connus des deux côtés (sinon il ne garde rien)', async () => {
     const jeu = idsDuJeu(), scenes = await idsDesScenes()
     for (const id of ['menu', 'canvas', 'briefing-root', 'game-hud', 'target-dossier']) expect(jeu.has(id), `id du jeu « ${id} » non détecté`).toBe(true)
-    for (const id of ['scene', 'radio', 'sub', 'title', 'trans', 'wave']) expect(scenes.has(id), `id de scène « ${id} » non détecté`).toBe(true)
+    for (const id of ['scene', 'radio', 'sub', 'title', 'trans', 'wave', 'lgt']) expect(scenes.has(id), `id de scène « ${id} » non détecté`).toBe(true)
     expect(scenes.size).toBeGreaterThan(50)
   })
 
