@@ -2,10 +2,9 @@ import * as THREE from 'three'
 import { initScene, scene, camera, renderer } from './scene.js'
 import { showScope, hideScope, isVisible, setZoom, getZoom, setStress, setSteady, updateTremble, getTrembleOffset, drawScope } from './scope.js'
 import { NPC, STATES } from './npc.js'
-import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, resetCampaignFlags } from './upgrades.js'
+import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
 import { MAP_BUILDERS, updateMapAmbient, makeJeep } from './maps.js'
-import { startIntroCinematic, updateCinematic, isCinematicActive } from './cinematic3d.js'
 import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
 import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys } from './settings.js'
@@ -95,19 +94,25 @@ refreshMenuButtons()
 const resetBtn = document.getElementById('btn-reset-save')
 if (resetBtn) resetBtn.onclick = () => { resetProgress(); refreshMenuButtons() }
 
-let introShown = false
-document.getElementById('btn-start').onclick     = () => {
-  // Au tout premier départ (niveau 1) : intro Viktor, puis le niveau
-  if (!introShown && upgradeState.currentLevel === 1) {
-    introShown = true
-    menuEl.style.display = 'none'
-    hudEl.style.display = 'none'
-    gamePhase = 'cinematic'
-    clock.getDelta()
-    startIntroCinematic(() => launchLevel(upgradeState.currentLevel))
-  } else {
-    launchLevel(upgradeState.currentLevel)
-  }
+// Prologue, une fois par campagne : A (l'offre, le 14 mars) → [plan suivant : l'enquête] → B (le rappel, le
+// tableau de chasse) → mission 1, avec son briefing s'il n'a pas été vu. Chaque pièce se passe à part.
+function playPrologue() {
+  menuEl.style.display = 'none'
+  hudEl.style.display = 'none'
+  gamePhase = 'briefing'          // cinématique en motion design : pas de rendu WebGL
+  clock.getDelta()
+  cinematic('prologue-a', {
+    audio: cinematicAudio(),      // appelé dans le clic : l'AudioContext reprend sur ce geste
+    onDone: () => cinematic('prologue-b', {
+      audio: cinematicAudio(),
+      onDone: () => { markPrologueSeen(); saveProgress(); launchLevel(upgradeState.currentLevel) },
+    }),
+  })
+}
+
+document.getElementById('btn-start').onclick = () => {
+  if (upgradeState.currentLevel === 1 && !upgradeState.prologueSeen) playPrologue()
+  else launchLevel(upgradeState.currentLevel)
 }
 document.getElementById('btn-retry').onclick     = () => launchLevel(upgradeState.currentLevel)
 document.getElementById('btn-rebrief').onclick   = () => launchLevel(upgradeState.currentLevel, { forceBriefing: true })
@@ -1011,7 +1016,7 @@ document.addEventListener('keydown', e => {
   // Raccourci de test : touches 1-6 depuis le menu/écrans pour sauter à un niveau
   // (pas pendant une saisie : les codes PvP contiennent des chiffres)
   if (e.target.closest && e.target.closest('input, textarea')) return
-  if (gamePhase !== 'playing' && gamePhase !== 'paused' && gamePhase !== 'briefing' && gamePhase !== 'cinematic' && e.key >= '1' && e.key <= '6') {
+  if (gamePhase !== 'playing' && gamePhase !== 'paused' && gamePhase !== 'briefing' && e.key >= '1' && e.key <= '6') {
     upgradeState.currentLevel = parseInt(e.key)
     launchLevel(upgradeState.currentLevel)
   }
@@ -1072,13 +1077,6 @@ function loop() {
   // timeScale < 1 pendant la kill-cam (ralenti)
   const dt = Math.min(clock.getDelta(), 0.05) * timeScale
   if (gamePhase === 'briefing') return   // cinématique en motion design : pas de rendu WebGL
-
-  if (gamePhase === 'cinematic') {
-    updateCinematic(dt)
-    renderer.render(scene, camera)
-    drawScope()
-    return
-  }
 
   if (gamePhase === 'playing') {
     updateMapAmbient(dt)   // météo de la map (pluie du port…)
@@ -1201,11 +1199,19 @@ function loop() {
 loop()
 
 // Le menu principal s'affiche directement au chargement.
-// La cinématique 3D d'intro se joue après le clic sur COMMENCER (voir btn-start).
+// Le prologue se joue après le clic sur COMMENCER, une fois par campagne (voir playPrologue).
 
 // Développement : ?cine=m3&freeze=12000&port=libres joue (ou fige) une cinématique directement.
 if (import.meta.env.DEV) {
   const q = new URLSearchParams(location.search)
+  // Mémoire GPU / JS de la partie (contrôle du nettoyage, spec §6.8) : __mem() dans la console
+  window.__mem = () => {
+    let objets = 0; scene.traverse(() => objets++)
+    const i = renderer.info
+    return { geometries: i.memory.geometries, textures: i.memory.textures, programmes: i.programs ? i.programs.length : 0,
+      appels: i.render.calls, triangles: i.render.triangles, objets,
+      tasJSMo: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null }
+  }
   if (q.has('cine')) {
     menuEl.style.display = 'none'
     gamePhase = 'briefing'
