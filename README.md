@@ -3,7 +3,7 @@
 > **Mon projet JavaScript le plus ambitieux, poussé au maximum.**
 > Un jeu de tir 3D complet, développé **« from scratch » en Three.js / WebGL, sans
 > aucun moteur de jeu** : rendu, animations de squelette, IA des PNJ, audio
-> synthétisé, physique de balle, cinématiques 3D et **multijoueur temps réel** —
+> synthétisé, physique de balle, cinématiques en motion design et **multijoueur temps réel** —
 > tout est écrit à la main. Un projet solo, pensé et codé de A à Z, pour repousser
 > le plus loin possible ce qu'on peut faire avec du **JavaScript pur** dans un
 > navigateur.
@@ -30,7 +30,8 @@ Développé par **Rayan Madi**. Deux modes de jeu :
   joueurs voient exactement la même fête).
 - **Audio entièrement synthétisé** dans le navigateur (Web Audio API) : tirs,
   ambiance de fête, sons positionnels — aucun fichier son.
-- **Cinématiques 3D**, système de stress/respiration, visée à la lunette,
+- **Cinématiques en motion design** façon « dossier du fixeur » (briefings,
+  prologue, épilogue), système de stress/respiration, visée à la lunette,
   progression et améliorations… le tout en JavaScript.
 
 > ⚠️ Le multijoueur est en **beta**. Il fonctionne via un petit relais WebSocket

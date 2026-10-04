@@ -15,7 +15,7 @@ function clear() {
 // Appelé chaque frame par le jeu : anime la météo/ambiance de la map courante
 export function updateMapAmbient(dt) { if (ambientFn) ambientFn(dt) }
 
-// Permet aux cinématiques de partir d'une scène vide
+// Vide la scène de la carte courante (utilisé par la carte PvP).
 export function clearMap() { clear() }
 
 // Obstacles solides de la map courante (collision PNJ)
@@ -115,7 +115,7 @@ function car(x, z, color, rotY = 0) {
   return g
 }
 
-// ─── Jeep militaire détaillée (partagée : gameplay convoi + cinématiques) ──
+// ─── Jeep militaire détaillée (convoi de la mission 5) ──
 // Le groupe N'est PAS ajouté à la scène ni aux obstacles (véhicule mobile).
 export function makeJeep(color = 0x3a4a2a) {
   const g = new THREE.Group()
