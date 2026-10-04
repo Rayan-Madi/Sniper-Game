@@ -57,6 +57,12 @@ Les maquettes validées servent de référence exacte (textes, timing, mise en p
 
 La cinématique 2 du prologue **remplace** le passage maquetté « couloir → cadre photo → rapport classé → Anton appelle », puisque ces moments deviennent jouables. On garde son tableau de chasse et sa conclusion. Il y a une adaptation : dans la maquette Anton appelle, alors qu'ici **Viktor rappelle**. L'écran du téléphone montre donc un appel sortant vers « NUMÉRO MASQUÉ » qui sonne puis décroche, et la première réplique d'Anton répond au rappel : *« Tu as eu mon message. Trop tard, je sais. »*
 
+> **Écarts assumés au Plan 2 (4 octobre 2026)** — ils font foi pour la suite, y compris l'enquête (§5) :
+> - Anton appelle et se fait rappeler depuis un **numéro jetable affiché en clair**, `06 39 98 41 07` (tranche réservée à la fiction), car un numéro masqué ne se rappelle pas. « NUMÉRO MASQUÉ » reste la signature du recruteur (appel du 21 février). Partout où ce document écrit « NUMÉRO MASQUÉ · 18:52 », lire ce numéro.
+> - Prologue A (≈ 21 s) : carton « 21 FÉVR. · 23:12 / L'OFFRE », l'offre, le refus, puis carton « 14 MARS · 21:47 / LE SILENCE » et « Trois semaines plus tard, je suis rentré plus tôt que prévu. ». L'enquête commence là.
+> - Prologue B (≈ 53 s) : messagerie (le message de 18:52 joué), rappel sortant, « Tu as eu mon message. Trop tard, je sais. », « Tu ne me connais pas. Et tu ne verras jamais mon visage. », puis la fin de la maquette d'origine. Journal d'appels : « ANTON » sortant 22:41, MAISON 19:04 manqué, le numéro jetable 18:52 manqué avec message, le refus du 21 février.
+> - Le prologue se joue une fois par campagne (`upgradeState.prologueSeen`, sauvegardé). Détails : `docs/superpowers/plans/2026-10-04-cinematiques-plan2-prologue.md`.
+
 ## 5. L'enquête jouable du prologue
 
 **Intention :** le premier moment jouable apprend la compétence centrale du jeu, observer les détails pour comprendre et identifier. Il n'y a ni échec ni chrono.
