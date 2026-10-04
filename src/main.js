@@ -170,7 +170,7 @@ document.getElementById('btn-see-ending').onclick = () => {
     audio: cinematicAudio(),
     params: { port: upgradeState.freedVictims ? 'libres' : 'enfermes' },
     onDone: () => {
-      // Nouvelle campagne : retour à la mission 1, choix du port et briefings vus remis à zéro
+      // Nouvelle campagne : retour à la mission 1, choix du port, briefings vus et prologue remis à zéro
       upgradeState.currentLevel = 1
       resetCampaignFlags()
       saveProgress()

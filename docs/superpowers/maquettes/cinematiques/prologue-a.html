@@ -63,7 +63,7 @@
   .pro .rig.press #thumb { transform: rotate(-21deg) scale(.97); }
 
   /* téléphone (en main) */
-  /* isolation : les z-index internes (journal, reflet, encoche) restent DANS le téléphone ; les doigts et le pouce repassent devant */
+  /* isolation : les z-index internes (reflet, encoche) restent DANS le téléphone ; les doigts et le pouce repassent devant */
   .pro .mob { position: absolute; width: 20cqw; height: 41cqw; border-radius: 2.7cqw; text-shadow: none; isolation: isolate;
       background: linear-gradient(135deg, #2b303a, #0c0e12 45%, #171a20);
       box-shadow: inset 0 0 0 .16cqw #3b414d, inset 0 0 0 .34cqw #08090b, 0 1.4cqw 3cqw rgba(0,0,0,.7); }
@@ -93,7 +93,7 @@
   .pro .p-row i { width: 3.6cqw; height: 3.6cqw; border-radius: 50%; background: rgba(255,255,255,.1); position: relative; }
   .pro .p-row i svg { position: absolute; inset: 22%; width: 56%; height: 56%; }
   .pro .p-btn { position: absolute; top: 31.2cqw; width: 4.4cqw; height: 4.4cqw; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: transform .15s, filter .15s, opacity .2s; }
-  .pro .p-btn svg { width: 56%; height: 56%; display: block; }
+  .pro .p-btn svg { position: static; width: 56%; height: 56%; display: block; }
   .pro .p-btn.hang { left: 50%; margin-left: -2.2cqw; background: #e5383b; }
   .pro .p-btn.dec { left: 2.4cqw; background: #e5383b; display: none; }
   .pro .p-btn.acc { right: 2.4cqw; background: #34c759; display: none; }

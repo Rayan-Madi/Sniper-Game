@@ -67,7 +67,6 @@
   .pro .p-ic i:nth-child(1) { height: 30% } .pro .p-ic i:nth-child(2) { height: 55% } .pro .p-ic i:nth-child(3) { height: 80% } .pro .p-ic i:nth-child(4) { height: 100%; opacity: .35 }
   .pro .p-ic b { width: 1.7cqw; height: .85cqw; margin-left: .45cqw; border: .1cqw solid #e9ecef; border-radius: .2cqw; background: linear-gradient(90deg, #e9ecef 0 35%, transparent 35%); }
   .pro .p-st { position: absolute; left: 0; right: 0; top: 4.2cqw; text-align: center; font-size: 1.15cqw; letter-spacing: .18em; padding-left: .18em; color: rgba(215,220,207,.62); }
-  .pro .p-st .s2 { display: none; }
   .pro .p-av { position: absolute; left: 50%; top: 7.1cqw; width: 6.6cqw; height: 6.6cqw; margin-left: -3.3cqw; border-radius: 50%;
       background: radial-gradient(circle at 50% 35%, #2c3546, #121722); box-shadow: 0 0 0 .14cqw rgba(215,220,207,.22); }
   .pro .p-av svg { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; clip-path: circle(50% at 50% 50%); }
@@ -567,7 +566,7 @@
         cues: [[2400, H]] },
       // 4 — la règle d'Anton : jamais vu
       { label: 'jamais vu', post: 300, say: 'Tu ne me connais pas. Et tu ne verras jamais mon visage.',
-        cues: [[1600, K => { K.on('ph1', 'ant'); K.glitch(220, .7) }], [3400, H]] },
+        cues: [[2900, K => { K.on('ph1', 'ant'); K.glitch(220, .7) }], [3400, H]] },
       // 5 — « Appelle-moi Anton »
       { label: 'Anton', pre: 500, post: 300, say: 'Appelle-moi Anton. Je vends des infos… et je sais qui t\'a fait ça.',
         cues: [
