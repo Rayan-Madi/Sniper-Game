@@ -325,6 +325,12 @@ describe('collisions cercle contre boîtes', () => {
     const p = moveCircle({ x: 0.7, z: 0 }, 0.3, -0.5, 0.25, [wall])
     expect(p.x).toBeLessThanOrEqual(0.75); close(p.z, -0.5)
   })
+  it('pousser longtemps contre une boîte ne la traverse pas (arrondi : (3,4 − 0,28) + 0,28 > 3,4)', () => {
+    const box = { minX: -5, maxX: 5, minZ: 3.4, maxZ: 4.6 }
+    let p = { x: 0, z: 2 }
+    for (let i = 0; i < 300; i++) p = moveCircle(p, 0, 0.01, 0.28, [box])
+    expect(p.z).toBeLessThanOrEqual(3.4 - 0.28 + 1e-9)
+  })
 })
 
 describe('contrôleur', () => {
@@ -458,19 +464,22 @@ export const rightOf = yaw => ({ x: Math.cos(yaw), z: -Math.sin(yaw) })
 
 // Avance un cercle de rayon r de (dx, dz), axe par axe, en glissant le long des boîtes. Le test se fait sur tout le
 // trajet de l'axe (pas seulement l'arrivée) : un grand pas ne traverse pas un mur fin. Une boîte dans laquelle on se
-// trouve déjà ne retient pas (on peut toujours en sortir).
+// trouve déjà ne retient pas (on peut toujours en sortir). La tolérance E est indispensable : après un arrêt contre
+// une boîte (x = minX − r), (minX − r) + r peut dépasser minX d'un arrondi, et sans elle la boîte compterait comme
+// « déjà dedans » à l'image suivante : on traverserait le mur en continuant de pousser.
 export function moveCircle(pos, dx, dz, r, boxes) {
+  const E = 1e-6
   let x = pos.x + dx
   if (dx) for (const b of boxes) {
-    if (pos.z + r <= b.minZ || pos.z - r >= b.maxZ) continue
-    if (dx > 0 && pos.x + r <= b.minX && x + r > b.minX) x = b.minX - r
-    else if (dx < 0 && pos.x - r >= b.maxX && x - r < b.maxX) x = b.maxX + r
+    if (pos.z + r <= b.minZ + E || pos.z - r >= b.maxZ - E) continue
+    if (dx > 0 && pos.x + r <= b.minX + E && x + r > b.minX) x = b.minX - r
+    else if (dx < 0 && pos.x - r >= b.maxX - E && x - r < b.maxX) x = b.maxX + r
   }
   let z = pos.z + dz
   if (dz) for (const b of boxes) {
-    if (x + r <= b.minX || x - r >= b.maxX) continue
-    if (dz > 0 && pos.z + r <= b.minZ && z + r > b.minZ) z = b.minZ - r
-    else if (dz < 0 && pos.z - r >= b.maxZ && z - r < b.maxZ) z = b.maxZ + r
+    if (x + r <= b.minX + E || x - r >= b.maxX - E) continue
+    if (dz > 0 && pos.z + r <= b.minZ + E && z + r > b.minZ) z = b.minZ - r
+    else if (dz < 0 && pos.z - r >= b.maxZ - E && z - r < b.maxZ) z = b.maxZ + r
   }
   return { x, z }
 }
@@ -518,7 +527,8 @@ export function createFpsController({ camera, colliders = [], start = { x: 0, z:
       target.removeEventListener('keydown', onDown); target.removeEventListener('keyup', onUp)
       target.removeEventListener('mousemove', onMove); target.removeEventListener('pointerlockchange', onLock)
     },
-    lock(el) { if (el && typeof el.requestPointerLock === 'function') { try { el.requestPointerLock() } catch (e) { /* refusé */ } } },
+    // Chrome renvoie une promesse, rejetée si on reverrouille trop vite après Échap : on l'avale (pas d'erreur en console)
+    lock(el) { if (el && typeof el.requestPointerLock === 'function') { try { const p = el.requestPointerLock(); if (p && p.catch) p.catch(() => {}) } catch (e) { /* refusé */ } } },
     setFrozen(v) { frozen = !!v; if (frozen) held.clear() },
     setPose(p) { pos.x = p.x; pos.z = p.z; if (p.y != null) y = p.y; if (p.yaw != null) yaw = p.yaw; if (p.pitch != null) pitch = p.pitch },
     update(dt) {
@@ -546,7 +556,7 @@ export function createFpsController({ camera, colliders = [], start = { x: 0, z:
 }
 ```
 
-Note : le test « figé » attend que `setFrozen(false)` ne relance pas une touche tenue avant le gel (elle a été relâchée par `setFrozen(true)` ; `onDown` ignore aussi les appuis pendant le gel).
+Note : le test « figé » attend que `setFrozen(false)` ne relance pas une touche tenue avant le gel (elle a été relâchée par `setFrozen(true)` ; `onDown` ignore aussi les appuis pendant le gel). Ne pas retirer la tolérance `E` de `moveCircle` : sur un appartement construit selon la tâche 3, sans elle, 7 boîtes (dont un mur du couloir, la table basse et le radiateur) se traversaient en poussant contre elles.
 
 - [ ] **Étape 4 : vérifier** — `npx vitest run tests/prologue/fpsController.test.js` → PASS. Si un test de pas ou de vitesse échoue d'un epsilon, corriger l'implémentation, pas le test.
 
@@ -567,6 +577,7 @@ git commit -m "feat(enquete): déplacement à la première personne et collision
 - Test : `tests/prologue/apartment.test.js`
 
 **Interfaces :**
+- Consomme (dans ses tests seulement) : `moveCircle` (tâche 2) et `CLUES` / `PHONE` (tâche 1), écrits en parallèle : s'ils ne sont pas encore là, l'échec de l'étape 3 est normal ; attendre leurs fichiers avant l'étape 5.
 - Produit : `buildApartment()` → `{ group, colliders, targets, occluders, anchors, start, lights, openDoor(), update(dt), stats(), dispose() }` :
   - `openDoor()` : lance l'ouverture animée du battant de la porte d'entrée (30° → 100° en 1,6 s, animée par `update`) ; le battant est un maillage à part (il bouge), sa collision est d'emblée celle de la position ouverte ;
   - **seuls les gros éléments ont une collision** : murs, portes fermées, battant ouvert, console, canapé, table basse, étagère, radiateur, lit, table de chevet, coffre à jouets, et les formes sous le drap. Les petits objets au sol (porte-manteau, veste, éclats, chaise renversée, cadre, mot, doudou, copeaux) n'en ont pas : ils ne doivent jamais bloquer un passage ;
@@ -786,7 +797,7 @@ Contenu à construire (toutes les cotes en mètres, voir « Repère et plan de l
 
 1. **Matériaux statiques** (`MeshLambertMaterial`, un appel de dessin chacun) — couleurs de départ, à ajuster à l'œil sur les captures :
    `parquet` (0x6a4e36, texture de lattes en canvas 256×256, répétée), `carrelage` du palier (0x3b3e44), `mur` (0x8c877d), `murEnfant` (0x9b8fa2), `plafond` (0x1a1c22), `boisSombre` (0x3a2a1e : portes, console, étagère, table basse, cadres), `boisClair` (0x9a7a58 : lit), `tissu` (0x2f3440 : canapé, rideaux), `tapis` (0x4a2a24), `tissuRose` (0x8a5a6a : couverture, tapis rond), `blanc` (0xb8b4ac : oreiller, radiateur), `livres` (0x5a4a3a), `metal` (0x6a6e76 : pied de lampe, poignées, menuiseries). Les murs et les portes forment les `occluders`. `mat.userData.cast = true` seulement pour les meubles du salon (canapé, table, étagère) ; les murs reçoivent l'ombre.
-2. **Murs** : un outil `wall(x1, z1, x2, z2, openings)` qui pose des boîtes de 0,12 m d'épaisseur et 2,6 m de haut le long d'un segment horizontal ou vertical, en laissant les ouvertures (`{ from, to, bottom = 0, top }`) : morceaux pleins de part et d'autre, linteau au-dessus, allège en dessous. Chaque morceau plein ajoute aussi sa boîte à `colliders`. Murs à poser :
+2. **Murs** : un outil `wall(x1, z1, x2, z2, openings)` qui pose des boîtes de 0,12 m d'épaisseur et 2,6 m de haut le long d'un segment horizontal ou vertical, en laissant les ouvertures (`{ from, to, bottom = 0, top }`) : morceaux pleins de part et d'autre, linteau au-dessus, allège en dessous. Chaque morceau plein **qui part du sol** (de part et d'autre, allège) ajoute aussi sa boîte à `colliders` ; **jamais le linteau** : les collisions sont des boîtes au sol, celle d'un linteau boucherait la porte ou l'arche en dessous. Murs à poser :
    - palier : x = 5 et x = 7 (z 7 → 8,5), z = 8,5 (x 5 → 7) ;
    - entrée : z = 7 (x 4,5 → 7,5) avec la porte d'entrée (x 5,55–6,45, top 2,05) ; z = 4,5 (x 4,5 → 7,5) plein (la porte de cuisine est un battant collé dessus) ; x = 7,5 (z 1 → 7) avec l'arche (z 5,0–6,6, top 2,2) ; x = 4,5 (z 4,5 → 7) avec l'ouverture du couloir (z 4,6–5,7, top 2,2) ;
    - salon : z = 1 (x 7,5 → 12,5), z = 7 (x 7,5 → 12,5), x = 12,5 (z 1 → 7) avec la fenêtre (z 2–6, bottom 0,9, top 2,3) ;
@@ -1053,7 +1064,7 @@ import { estimate } from '../briefing/kit.js'
 
 export function createAmbience(audio) {
   const timers = new Set(), intervals = new Set()
-  let dead = false, started = false, proximity = 0
+  let dead = false, started = false, proximity = 0, voiceEnd = 0
   const at = (ms, fn) => { const h = setTimeout(() => { timers.delete(h); if (!dead) fn() }, ms); timers.add(h); return h }
   const every = (ms, fn) => { const h = setInterval(() => { if (!dead) fn() }, ms); intervals.add(h); return h }
   const stopEvery = h => { clearInterval(h); intervals.delete(h) }
@@ -1092,7 +1103,11 @@ export function createAmbience(audio) {
     step() { S.noise(0.07, 0.1, 420, 'lowpass'); S.tone(68, 'sine', 0.09, 0.12) },
     tinnitus() { S.tone(6900, 'sine', 4.6, 0.035); S.tone(7350, 'sine', 4, 0.018, 0.3) },
     glitch(ms = 200, p = 0.7) { S.glitch(ms, p) },
-    speak(text) { const ms = estimate(text); if (!dead) { S.voice('inner', true); at(ms, () => S.stopVoice()) } return ms },
+    speak(text) {   // une nouvelle réplique annule la fin prévue de la précédente (sinon celle-ci couperait la nouvelle)
+      const ms = estimate(text)
+      if (!dead) { S.voice('inner', true); if (voiceEnd) { clearTimeout(voiceEnd); timers.delete(voiceEnd) } voiceEnd = at(ms, () => { voiceEnd = 0; S.stopVoice() }) }
+      return ms
+    },
     stop() {
       if (dead) return
       S.destroy(); dead = true
@@ -1130,20 +1145,20 @@ git commit -m "feat(enquete): pluie, cœur, pas et voix intérieure" -- src/prol
 
 Déroulé à implémenter :
 
-1. **Démarrage** : `buildApartment()` ; `scene = new THREE.Scene()` (fond 0x05070c, `Fog(0x05070c, 6, 22)`), `scene.add(apartment.group)` ; sauvegarde de la caméra (`fov`, `near`, `far`, `position`, `quaternion`, `rotation.order`) et de `renderer.shadowMap.autoUpdate` ; caméra `fov 72`, `near 0.05`, `far 40`, `updateProjectionMatrix()` ; `renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true` ; précompilation `renderer.compile(scene, camera)` dans un `try` ; état (`anchors: apartment.anchors`, `found: CLUES.slice(0, options.indices).map(c => c.id)`), contrôleur (`start: apartment.start`, `colliders`, `onStep: () => amb.step()`, `onUnlock: () => pause()`), visée (`targets`, `occluders`), son.
+1. **Démarrage** : `buildApartment()` ; `scene = new THREE.Scene()` (fond 0x05070c, `Fog(0x05070c, 6, 22)`), `scene.add(apartment.group)` ; sauvegarde de la caméra (`fov`, `near`, `far`, `position`, `quaternion`, `rotation.order`) et de `renderer.shadowMap.autoUpdate` ; caméra `fov 72`, `near 0.05`, `far 40`, `updateProjectionMatrix()` ; `renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true` ; précompilation `renderer.compile(scene, camera)` dans un `try` ; état (`anchors: apartment.anchors`, `found: CLUES.slice(0, options.indices || 0).map(c => c.id)` — le `|| 0` est indispensable : `slice(0, undefined)` rend les 6 indices), contrôleur (`start: apartment.start`, `colliders`, `onStep: () => amb.step()`, `onUnlock: () => pause()`), visée (`targets`, `occluders`), son.
 2. **Interface** : style `enquete.css` injecté (`import css from './enquete.css?raw'`, `<style id="enq-css">`, retiré au démontage) ; racine `<div id="enq-root" class="enq">` dans `root`, avec :
-   `.enq-fx` (`.enq-scan`, `.enq-vig`, `.enq-grain`) ; `#enq-count` (« INDICES <b>n</b> / 6 ») ; `#enq-time` (« <i>●</i> 14/03 · 21:47 ») ; `.enq-cross` (point central, classe `on` quand une cible est visée) ; `#enq-prompt` (« <b>E</b> — EXAMINER ») ; `#enq-sub` (sous-titres : `span.spk` « VIKTOR » + `span.tx` tapé) ; `#enq-card` (carte de départ : « 14 MARS · 21:47 », trait rouge, ligne des commandes, « CLIQUER POUR COMMENCER ») ; `#enq-fiche` (voir 4) ; `#enq-pause` (« PAUSE », boutons `#enq-resume` « REPRENDRE » et `#enq-skip` « PASSER L'ENQUÊTE ») ; `#enq-black` (noir qui s'efface en 0,9 s au départ et revient à la fin) ; `#enq-stats` si `options.stats`.
+   `.enq-fx` (`.enq-scan`, `.enq-vig`, `.enq-grain`) ; `#enq-count` (« INDICES <b>n</b> / 6 ») ; `#enq-time` (« <i>●</i> 14/03 · 21:47 ») ; `.enq-cross` (point central, classe `on` quand une cible est visée) ; `#enq-prompt` (« <b>E</b> — EXAMINER ») ; `#enq-sub` (sous-titres : `span.spk` « VIKTOR » + `span.tx` tapé) ; `#enq-fiche` (voir 4) ; `#enq-black` (noir qui s'efface en 0,9 s au départ et revient à la fin) ; `#enq-card` (carte de départ : « 14 MARS · 21:47 », trait rouge, ligne des commandes, « CLIQUER POUR COMMENCER ») ; `#enq-pause` (« PAUSE », boutons `#enq-resume` « REPRENDRE » et `#enq-skip` « PASSER L'ENQUÊTE ») ; `#enq-stats` si `options.stats`. **Dans cet ordre** (sans `z-index`, l'ordre du DOM fait l'empilement) : le noir couvre la fiche à la fin, mais la carte et la pause restent au-dessus du noir — sinon la carte du départ serait invisible sous le noir opaque, qui ne s'efface qu'après le clic sur elle.
    Ligne des commandes de la carte : les libellés des touches de `settings.pvpKeys` (avancer/gauche/reculer/droite) — si `navigator.keyboard?.getLayoutMap` existe, l'utiliser (libellé réel du clavier, AZERTY compris), sinon dériver du code (`KeyW` → `W`) — puis « SOURIS — REGARDER · E — EXAMINER · ÉCHAP — PAUSE ».
-3. **Contrôle** : tant que l'enquête n'a pas « commencé » (premier verrouillage, ou option `cam` qui la fait commencer d'emblée, sans carte), aucune action ni visée. Clic sur la carte (ou sur `#enq-resume`) → `controller.lock(renderer.domElement)` ; à `pointerlockchange` verrouillé : carte et pause masquées, `state.resume()` ; la première fois : `amb.start()`, `apartment.openDoor()`, fondu du noir. La citation d'un indice et la liste des appels s'affichent tout de suite ; seules les phrases de Viktor et les sous-titres se tapent. Clavier (écouteur sur `document`) : `KeyE` → action ; clic gauche (`mousedown`, bouton 0) pointeur verrouillé → action. Action : en exploration, si une cible est visée → examiner ; en fiche → fermer, ou « écouter » si c'est la fiche du téléphone.
-4. **Examiner** (`state.examine(id)`) :
+3. **Contrôle** : tant que l'enquête n'a pas « commencé » (premier verrouillage, ou option `cam` qui la fait commencer d'emblée, sans carte, avec les effets du premier départ ci-dessous, fondu du noir compris), aucune action, ni visée, ni piste. Clic sur la carte (ou sur `#enq-resume`) → `controller.lock(renderer.domElement)` ; à `pointerlockchange` verrouillé (hors fin) : carte et pause masquées, `state.resume()`, puis `controller.setFrozen(state.mode !== 'exploring')` (la pause a figé le contrôleur : sans cela, on ne bouge plus après REPRENDRE ; une fiche ouverte avant la pause reste figée) ; la première fois : `amb.start()`, `apartment.openDoor()`, fondu du noir. La citation d'un indice et la liste des appels s'affichent tout de suite ; seules les phrases de Viktor et les sous-titres se tapent. Clavier (écouteur sur `document`) : `KeyE` → action ; clic gauche (`mousedown`, bouton 0) pointeur verrouillé → action. Action : en exploration, si une cible est visée → examiner ; en fiche → fermer, ou « écouter » si c'est la fiche du téléphone.
+4. **Examiner** (`state.examine(id)`) — toute frappe se fait par minuteurs suivis, et une nouvelle réplique dans le même élément annule d'abord ceux de la frappe en cours (sinon E pressé deux fois mêle les lettres des deux phrases) :
    - `phone-locked` : sous-titre « VIKTOR » + phrase tapée, `amb.speak(line)` ; pas de fiche.
    - `clue` : instantané (`renderer.render(scene, camera)` puis `renderer.domElement.toDataURL('image/jpeg', 0.85)`, dans un `try` ; sans image, la photo reste noire), fiche : onglet « INDICE 0n / 06 », photo + lieu en légende, titre, citation (le mot) s'il y en a, phrase de Viktor tapée en `0,8 × estimate(texte)` avec `amb.speak`, pied « <b>E</b> — FERMER » ; `controller.setFrozen(true)` ; classe `gl` 250 ms sur `.enq` + `amb.glitch()` ; `amb.tinnitus()` si `clue.acouphene` ; compteur mis à jour.
    - `phone` : fiche du téléphone : onglet « LE TÉLÉPHONE », titre « 2 APPELS MANQUÉS », la liste des appels (`.enq-calls`, un `div` par appel : `<b>de · heure</b><small>note</small>`), les deux phrases de Viktor tapées l'une après l'autre (la seconde après `estimate(première) + 400 ms`), pied « <b>E</b> — ÉCOUTER LE MESSAGE ».
    - **Fermer** : `state.close()`, `controller.setFrozen(false)`, fiche masquée. **Écouter** : `state.finish('listened')` → fin.
 5. **Pause** : perte du verrou (`onUnlock`) hors fin → `state.pause()`, `controller.setFrozen(true)`, `#enq-pause` visible. `#enq-resume` → reverrouille (le retour du verrou reprend). `#enq-skip` → `state.finish('skipped')` → fin.
 6. **Piste** : à chaque `update`, `const hint = state.tick(dt, controller.position)` → sous-titre « VIKTOR » + `amb.speak(hint)`.
-7. **`update(dt)`** : `apartment.update(dt)` ; si `options.cam`, caméra figée via `controller.setPose` + `controller.update(0)` ; sinon, en exploration pointeur verrouillé, `controller.update(dt)` ; en exploration, `interact.update()` → croix et invite ; proximité du cœur `amb.setProximity(1 - (distance à l'ancre « corps » − 1,5) / 6)` bornée à [0, 1] ; piste ; stats si demandé (`renderer.info.render.calls` et `.triangles` de l'image précédente).
-8. **Fin** (une seule fois) : noir (`#enq-black` sans `off`), `controller.setFrozen(true)`, puis après 700 ms (minuteur suivi) : `stop()` et `onDone({ result })`.
+7. **`update(dt)`** : `apartment.update(dt)` ; si `options.cam`, caméra figée via `controller.setPose` + `controller.update(0)` ; sinon, en exploration pointeur verrouillé, `controller.update(dt)` ; `scene.updateMatrixWorld()` (la visée lit les `matrixWorld` des cibles ; sans rendu préalable — faux renderer des tests, toute première image — elles valent l'identité et le rayon ne touche rien) ; en exploration, `interact.update()` → croix et invite ; proximité du cœur `amb.setProximity(1 - (distance à l'ancre « corps » − 1,5) / 6)` bornée à [0, 1] ; piste ; stats si demandé (`renderer.info.render.calls` et `.triangles` de l'image précédente).
+8. **Fin** (une seule fois) : noir (`#enq-black` sans `off`), pause et carte masquées (elles sont au-dessus du noir), `controller.setFrozen(true)`, puis après 700 ms (minuteur suivi) : `stop()` et `onDone({ result })`.
 9. **`stop()`** (idempotent, ne lève jamais) : écouteurs retirés, minuteurs annulés, `controller.dispose()`, `interact.clear()`, `amb.stop()`, `apartment.dispose()`, `scene.clear()`, caméra et `renderer.shadowMap.autoUpdate` restaurés, `document.exitPointerLock()` si le pointeur est verrouillé, `#enq-root` et `#enq-css` retirés.
 
 `src/prologue/enquete.css` (à reprendre tel quel, puis à ajuster à l'œil) :
@@ -1371,6 +1386,10 @@ function investigate(onNext, options = {}) {
     onNext()
   }
   enquete = run
+  // le canvas garde la dernière image rendue (le décor du menu) : noir pendant le chargement du module, sinon elle
+  // apparaît entre la fin de A (#briefing-root masqué) et le noir de l'enquête. setClearColor d'abord : clear() seul
+  // reprendrait la couleur de fond du dernier rendu (le ciel du menu)
+  try { renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 1); renderer.clear() } catch (e) { /* sans effet */ }
   import('./prologue/investigation.js')
     .then(m => {
       if (run.ended) return
