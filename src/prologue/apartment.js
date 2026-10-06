@@ -80,6 +80,35 @@ function heightUV(geo) {
   for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) + p.getZ(i)) / 4, p.getY(i) / H)
   return geo
 }
+// Le palier, périmètre intérieur déroulé (en mètres) : mur x = 5 (du fond vers la porte), mur de la porte (z = 7),
+// mur x = 7 (de la porte vers le fond), mur du fond (z = 8,5). Les murs du palier ont u = s / P, v = y / H.
+const PAL = (() => {
+  const x0 = 5 + T / 2, x1 = 7 - T / 2, z0 = 7 + T / 2, z1 = 8.5 - T / 2, W = x1 - x0, D = z1 - z0
+  return { x0, x1, z0, z1, W, D, P: 2 * (W + D) }
+})()
+// abscisse s → point du mur et normale vers l'intérieur du palier
+function palierAt(s) {
+  const { x0, x1, z0, z1, W, D } = PAL
+  if (s < D) return { x: x0, z: z1 - s, nx: 1, nz: 0 }
+  if (s < D + W) return { x: x0 + (s - D), z: z0, nx: 0, nz: 1 }
+  if (s < 2 * D + W) return { x: x1, z: z0 + (s - D - W), nx: -1, nz: 0 }
+  return { x: x1 - (s - 2 * D - W), z: z1, nx: 0, nz: -1 }
+}
+function palierUV(geo) {
+  const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv, { x0, x1, z0, z1, W, D, P } = PAL
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i)
+    const s = Math.abs(n.getX(i)) > 0.5 ? (x < 6 ? z1 - z : D + W + (z - z0)) : (z < 7.75 ? D + (x - x0) : 2 * D + W + (x1 - x))
+    uv.setXY(i, s / P, p.getY(i) / H)
+  }
+  return geo
+}
+// UV d'une porte vue de face : u = 0 au gond → 1 côté poignée (flip : gond du côté des x croissants), v = y / 2,05
+function doorUV(geo, x0, w, flip = false) {
+  const p = geo.attributes.position, uv = geo.attributes.uv
+  for (let i = 0; i < p.count; i++) { const t = (p.getX(i) - x0) / w; uv.setXY(i, flip ? 1 - t : t, p.getY(i) / 2.05) }
+  return geo
+}
 // Couleur par sommet (matériaux en vertexColors : livres, jouets, lueurs)
 function tint(geo, hex) {
   const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3)
@@ -136,6 +165,142 @@ function drawTiles(g, w, h) {
     for (let k = 0; k < 40; k++) g.fillRect(i * s + rnd() * s, j * s + rnd() * s, 1.5, 1.5)
     g.globalAlpha = 1
   }
+}
+
+// Les murs du palier, déroulés (1 unité = 1 m) : enduit beige sale, auréoles et coulures sous le plafond, soubassement
+// vert bouteille jusqu'à 1 m (éraflures, traces de semelles, éclats de peinture), cimaise, coins encrassés.
+function drawPalier(g, w, h) {
+  const rnd = makeRnd(61), { P, W, D } = PAL, Y = y => H - y   // y du monde → y du canvas (le haut de la texture est au plafond)
+  g.save(); g.scale(w / P, h / H)
+  const blot = (x, y, rx, ry, rgb, a) => {   // tache douce
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, 1); gr.addColorStop(0, `rgba(${rgb},${a})`); gr.addColorStop(1, `rgba(${rgb},0)`)
+    g.save(); g.translate(x, Y(y)); g.scale(rx, ry); g.fillStyle = gr; g.fillRect(-1, -1, 2, 2); g.restore()
+  }
+  const wobble = (x, y, rx, ry, n = 16) => {   // contour irrégulier
+    g.beginPath()
+    const ks = Array.from({ length: n }, () => 0.8 + rnd() * 0.35), pt = i => { const t = i / n * Math.PI * 2, k = ks[i % n]; return [x + Math.cos(t) * rx * k, Y(y) + Math.sin(t) * ry * k] }
+    const mid = i => { const a = pt(i), b = pt(i + 1); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }
+    g.moveTo(...mid(0))
+    for (let i = 1; i <= n; i++) g.quadraticCurveTo(...pt(i), ...mid(i))   // contour lissé (milieux des côtés)
+    g.closePath()
+  }
+  // enduit
+  g.fillStyle = '#6e6250'; g.fillRect(0, 0, P, H)
+  for (let i = 0; i < 220; i++) blot(rnd() * P, 1 + rnd() * 1.7, 0.1 + rnd() * 0.4, 0.08 + rnd() * 0.3, rnd() < 0.6 ? '58,48,34' : '150,138,112', 0.05 + rnd() * 0.09)
+  g.globalAlpha = 0.18
+  for (let i = 0; i < 9000; i++) { g.fillStyle = rnd() < 0.5 ? '#3a3226' : '#a89a80'; g.fillRect(rnd() * P, rnd() * (H - 1), 0.004 + rnd() * 0.004, 0.006) }
+  g.globalAlpha = 1
+  // jaunissement sous le plafond, auréoles d'anciens dégâts des eaux et leurs coulures
+  { const gr = g.createLinearGradient(0, 0, 0, 0.6); gr.addColorStop(0, 'rgba(52,38,20,.3)'); gr.addColorStop(1, 'rgba(52,38,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, P, 0.6) }
+  for (const [sx, rx, ry] of [[0.3, 0.34, 0.24], [1.62, 0.16, 0.1], [3.02, 0.22, 0.14], [4.3, 0.5, 0.3], [5.95, 0.3, 0.36]]) {
+    const sy = H - ry * 0.55
+    wobble(sx, sy, rx, ry); g.fillStyle = 'rgba(104,78,44,.22)'; g.fill()
+    g.lineWidth = 0.008; g.strokeStyle = 'rgba(74,52,26,.3)'; g.stroke()
+    wobble(sx + rx * 0.1, sy + ry * 0.15, rx * 0.6, ry * 0.55); g.lineWidth = 0.005; g.strokeStyle = 'rgba(74,52,26,.18)'; g.stroke()
+    const drips = 2 + Math.floor(rnd() * 4)
+    for (let k = 0; k < drips; k++) {
+      const x = sx + (rnd() - 0.5) * rx * 1.4, y0 = sy - ry * (0.3 + rnd() * 0.5), len = 0.25 + rnd() * 1.1, lw = 0.006 + rnd() * 0.016
+      const gr = g.createLinearGradient(0, Y(y0), 0, Y(y0 - len)); gr.addColorStop(0, 'rgba(78,56,28,.42)'); gr.addColorStop(0.7, 'rgba(78,56,28,.2)'); gr.addColorStop(1, 'rgba(78,56,28,0)')
+      g.strokeStyle = gr; g.lineWidth = lw; g.lineCap = 'round'
+      g.beginPath(); g.moveTo(x, Y(y0)); g.bezierCurveTo(x + (rnd() - 0.5) * 0.02, Y(y0 - len * 0.4), x + (rnd() - 0.5) * 0.03, Y(y0 - len * 0.7), x + (rnd() - 0.5) * 0.02, Y(y0 - len)); g.stroke()
+    }
+  }
+  // une fissure qui descend du plafond (mur du fond)
+  g.strokeStyle = 'rgba(30,24,16,.6)'; g.lineWidth = 0.004
+  { let x = 5.25, y = H; g.beginPath(); g.moveTo(x, Y(y)); while (y > 1.55) { x += (rnd() - 0.5) * 0.07; y -= 0.04 + rnd() * 0.08; g.lineTo(x, Y(y)) } g.stroke() }
+  // mains et épaules : traces grasses autour de la porte, de la minuterie et de la sonnette
+  for (const [sx, sy, rx, ry] of [[D + 0.19, 1.2, 0.1, 0.11], [D + 0.36, 1.35, 0.07, 0.3], [D + 1.52, 1.3, 0.08, 0.3], [D + 1.62, 1.5, 0.14, 0.26], [D + 1.68, 1.42, 0.07, 0.12]]) blot(sx, sy, rx, ry, '40,32,22', 0.32)
+  // soubassement vert bouteille (peinture à l'huile)
+  g.fillStyle = '#3e4c41'; g.fillRect(0, Y(1), P, 1)
+  for (let i = 0; i < 70; i++) blot(rnd() * P, rnd(), 0.2 + rnd() * 0.6, 0.03 + rnd() * 0.06, rnd() < 0.5 ? '120,140,120' : '10,14,10', 0.05 + rnd() * 0.05)
+  g.lineCap = 'round'
+  for (let i = 0; i < 70; i++) {   // éraflures claires
+    const x = rnd() * P, y = 0.15 + rnd() * 0.8, l = 0.04 + rnd() * 0.35, a = (rnd() - 0.5) * 0.5
+    g.strokeStyle = `rgba(150,146,124,${0.15 + rnd() * 0.3})`; g.lineWidth = 0.002 + rnd() * 0.004
+    g.beginPath(); g.moveTo(x, Y(y)); g.lineTo(x + Math.cos(a) * l, Y(y + Math.sin(a) * l)); g.stroke()
+  }
+  for (let i = 0; i < 46; i++) {   // traces de semelles et de chariots
+    g.save(); g.translate(rnd() * P, Y(0.04 + rnd() * 0.28)); g.rotate((rnd() - 0.5) * 0.6)
+    g.fillStyle = `rgba(6,6,4,${0.25 + rnd() * 0.35})`; g.beginPath(); g.ellipse(0, 0, 0.02 + rnd() * 0.08, 0.004 + rnd() * 0.012, 0, 0, Math.PI * 2); g.fill(); g.restore()
+  }
+  for (let i = 0; i < 34; i++) {   // éclats de peinture, surtout sous la cimaise
+    const x = rnd() * P, y = rnd() < 0.6 ? 0.88 + rnd() * 0.1 : 0.1 + rnd() * 0.8
+    wobble(x, y, 0.006 + rnd() * 0.025, 0.004 + rnd() * 0.014, 7); g.fillStyle = 'rgba(132,120,98,.85)'; g.fill()
+  }
+  { const gr = g.createLinearGradient(0, Y(0.16), 0, Y(0)); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.45)'); g.fillStyle = gr; g.fillRect(0, Y(0.16), P, 0.16) }
+  // cimaise : ombre portée dessous, bois, filet clair
+  { const gr = g.createLinearGradient(0, Y(1), 0, Y(0.95)); gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, Y(1), P, 0.05) }
+  g.fillStyle = '#4a3a28'; g.fillRect(0, Y(1.04), P, 0.04)
+  g.fillStyle = 'rgba(20,14,8,.7)'; g.fillRect(0, Y(1.021), P, 0.004)
+  g.fillStyle = '#a8946e'; g.fillRect(0, Y(1.04), P, 0.005)
+  // coins encrassés (là où le néon n'arrive pas, et où le chiffon non plus)
+  for (const s of [0, D, D + W, 2 * D + W, P]) {
+    const gr = g.createLinearGradient(s - 0.16, 0, s + 0.16, 0)
+    gr.addColorStop(0, 'rgba(18,14,8,0)'); gr.addColorStop(0.5, 'rgba(18,14,8,.5)'); gr.addColorStop(1, 'rgba(18,14,8,0)')
+    g.fillStyle = gr; g.fillRect(s - 0.16, 0, 0.32, H)
+  }
+  { const gr = g.createLinearGradient(0, 0, 0, 0.07); gr.addColorStop(0, 'rgba(10,8,4,.6)'); gr.addColorStop(1, 'rgba(10,8,4,0)'); g.fillStyle = gr; g.fillRect(0, 0, P, 0.07) }
+  g.restore()
+}
+
+// La lumière du néon sur les murs du palier, calculée au mur (cosinus / d², tube échantillonné), multipliée par l'enduit :
+// la carte émissive des murs du palier (plus clair sous le tube, coins et bas des murs dans l'ombre).
+function drawPalierLit(g, w, h, wallCanvas) {
+  g.drawImage(wallCanvas, 0, 0, w, h)
+  const FW = 326, FH = 130, c = document.createElement('canvas'); c.width = FW; c.height = FH
+  const f = c.getContext('2d'); if (!f) return
+  const img = f.getImageData(0, 0, FW, FH), d = img.data, N = 8
+  for (let i = 0; i < d.length / 4; i++) {
+    const q = palierAt(((i % FW) + 0.5) / FW * PAL.P), y = H * (1 - (Math.floor(i / FW) + 0.5) / FH)
+    let E = 0
+    for (let k = 0; k < N; k++) {
+      const dx = 5.58 + (k + 0.5) / N * 0.84 - q.x, dy = 2.55 - y, dz = 7.75 - q.z, r2 = dx * dx + dy * dy + dz * dz
+      const cos = q.nx * dx + q.nz * dz
+      if (cos > 0) E += cos / (r2 * Math.sqrt(r2))
+    }
+    const v = Math.round(255 * Math.pow(1 - Math.exp(-(E / N + 0.03)), 1 / 2.2))   // éclairement linéaire, encodé sRGB (la texture est décodée)
+    d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255
+  }
+  f.putImageData(img, 0, 0)
+  g.globalCompositeOperation = 'multiply'; g.drawImage(c, 0, 0, w, h); g.globalCompositeOperation = 'source-over'
+}
+
+// Les portes palières, vues de face (u = 0 au gond, 1 côté poignée ; v = y / 2,05) : la teinte sang de bœuf vient du
+// matériau ; ici la lumière des moulures, le fil du bois sous la laque, l'usure autour de la poignée et en bas.
+const DOOR_PANELS = [[0.156, 0.844, 0.2, 0.9], [0.156, 0.844, 1.05, 1.95]]   // u0, u1, y0, y1 (m)
+function drawDoor(g, w, h) {
+  const rnd = makeRnd(71), X = u => u * w, Yy = y => (1 - y / 2.05) * h
+  g.fillStyle = '#d6cec8'; g.fillRect(0, 0, w, h)
+  g.globalAlpha = 0.04
+  for (let i = 0; i < 160; i++) { g.fillStyle = rnd() < 0.5 ? '#2a1a14' : '#ffffff'; g.fillRect(rnd() * w, 0, 0.6 + rnd() * 2, h) }
+  g.globalAlpha = 1
+  for (const [u0, u1, y0, y1] of DOOR_PANELS) {
+    const x0 = X(u0), x1 = X(u1), t = Yy(y1), b = Yy(y0), e = 8
+    g.fillStyle = 'rgba(20,10,6,.7)'; g.fillRect(x0 - 3, t - 3, x1 - x0 + 6, b - t + 6)                       // gorge autour du panneau
+    g.fillStyle = '#e2dad4'; g.fillRect(x0, t, x1 - x0, b - t)
+    const bevel = (pts, c) => { g.fillStyle = c; g.beginPath(); g.moveTo(...pts[0]); for (const p of pts.slice(1)) g.lineTo(...p); g.closePath(); g.fill() }
+    bevel([[x0, t], [x1, t], [x1 - e, t + e], [x0 + e, t + e]], 'rgba(255,255,255,.5)')                       // biseau du haut : la lumière tombe du néon
+    bevel([[x0, t], [x0 + e, t + e], [x0 + e, b - e], [x0, b]], 'rgba(255,255,255,.18)')
+    bevel([[x1, t], [x1, b], [x1 - e, b - e], [x1 - e, t + e]], 'rgba(30,14,8,.3)')
+    bevel([[x0, b], [x0 + e, b - e], [x1 - e, b - e], [x1, b]], 'rgba(30,14,8,.55)')
+  }
+  const blot = (x, y, rx, ry, a) => { const gr = g.createRadialGradient(x, y, 0, x, y, 1); gr.addColorStop(0, `rgba(30,16,10,${a})`); gr.addColorStop(1, 'rgba(30,16,10,0)'); g.save(); g.translate(x, y); g.scale(rx, ry); g.translate(-x, -y); g.fillStyle = gr; g.fillRect(x - 1, y - 1, 2, 2); g.restore() }
+  blot(X(0.86), Yy(1.02), 34, 70, 0.45)                                                                         // les mains autour de la poignée
+  blot(X(0.5), Yy(0.08), 120, 30, 0.4)                                                                          // les pieds en bas
+  g.lineCap = 'round'
+  for (let i = 0; i < 26; i++) {                                                                                // éraflures dans la laque
+    const x = rnd() * w, y = Yy(0.03 + rnd() * (rnd() < 0.6 ? 0.35 : 1.6)), l = 4 + rnd() * 22, a = (rnd() - 0.5) * 0.8
+    g.strokeStyle = `rgba(255,240,225,${0.2 + rnd() * 0.3})`; g.lineWidth = 0.6 + rnd()
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke()
+  }
+  g.fillStyle = 'rgba(20,10,6,.6)'; g.fillRect(0, 0, 2, h); g.fillRect(w - 2, 0, 2, h); g.fillRect(0, 0, w, 2)  // arêtes
+}
+// La même, éclairée par le néon : multipliée par le dégradé vertical des faces « palier » (celui de T_neonGrad, en y / H)
+function drawDoorLit(g, w, h, doorCanvas) {
+  g.drawImage(doorCanvas, 0, 0, w, h)
+  const top = Math.round(42 + (2.05 / H - 0.45) / 0.55 * (255 - 42)), gr = g.createLinearGradient(0, 0, 0, h)
+  gr.addColorStop(0, `rgb(${top},${top},${top})`); gr.addColorStop(1 - 0.45 * H / 2.05, '#2a2a2a'); gr.addColorStop(1, '#000')
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = gr; g.fillRect(0, 0, w, h); g.globalCompositeOperation = 'source-over'
 }
 
 function drawRug(g, w, h) {
@@ -323,13 +488,15 @@ export function buildApartment() {
   const T_city = tex(1024, 512, drawCity)
   const T_glow = tex(512, 256, drawGlows)
   const T_shade = tex(4, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#4a4a4a'); gr.addColorStop(0.7, '#ffffff'); gr.addColorStop(1, '#b0b0b0'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
+  const T_palier = tex(2048, 512, drawPalier); T_palier.anisotropy = 8
+  const T_palierLit = tex(2048, 512, (g, w, h) => drawPalierLit(g, w, h, T_palier.image)); T_palierLit.anisotropy = 8
   const T_neonGrad = tex(4, 64, (g, w, h) => { const gr = g.createLinearGradient(0, h, 0, 0); gr.addColorStop(0, '#000'); gr.addColorStop(0.45, '#2a2a2a'); gr.addColorStop(1, '#ffffff'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
 
   const M = {
     parquet: lambert(0xb08a68, { map: T_parquet }),
     carrelage: lambert(0x8a8e96, { map: T_tiles, emissive: 0x6a7a70, emissiveIntensity: 0.05 }),
     mur: lambert(0x8c877d),
-    murPalier: lambert(0x6f7a6c, { emissive: 0x8fa894, emissiveMap: T_neonGrad, emissiveIntensity: 0.3 }),
+    murPalier: lambert(0x9a9a9a, { map: T_palier, emissive: 0xc4d6cf, emissiveMap: T_palierLit, emissiveIntensity: 1.3 }),   // l'enduit, et le néon qui l'éclaire (carte calculée au mur)
     portePalier: lambert(0x6a3e32, { emissive: 0x6a7a66, emissiveMap: T_neonGrad, emissiveIntensity: 0.3 }),   // faces de la porte et du chambranle éclairées par le néon
     murEnfant: lambert(0x84788e),
     plafond: lambert(0x56585f),
@@ -355,8 +522,9 @@ export function buildApartment() {
   for (const k of ['veilleuse', 'vitre', 'ville', 'lueurs', 'halo']) M[k].userData.receive = false
   for (const k in M) M[k].name = k
 
-  const neonLit = [[M.murPalier, 0.36], [M.portePalier, 0.6], [M.carrelage, 0.14]]   // matériaux « éclairés » par le néon du palier (intensité émissive de base)
+  const neonLit = [[M.murPalier, 1.3], [M.portePalier, 0.6], [M.carrelage, 0.14]]   // matériaux « éclairés » par le néon du palier (intensité émissive de base)
   const B = createBatcher()
+  const glows = []   // lueurs additives (fausse lumière), fusionnées en un seul maillage
   const box = (m, cx, cy, cz, w, h, d, place) => B.box(m, cx, cy, cz, w, h, d, place)
   const solid = (minX, maxX, minZ, maxZ) => colliders.push({ minX, maxX, minZ, maxZ })
 
@@ -381,21 +549,22 @@ export function buildApartment() {
       for (const [m, off, th] of halves) {
         const geo = new THREE.BoxGeometry(alongX ? len : th, hh, alongX ? th : len)
         geo.translate(alongX ? mid : line + off, yc, alongX ? line + off : mid)
-        if (m === M.murPalier) heightUV(geo)
+        if (m === M.murPalier) palierUV(geo)
         B.add(m, geo)
       }
       if (p.y0 === 0) {   // seuls les morceaux qui partent du sol arrêtent le joueur (jamais un linteau)
         if (alongX) solid(p.a, p.b, line - T / 2, line + T / 2); else solid(line - T / 2, line + T / 2, p.a, p.b)
-        for (const side of [-1, 1]) {   // plinthes
-          const o = line + side * (T / 2 + 0.006)
-          if (alongX) box(M.blanc, mid, 0.04, o, len, 0.08, 0.012); else box(M.blanc, o, 0.04, mid, 0.012, 0.08, len)
+        for (const side of [-1, 1]) {   // plinthes (sombres sur le palier, blanches dans l'appartement)
+          const o = line + side * (T / 2 + 0.006), pm = (side < 0 ? matNeg : matPos) === M.murPalier ? M.boisSombre : M.blanc
+          if (alongX) box(pm, mid, 0.04, o, len, 0.08, 0.012); else box(pm, o, 0.04, mid, 0.012, 0.08, len)
         }
       }
     }
   }
 
   // palier
-  wall(5, 7, 5, 8.5, [], M.murPalier); wall(7, 7, 7, 8.5, [], M.murPalier); wall(5, 8.5, 7, 8.5, [], M.murPalier)
+  // les murs latéraux partent de l'épaisseur du mur z = 7 : leur bout (prolongé de T/2) y est noyé, et non à fleur de sa face côté entrée
+  wall(5, 7 + T / 2, 5, 8.5, [], M.murPalier); wall(7, 7 + T / 2, 7, 8.5, [], M.murPalier); wall(5, 8.5, 7, 8.5, [], M.murPalier)
   // entrée
   wall(4.5, 7, 7.5, 7, [{ from: 5.55, to: 6.45, top: 2.05 }], M.mur, M.murPalier)
   wall(4.5, 4.5, 7.5, 4.5)
@@ -464,10 +633,12 @@ export function buildApartment() {
   const leaf = new THREE.Mesh(leafGeo, M.boisSombre); leaf.castShadow = true; leaf.receiveShadow = true; pivot.add(leaf)
   // face palier du battant (panneaux moulurés compris), éclairée par le néon
   const skinGeo = mergeGeometries([
-    heightUV(new THREE.BoxGeometry(0.9, 2.05, 0.004).translate(0.45, 1.025, 0.0215)),
-    heightUV(new THREE.BoxGeometry(0.62, 0.7, 0.01).translate(0.45, 0.55, 0.027)), heightUV(new THREE.BoxGeometry(0.62, 0.9, 0.01).translate(0.45, 1.5, 0.027)),
-  ])
-  const skinMat = M.portePalier.clone(); skinMat.name = 'battant'; owned.mats.push(skinMat)
+    new THREE.BoxGeometry(0.9, 2.05, 0.004).translate(0.45, 1.025, 0.0215),
+    new THREE.BoxGeometry(0.62, 0.7, 0.01).translate(0.45, 0.55, 0.027), new THREE.BoxGeometry(0.62, 0.9, 0.01).translate(0.45, 1.5, 0.027),
+  ].map(g => doorUV(g, 0, 0.9)))
+  const T_door = tex(256, 512, drawDoor); T_door.anisotropy = 4
+  const T_doorLit = tex(256, 512, (g, w, h) => drawDoorLit(g, w, h, T_door.image)); T_doorLit.anisotropy = 4
+  const skinMat = M.portePalier.clone(); skinMat.name = 'battant'; skinMat.map = T_door; skinMat.emissiveMap = T_doorLit; owned.mats.push(skinMat)
   const skin = new THREE.Mesh(skinGeo, skinMat); skin.receiveShadow = true; pivot.add(skin)
   const skinLit = [skinMat, 0.6]; neonLit.push(skinLit)   // une fois la porte ouverte, cette face ne voit plus le néon
   occluders.push(skin)
@@ -475,6 +646,9 @@ export function buildApartment() {
     new THREE.BoxGeometry(0.13, 0.02, 0.025).translate(0.76, 1.02, 0.045), new THREE.BoxGeometry(0.13, 0.02, 0.025).translate(0.76, 1.02, -0.045),
     new THREE.BoxGeometry(0.05, 0.22, 0.008).translate(0.82, 1.0, 0.027), new THREE.BoxGeometry(0.05, 0.22, 0.008).translate(0.82, 1.0, -0.027),
     new THREE.CylinderGeometry(0.008, 0.008, 0.01, 8).rotateX(Math.PI / 2).translate(0.45, 1.55, 0.028),   // judas
+    // le numéro, « 17 », en chiffres de laiton au-dessus du judas
+    ...[[0.008, 0.075, 0.43, 1.72, 0], [0.008, 0.02, 0.4225, 1.7515, -0.9], [0.042, 0.008, 0.468, 1.7535, 0], [0.008, 0.074, 0.4715, 1.7175, -0.36]]
+      .map(([w, h, x, y, rz]) => new THREE.BoxGeometry(w, h, 0.003).rotateZ(rz).translate(x, y, 0.0335)),
   ])
   const brass = lambert(0xb08a4a, { emissive: 0x3a2a10, emissiveIntensity: 1 }); brass.name = 'laiton'
   const hardware = new THREE.Mesh(hwGeo, brass); pivot.add(hardware)
@@ -486,14 +660,46 @@ export function buildApartment() {
     solid(Math.min(...pts.map(p => p[0])), Math.max(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[1])))
   }
 
-  // ── palier : paillasson, néon ──
-  box(M.tissu, 6.0, 0.006, 7.4, 0.8, 0.012, 0.5)
+  // ── palier : paillasson, néon, minuterie, sonnette, porte du voisin ──
+  box(M.tapis, 6.0, 0.006, 7.4, 0.8, 0.012, 0.5)   // paillassons : le tapis rouge sombre du couloir des cinématiques
+  // boîtes peintes comme les murs du palier, ou comme les portes (éclairées par le néon)
+  const palBox = (cx, cy, cz, w, h, d) => B.add(M.murPalier, palierUV(new THREE.BoxGeometry(w, h, d).translate(cx, cy, cz)))
+  const doorBox = (cx, cy, cz, w, h, d) => B.add(M.portePalier, heightUV(new THREE.BoxGeometry(w, h, d).translate(cx, cy, cz)))
+  // lueur verticale (radiale, face +z) posée devant un mur
+  const vglow = (w, h, x, y, z, hex) => { const g = new THREE.PlaneGeometry(w, h), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * 0.5); return tint(g.translate(x, y, z), hex) }
+  {   // bouton de minuterie à gauche de la porte (sa diode orange dans le noir) et sa goulotte jusqu'au plafonnier
+    const z = PAL.z0
+    palBox(5.25, 1.2, z + 0.006, 0.08, 0.08, 0.012)
+    B.add(brass, new THREE.CylinderGeometry(0.024, 0.026, 0.008, 20).rotateX(Math.PI / 2), { x: 5.25, y: 1.2, z: z + 0.016 })
+    B.add(M.veilleuse, tint(new THREE.CylinderGeometry(0.0055, 0.0055, 0.003, 12).rotateX(Math.PI / 2), 0xff8a24), { x: 5.25, y: 1.2, z: z + 0.0205 })
+    glows.push(vglow(0.13, 0.13, 5.25, 1.2, z + 0.023, 0x7a3a10))
+    palBox(5.25, 1.92, z + 0.007, 0.022, 1.36, 0.014)   // goulotte repeinte avec le mur
+    box(M.blanc, 5.25, 2.592, 7.4, 0.022, 0.014, 0.68); box(M.blanc, 5.38, 2.592, 7.75, 0.28, 0.014, 0.022)
+    // sonnette et plaque à droite, côté gâche
+    palBox(6.74, 1.43, z + 0.005, 0.05, 0.075, 0.01)
+    B.add(brass, new THREE.CylinderGeometry(0.009, 0.009, 0.006, 12).rotateX(Math.PI / 2), { x: 6.74, y: 1.44, z: z + 0.012 })
+    box(brass, 6.74, 1.33, z + 0.003, 0.09, 0.028, 0.006)
+  }
+  {   // en face (mur z = 8,5), la porte du voisin : chambranle, battant à panneaux, laiton ; un filet de lumière dessous
+    const z = PAL.z1
+    for (const [cx, cy, w, h] of [[5.54, 1.0, 0.06, 2.0], [6.46, 1.0, 0.06, 2.0], [6.0, 2.03, 0.98, 0.06]]) doorBox(cx, cy, z, w, h, 0.03)   // chambranle
+    const voisin = skinMat.clone(); voisin.name = 'porteVoisin'; owned.mats.push(voisin); neonLit.push([voisin, 0.6])   // la même porte, que rien n'ouvre
+    const leafV = (cx, cy, cz, w, h, d) => B.add(voisin, doorUV(new THREE.BoxGeometry(w, h, d).translate(cx, cy, cz), 5.57, 0.86, true))
+    leafV(6.0, 1.006, z - 0.02, 0.86, 1.988, 0.04)
+    for (const [y0, y1] of DOOR_PANELS.map(p => [p[2], p[3]])) leafV(6.0, (y0 + y1) / 2, z - 0.045, 0.59, y1 - y0, 0.01)
+    box(brass, 5.7, 1.0, z - 0.055, 0.12, 0.018, 0.022); box(brass, 5.66, 0.98, z - 0.043, 0.045, 0.2, 0.006)
+    B.add(brass, new THREE.CylinderGeometry(0.008, 0.008, 0.01, 10).rotateX(Math.PI / 2), { x: 6.0, y: 1.55, z: z - 0.052 })
+    box(brass, 6.0, 1.42, z - 0.052, 0.1, 0.03, 0.004)
+    box(M.tapis, 6.0, 0.006, 8.15, 0.7, 0.012, 0.42, { ry: Math.PI + 0.04 })
+    B.add(M.veilleuse, tint(new THREE.BoxGeometry(0.84, 0.011, 0.038), 0xffb870), { x: 6.0, y: 0.0055, z: z - 0.02 })
+    glows.push(tint(flat(1.3, 0.55, 6.0, 0.0135, z - 0.275, 0, [0, 0.5, 0.5, 1]), 0x3a2410))   // au-dessus des paillassons
+  }
   box(M.metal, 6.0, 2.585, 7.75, 0.95, 0.03, 0.12)
   const neonGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.88, 10).rotateZ(Math.PI / 2).translate(6.0, 2.55, 7.75)
   const neon = new THREE.Mesh(neonGeo, M.neon); group.add(neon)
   const haloGeo = mergeGeometries([   // halo au plafond (vu de dessous : matériau double face) et flaque de lumière au sol
     flat(2.4, 1.7, 6.0, H - 0.004, 7.75, 0, [0, 0.5, 0, 1]),
-    flat(1.6, 1.4, 6.0, 0.006, 7.65, 0, [0, 0.5, 0, 1]),
+    flat(1.6, 1.4, 6.0, 0.0135, 7.65, 0, [0, 0.5, 0, 1]),   // au-dessus du paillasson
   ])
   const halo = new THREE.Mesh(haloGeo, M.halo); halo.renderOrder = 2; group.add(halo)
 
@@ -515,7 +721,7 @@ export function buildApartment() {
   box(M.tissu, 9.4, 0.45, 1.31, 2.2, 0.9, 0.18)
   box(M.tissu, 8.23, 0.305, 1.7, 0.16, 0.61, 0.95); box(M.tissu, 10.57, 0.305, 1.7, 0.16, 0.61, 0.95)
   box(M.tissu, 8.85, 0.4, 1.82, 1.04, 0.12, 0.7, { rz: 0.02 }); box(M.tissu, 9.93, 0.39, 1.82, 1.04, 0.12, 0.7, { rz: -0.015 })
-  box(M.tissu, 9.0, 0.06, 2.75, 0.5, 0.12, 0.42, { ry: 0.5, rz: 0.15 })   // coussin tombé
+  box(M.tissu, 8.7, 0.07, 2.55, 0.5, 0.12, 0.42, { ry: 0.5, rz: 0.04 })   // coussin tombé, entre le canapé et la table (hors de leurs emprises)
   solid(8.15, 10.65, 1.2, 2.2)
   // table basse (9,5 ; 0,2 ; 3,1) 1,1 × 0,4 × 0,6
   box(M.boisSombre, 9.5, 0.38, 3.1, 1.1, 0.04, 0.6)
@@ -599,7 +805,6 @@ export function buildApartment() {
   spot.shadow.camera.near = 0.05
   group.add(spot, spot.target)
   // lueur chaude au sol autour de l'abat-jour
-  const glows = []
   glows.push(tint(flat(1.3, 1.3, shadeEnd.x, 0.006, shadeEnd.z, 0, [0, 0.5, 0, 1]), 0x5a2e10))
 
   // ── fenêtres : la ville et la lumière de la nuit au sol ──
@@ -717,7 +922,8 @@ export function buildApartment() {
   {
     const tg = target('lutte', 6.85, 5.75), rnd = makeRnd(37)
     const wood = tg.mat(M.boisSombre, { color: new THREE.Color(0x6a4a32) }), coat = tg.mat(M.tissu, { color: new THREE.Color(0x4a5238) }), china = tg.mat(M.blanc, { color: new THREE.Color(0xc8d4e0) })
-    const base = V(7.22, 0.035, 6.72), tip = V(6.32, 0.035, 5.18), dir = new THREE.Vector3().subVectors(tip, base).normalize()
+    // comme la lampe : le socle reste perpendiculaire au pied, posé sur la tranche (son centre à hauteur de son rayon)
+    const base = V(7.22, 0.172, 6.72), tip = V(6.32, 0.03, 5.18), dir = new THREE.Vector3().subVectors(tip, base).normalize()
     tg.TB.add(wood, rod(base, tip, 0.016))
     tg.TB.add(wood, between(new THREE.CylinderGeometry(0.17, 0.17, 0.03, 20), base.clone().addScaledVector(dir, -0.012), base.clone().addScaledVector(dir, 0.018)))
     const side = V(-dir.z, 0, dir.x)
@@ -740,6 +946,8 @@ export function buildApartment() {
   // 3. elles : deux formes sous un drap (champ de hauteur drapé), sang qui l'imbibe, flaque et traînée vers l'arche
   {
     const tg = target('corps', 10.6, 4.8)
+    // on ne marche pas sur elles : passages libres vers la table (0,7 m), l'étagère (1,17 m) et le radiateur (0,68 m)
+    solid(9.7, 11.6, 4.1, 5.5)
     // silhouettes (capsules en plan : a → b, rayon, hauteur) — l'adulte la tête vers la fenêtre, la petite contre elle
     const parts = [
       [11.36, 4.6, 11.36, 4.6, 0.11, 0.19], [11.08, 4.6, 10.64, 4.6, 0.21, 0.22],

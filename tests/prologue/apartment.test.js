@@ -83,6 +83,13 @@ describe('l\'appartement', () => {
     apt.dispose()
   })
 
+  it('les formes sous le drap arrêtent le joueur', () => {
+    const apt = buildApartment()
+    expect(walk(apt, { x: 9.2, z: 4.8 }, { x: 11.9, z: 4.8 }).x).toBeLessThan(9.7)         // par l'arche, vers la fenêtre
+    expect(walk(apt, { x: 10.6, z: 5.9 }, { x: 10.6, z: 3.7 }).z).toBeGreaterThan(5.5)     // depuis l'étagère, vers la table
+    apt.dispose()
+  })
+
   it('les ancres des indices sont accessibles (à moins de 1,5 m d\'un point atteignable)', () => {
     const apt = buildApartment()
     const reach = { serrure: { x: 6.0, z: 7.6 }, lutte: { x: 6.4, z: 6.0 }, corps: { x: 9.6, z: 5.6 }, photo: { x: 10.6, z: 6.3 }, mot: { x: 9.5, z: 4.2 }, doudou: { x: 2.45, z: 3.9 }, telephone: { x: 5.4, z: 6.3 } }
