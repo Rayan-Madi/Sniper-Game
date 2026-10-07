@@ -78,7 +78,7 @@ La cinématique 2 du prologue **remplace** le passage maquetté « couloir → c
    - le mot laissé par les tueurs : *« Tu aurais dû dire oui. »* ;
    - le téléphone de Viktor, sur le meuble de l'entrée. Ce jour-là, il l'avait oublié en partant : c'est pour ça que l'avertissement ne lui est jamais parvenu. *« Ce jour-là, j'avais oublié mon téléphone. »*
 4. Le téléphone ne s'ouvre qu'après au moins **4 indices**. Avant, l'examiner donne seulement une phrase de Viktor (*« Pas encore… Je dois comprendre ce qui s'est passé. »*) et il reste en surbrillance. Une fois débloqué, il affiche deux appels manqués :
-   - « NUMÉRO MASQUÉ · 18:52 », avec un message vocal : celui d'Anton ;
+   - « 06 39 98 41 07 · 18:52 » (le numéro jetable d'Anton), avec un message vocal : celui d'Anton ;
    - « MAISON · 19:04 » : sa femme a essayé de le joindre.
 
    Le joueur écoute le message, puis choisit « Rappeler », et on passe à la cinématique 2.

@@ -193,16 +193,22 @@
   K.lost = (ms = 400) => { S.lost(); K.glitch(ms + 250, 1); K.on('k-lost'); at(ms, () => K.off('k-lost')) }
   K.title = () => { K.on('title'); S.boom(); K.glitch(200, .7) }
   K.black = () => K.on('k-black')
+  // Compteurs en cours : au gel, chacun affiche sa valeur à l'instant du gel (une capture gelée ne ment pas).
+  const counters = new Set()
   K.counter = (x, from, to, dur, suffix = '', tickEvery = 0) => {
     const e = el(x), s = performance.now(); let last = null
-    const f = () => {
-      if (K.frozen) return
+    const show = () => {
       const k = Math.min(1, (performance.now() - s) / dur), v = Math.round(from + (to - from) * k)
       e.textContent = v + suffix
-      if (tickEvery && Math.floor(v / tickEvery) !== last) { last = Math.floor(v / tickEvery); S.count() }
-      if (k < 1) requestAnimationFrame(f)
+      return [k, v]
     }
-    if (FREEZE !== null) { e.textContent = to + suffix; return }
+    const f = () => {
+      if (K.frozen) return
+      const [k, v] = show()
+      if (tickEvery && FREEZE === null && Math.floor(v / tickEvery) !== last) { last = Math.floor(v / tickEvery); S.count() }
+      if (k < 1) requestAnimationFrame(f); else counters.delete(show)
+    }
+    counters.add(show)
     f()
   }
   let waveOn = false
@@ -269,7 +275,7 @@
     timers.forEach(clearTimeout); timers = []
     if (SS) SS.cancel()
     S.stopVoice(); S.music(null); K.wave(false)
-    K.frozen = false; st.classList.remove('k-frozen')
+    K.frozen = false; st.classList.remove('k-frozen'); counters.clear()
     const cls = ['on', 'off', 'out', 'lock', 'dev', 'side', 'talk', 'shake', 'gl', ...((cfg && cfg.stateClasses) || [])]
     ;[st, ...st.querySelectorAll('*')].forEach(e => { if (e.classList) cls.forEach(c => e.classList.remove(c)) })
     st.querySelectorAll('[data-reset]').forEach(e => { e.textContent = e.dataset.reset === 'keep' ? e.textContent : '' })
@@ -297,7 +303,7 @@
     const id = ++runId
     reset()
     t0 = performance.now(); label = ''
-    if (FREEZE !== null) at(FREEZE, () => { K.frozen = true; st.classList.add('k-frozen'); timers.forEach(clearTimeout); timers = []; if (SS) SS.cancel(); S.stopVoice(); runId++ })
+    if (FREEZE !== null) at(FREEZE, () => { counters.forEach(show => show()); counters.clear(); K.frozen = true; st.classList.add('k-frozen'); timers.forEach(clearTimeout); timers = []; if (SS) SS.cancel(); S.stopVoice(); runId++ })
     if (soundOn && cfg.music) S.music(cfg.music)
     for (const b of cfg.beats) {
       if (id !== runId) return

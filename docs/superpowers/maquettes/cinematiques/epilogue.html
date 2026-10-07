@@ -757,10 +757,10 @@
       { label: 'la dernière croix', min: 3200, cues: [
           [0, K => { K.on('mhand'); K.on('xq') }], [780, K => K.snd.marker()], [1500, K => { K.$('sub').textContent = '' }], [1560, K => K.snd.marker()],
           [2350, click], [2700, K => K.on('mhw', 'out')]] },
-      // 4 — le téléphone vibre dans la main : numéro masqué
+      // 4 : le téléphone vibre dans la main, Anton appelle depuis son numéro jetable du prologue
       { label: 'le téléphone', min: 3400, cues: [
           [0, K => K.on('povA', 'dof')],
-          [200, K => { K.$('phn').textContent = 'NUMÉRO MASQUÉ'; K.$('phi').textContent = 'INCONNU'; K.on('rig'); K.on('ph', 'ring'); buzz(K) }],
+          [200, K => { K.$('phn').textContent = '06 39 98 41 07'; K.$('phi').textContent = 'NUMÉRO INCONNU'; K.on('rig'); K.on('ph', 'ring'); buzz(K) }],
           [1300, buzz], [2400, buzz],
           [2700, K => K.on('rig', 'press')],
           [2950, K => { K.off('rig', 'press'); K.off('ph', 'ring'); K.on('ph', 'ans'); K.on('radio'); K.snd.beep(1320); clock(K) }], [3100, calm(.6)]] },
