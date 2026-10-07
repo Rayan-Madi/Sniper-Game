@@ -16,6 +16,7 @@ import { settings } from '../settings.js'
 const END_MS = 700          // noir de fin, puis démontage et onDone
 const GLITCH_MS = 250
 const SUB_HOLD_MS = 2200    // un sous-titre reste lisible ce temps-là après sa réplique
+const RETRY_MS = 600        // REPRENDRE sans verrou revenu au bout de ce temps : Chrome l'a refusé (trop tôt après Échap)
 const PHOTO_W = 640         // largeur de l'instantané (4:3)
 const PHOTO_CROP = 0.74     // cadre le plus large : 74 % du 4:3 central (aussi celui d'un indice introuvable à l'image)
 const PHOTO_MIN = 0.35      // cadre le plus serré : 35 % de la hauteur de l'image (plus serré, l'agrandissement se verrait)
@@ -116,10 +117,12 @@ const HTML = `
     <div class="l"></div>
     <div class="k"></div>
     <div class="go">CLIQUER POUR COMMENCER</div>
+    <button type="button" class="skip" id="enq-card-skip">PASSER L'ENQUÊTE</button>
   </div>
   <div class="enq-pause" id="enq-pause" hidden>
     <h2>PAUSE</h2>
     <button type="button" id="enq-resume">REPRENDRE</button>
+    <p class="enq-retry" id="enq-retry" hidden>CLIQUE ENCORE POUR REPRENDRE</p>
     <button type="button" id="enq-skip">PASSER L'ENQUÊTE</button>
   </div>`
 
@@ -134,7 +137,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
   let apartment = null, scene = null, state = null, controller = null, interact = null, amb = null
   let saved = null, savedAuto = null, style = null, ui = null, $ = () => null
   let ready = false, started = false, ending = false, stopped = false, reported = false
-  let glitchTimer = 0, subTimer = 0, lineTimer = 0
+  let glitchTimer = 0, subTimer = 0, lineTimer = 0, retryTimer = 0
   const listening = []   // [cible, type, fonction] à retirer au démontage
 
   const report = payload => {
@@ -291,9 +294,16 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     if (stopped || ending) return
     if (locked()) onLockChange(); else controller.lock(renderer.domElement)
   }
+  // REPRENDRE : si le verrou n'est pas revenu au bout de RETRY_MS, le dire (sinon le clic semble perdu)
+  function resume() {
+    requestLock()
+    cancel(retryTimer)
+    retryTimer = at(RETRY_MS, () => { retryTimer = 0; if (!stopped && !ending && !locked() && !$('#enq-pause').hidden) $('#enq-retry').hidden = false })
+  }
   function onLockChange() {
     if (stopped || ending || !locked()) return     // la perte du verrou passe par onUnlock du contrôleur
     $('#enq-card').hidden = true; $('#enq-pause').hidden = true
+    $('#enq-retry').hidden = true; cancel(retryTimer); retryTimer = 0
     state.resume()
     controller.setFrozen(state.mode !== 'exploring')   // la pause a figé le contrôleur ; une fiche ouverte reste figée
     if (!started) begin()
@@ -303,6 +313,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     state.pause()
     controller.setFrozen(true)
     aim(false)
+    $('#enq-retry').hidden = true
     $('#enq-pause').hidden = false
   }
   function finish(result) {
@@ -398,7 +409,9 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     showKeys()
 
     $('#enq-card').addEventListener('click', guard(requestLock))
-    $('#enq-resume').addEventListener('click', guard(requestLock))
+    $('#enq-resume').addEventListener('click', guard(resume))
+    // sortie de secours si le navigateur refuse le verrouillage : le clic ne remonte pas jusqu'à la carte
+    $('#enq-card-skip').addEventListener('click', guard(e => { e.stopPropagation(); finish('skipped') }))
     $('#enq-skip').addEventListener('click', guard(() => finish('skipped')))
     controller.enable()
     listen(document, 'keydown', onKey)

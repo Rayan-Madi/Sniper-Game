@@ -48,6 +48,10 @@
   border: 1px solid rgba(215,220,207,.4); border-bottom-width: 2px; border-radius: 3px; background: rgba(215,220,207,.06); }
 .enq .enq-card kbd + kbd { margin-left: -.35em; }
 .enq .enq-card .go { margin-top: 3.4vh; font-size: clamp(12px, 1.1vw, 16px); letter-spacing: .4em; padding-left: .4em; color: #f0c040; animation: enq-in .6s ease-out 1.6s forwards, enq-pulse 1.6s ease-in-out 2.2s infinite; }
+/* sortie de secours (verrouillage du pointeur refusé) : petit bouton discret au pied de la carte, style de la pause */
+.enq .enq-card .skip { position: absolute; left: 0; right: 0; bottom: 5vh; width: max-content; margin: 0 auto; font: inherit; font-size: clamp(10px, .78vw, 12px); letter-spacing: .3em;
+  padding: .9vh 1.4vw; background: transparent; color: rgba(215,220,207,.45); border: 1px solid rgba(215,220,207,.22); cursor: pointer; animation-delay: 2.2s; }
+.enq .enq-card .skip:hover { border-color: #f0c040; color: #f0c040; }
 @keyframes enq-in { 0% { opacity: 0; transform: translateY(.8vh) } 100% { opacity: 1; transform: none } }
 @keyframes enq-line { to { transform: scaleX(1) } }
 @keyframes enq-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .3 } }
@@ -88,6 +92,8 @@
 .enq .enq-pause h2 { margin: 0 0 1.6vh; font-weight: normal; font-size: clamp(20px, 2.6vw, 36px); letter-spacing: .5em; padding-left: .5em; color: #f1f4ea; }
 .enq .enq-pause button { font: inherit; font-size: clamp(12px, 1.15vw, 16px); letter-spacing: .3em; padding: 1.4vh 2.4vw; min-width: 26vw; background: transparent; color: #d7dccf; border: 1px solid rgba(215,220,207,.4); cursor: pointer; }
 .enq .enq-pause button:hover { border-color: #f0c040; color: #f0c040; }
+/* REPRENDRE refusé par le navigateur (moins d'une seconde après Échap) */
+.enq .enq-retry { margin: -.8vh 0 0; font-size: clamp(11px, .95vw, 14px); letter-spacing: .3em; padding-left: .3em; color: #f0c040; animation: enq-pulse 1.6s ease-in-out infinite; }
 .enq .enq-black { position: absolute; inset: 0; background: #000; opacity: 1; transition: opacity .9s; }
 .enq .enq-black.off { opacity: 0; }
 .enq .enq-black.end { transition-duration: .6s; }

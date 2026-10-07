@@ -111,6 +111,58 @@ describe('l\'enquête', () => {
     h.stop()
   })
 
+  it('sur la carte de départ, « PASSER L\'ENQUÊTE » termine en « skipped » sans demander le verrou (navigateur qui le refuse)', async () => {
+    const renderer = fakeRenderer(), onDone = vi.fn()
+    renderer.domElement.requestPointerLock = vi.fn()               // le navigateur refuse : la carte reste
+    startInvestigation({ renderer, camera: new THREE.PerspectiveCamera(), onDone })
+    const skip = $('#enq-card #enq-card-skip')
+    expect(skip).not.toBeNull()
+    expect(skip.textContent).toBe('PASSER L\'ENQUÊTE')
+    skip.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(renderer.domElement.requestPointerLock).not.toHaveBeenCalled()   // le clic ne passe pas à la carte
+    await vi.advanceTimersByTimeAsync(800)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(onDone).toHaveBeenCalledWith({ result: 'skipped' })
+    expect($('#enq-root')).toBeNull()
+  })
+
+  it('REPRENDRE refusé par le navigateur (trop tôt après Échap) : « CLIQUE ENCORE POUR REPRENDRE » au bout de 600 ms', async () => {
+    const renderer = fakeRenderer()
+    const h = startInvestigation({ renderer, camera: new THREE.PerspectiveCamera(), onDone: vi.fn() })
+    $('#enq-card').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    lockEl = null; document.dispatchEvent(new Event('pointerlockchange'))
+    const retry = $('#enq-pause #enq-retry')
+    expect(retry).not.toBeNull()
+    expect(retry.hidden).toBe(true)
+    const grant = renderer.domElement.requestPointerLock.getMockImplementation()
+    renderer.domElement.requestPointerLock.mockImplementation(() => {})   // refusé
+    $('#enq-resume').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(599)
+    expect(retry.hidden).toBe(true)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(retry.hidden).toBe(false)
+    expect(retry.textContent).toBe('CLIQUE ENCORE POUR REPRENDRE')
+    renderer.domElement.requestPointerLock.mockImplementation(grant)     // accordé au second clic
+    $('#enq-resume').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect($('#enq-pause').hidden).toBe(true)
+    expect(retry.hidden).toBe(true)
+    lockEl = null; document.dispatchEvent(new Event('pointerlockchange'))   // pause suivante : l'invite repart cachée
+    expect($('#enq-pause').hidden).toBe(false)
+    expect(retry.hidden).toBe(true)
+    h.stop()
+  })
+
+  it('REPRENDRE accordé tout de suite : pas d\'invite à recliquer', async () => {
+    const renderer = fakeRenderer()
+    const h = startInvestigation({ renderer, camera: new THREE.PerspectiveCamera(), onDone: vi.fn() })
+    $('#enq-card').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    lockEl = null; document.dispatchEvent(new Event('pointerlockchange'))
+    $('#enq-resume').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect($('#enq-retry').hidden).toBe(true)
+    h.stop()
+  })
+
   it('une erreur au démarrage démonte tout et appelle onDone une fois, après le retour', async () => {
     const onDone = vi.fn()
     const h = startInvestigation({ renderer: fakeRenderer(), camera: null, onDone })
