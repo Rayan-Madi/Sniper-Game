@@ -1,12 +1,16 @@
 import * as THREE from 'three'
 import { scene, setLighting } from './scene.js'
+import { disposeObject } from './gfx/dispose.js'
 
 let mapObjects = []
 let obstacles = []   // AABB XZ des objets solides — les PNJ ne les traversent pas
 let ambientFn = null // animation d'ambiance de la map (pluie, etc.)
 
+// Retire la carte courante et libère ses ressources GPU (géométries, matériaux, carte d'ombre des lumières ; la
+// géométrie de la pluie du port est dans mapObjects comme le reste). Sans cela, chaque lancement de mission laissait
+// au renderer toute la carte précédente (de 58 à 461 géométries).
 function clear() {
-  for (const o of mapObjects) scene.remove(o)
+  for (const o of mapObjects) disposeObject(o)
   mapObjects = []
   obstacles = []
   ambientFn = null
@@ -17,6 +21,9 @@ export function updateMapAmbient(dt) { if (ambientFn) ambientFn(dt) }
 
 // Vide la scène de la carte courante (utilisé par la carte PvP).
 export function clearMap() { clear() }
+
+// Vrai si o fait partie du décor de la carte affichée (vérification du menu, accroche de dev __decor de main.js).
+export const isMapObject = o => mapObjects.includes(o)
 
 // Obstacles solides de la map courante (collision PNJ)
 export function getObstacles() { return obstacles }

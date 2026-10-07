@@ -1,12 +1,12 @@
 import * as THREE from 'three'
-import { initScene, scene, camera, renderer } from './scene.js'
+import { initScene, scene, camera, renderer, ambient, sun, fill } from './scene.js'
 import { showScope, hideScope, isVisible, setZoom, getZoom, setStress, setSteady, updateTremble, getTrembleOffset, drawScope } from './scope.js'
 import { NPC, STATES } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
-import { MAP_BUILDERS, updateMapAmbient, makeJeep } from './maps.js'
+import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject } from './maps.js'
 import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
-import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects } from './effects.js'
+import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys } from './settings.js'
 import { preloadCharacters } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
@@ -16,7 +16,8 @@ import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
 import { rankFor, precisionOf, isHit } from './campaign/rank.js'
 import { levelShortcut } from './campaign/shortcuts.js'
-import { stepConvoy } from './campaign/convoy.js'
+import { stepConvoy, releaseConvoy } from './campaign/convoy.js'
+import { buildMoralLock, releaseMoralLock } from './campaign/lock.js'
 import { missImpact } from './campaign/impact.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
@@ -65,7 +66,6 @@ let moralLockMesh = null, moralLockBox = null, moralLockLight = null
 
 // Bonus de tir
 let lastTargetKillAt = -99999   // double élimination
-let bulletHoles = []            // impacts de balle persistants au sol
 
 // Apnée (retenir son souffle)
 let breathMeter = 1        // 1 = plein, 0 = vide
@@ -389,7 +389,7 @@ function launchLevel(n, { forceBriefing = false } = {}) {
 
 function clearConvoy() {
   if (convoyCar) {
-    for (const v of convoyCar.vehicles) scene.remove(v.mesh)
+    releaseConvoy(convoyCar)
     convoyCar = null; convoyTarget = null
   }
 }
@@ -399,14 +399,15 @@ function clearEntities() {
   unmountLevel()
 }
 
-// Démontage de la scène d'une mission (PNJ, convoi, impacts, effets) : relance, mission suivante, retour au menu, et
-// la route ?memtest=1. Retirés de la scène seulement : la libération des ressources GPU vient au lot 1, tâche L2.
+// Démontage de la scène d'une mission (PNJ, convoi, cadenas, impacts, effets) : relance, mission suivante, retour au
+// menu, et la route ?memtest=1. Jeeps, cadenas et effets libèrent leurs ressources GPU ; les trous d'impact partagent
+// les leurs (effects.js). Les PNJ sont seulement retirés de la scène : leur libération vient au lot 1, tâche L3.
 function unmountLevel() {
   for (const npc of npcs) scene.remove(npc.mesh)
   clearConvoy()
+  removeMoralLock()   // sinon le cadenas du port restait sous le menu, posé dans la rue
   npcs = []; targets = []; guards = []; civilians = []
-  for (const h of bulletHoles) scene.remove(h)
-  bulletHoles = []
+  clearBulletHoles()
   clearEffects()
 }
 
@@ -461,7 +462,7 @@ function startLevel(n) {
 // Montage de la scène d'une mission (carte, PNJ, cadenas, convoi, caméra de départ), sans écran, son ni minuteur :
 // startLevel l'appelle, la route ?memtest=1 aussi. Le hasard est tiré dans le même ordre qu'avant l'extraction.
 function mountLevel(n) {
-  if (moralLockMesh) { scene.remove(moralLockMesh); moralLockMesh = null; moralLockBox = null; moralLockLight = null }
+  removeMoralLock()
 
   currentLevelData = getLevel(n)
 
@@ -471,22 +472,7 @@ function mountLevel(n) {
 
   // Cadenas du choix moral (port) : un tir dessus libère les victimes du conteneur
   if (currentMapInfo.moralLock) {
-    const [lx, ly, lz] = currentMapInfo.moralLock.pos
-    moralLockMesh = new THREE.Group()
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.18),
-      new THREE.MeshStandardMaterial({ color: 0xd9b02c, metalness: 0.75, roughness: 0.25 }))
-    moralLockMesh.add(body)
-    const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.05, 8, 14, Math.PI),
-      new THREE.MeshStandardMaterial({ color: 0x9a9a9a, metalness: 0.85, roughness: 0.2 }))
-    shackle.position.y = 0.27; moralLockMesh.add(shackle)
-    // halo doré pulsant — attire l'œil du sniper
-    moralLockLight = new THREE.PointLight(0xffcc44, 1.6, 7)
-    moralLockLight.position.set(0, 0.2, 0.7)
-    moralLockMesh.add(moralLockLight)
-    moralLockMesh.position.set(lx, ly, lz)
-    scene.add(moralLockMesh)
-    moralLockBox = new THREE.Box3().setFromCenterAndSize(
-      new THREE.Vector3(lx, ly + 0.1, lz), new THREE.Vector3(0.9, 1.0, 0.7))
+    ({ mesh: moralLockMesh, box: moralLockBox, light: moralLockLight } = buildMoralLock(currentMapInfo.moralLock.pos))
   }
 
   // Positionner la caméra depuis le point sniper de la map
@@ -614,10 +600,17 @@ function mountLevel(n) {
   }
 }
 
+// Cadenas du port retiré et libéré (tiré, mission relancée ou quittée).
+function removeMoralLock() {
+  if (moralLockMesh) releaseMoralLock(moralLockMesh)
+  moralLockMesh = null; moralLockBox = null; moralLockLight = null
+}
+
 function showMenu() {
   abortInvestigation()
   missionToken++   // la mission est abandonnée : ses minuteurs de fin (kill-cam, civil abattu) ne doivent plus tomber sur le menu
-  unmountLevel()   // PNJ, convoi, et désormais aussi les impacts et les effets de la mission quittée
+  unmountLevel()   // PNJ, convoi, cadenas, impacts et effets de la mission quittée
+  MAP_BUILDERS[0]()   // la carte de la mission est libérée, la rue revient derrière le menu (comme au démarrage)
   hideScope()
   releaseMouse()
   hudEl.style.display = 'none'
@@ -874,9 +867,8 @@ function resolveBullet() {
   if (kind === 'lock') {
     spawnTracer(muzzlePos, moralLockMesh.position)
     spawnImpact(moralLockMesh.position.clone(), 0xc9a227, 10)
-    scene.remove(moralLockMesh)
     const lockPos = moralLockMesh.position.clone()
-    moralLockMesh = null; moralLockBox = null
+    removeMoralLock()
     upgradeState.freedVictims = true
     score += 150
     addKillFeed('🔓 Conteneur ouvert : ils s\'échappent... (+150 pts)')
@@ -899,14 +891,7 @@ function resolveBullet() {
     spawnTracer(muzzlePos, shotPos)
     spawnDust(shotPos)
     // trou d'impact persistant dans le sol (témoin de tes tirs ratés)
-    if (holePos) {
-      const hole = new THREE.Mesh(new THREE.CircleGeometry(0.09, 8),
-        new THREE.MeshBasicMaterial({ color: 0x17130f }))
-      hole.rotation.x = -Math.PI / 2
-      hole.position.copy(holePos)
-      scene.add(hole); bulletHoles.push(hole)
-      if (bulletHoles.length > 24) scene.remove(bulletHoles.shift())
-    }
+    if (holePos) spawnBulletHole(holePos)
 
     if (!stats.silenced) {
       stress = Math.min(1, stress + 0.15)
@@ -1380,6 +1365,11 @@ if (import.meta.env.DEV) {
       appels: i.render.calls, triangles: i.render.triangles, objets,
       tasJSMo: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null }
   }
+  // Décor de la scène (scripts/capture-mission.mjs, retour au menu) : couleur du fond (celle de la carte affichée,
+  // 87a0b0 pour la rue) et type des objets qui ne sont ni la carte ni les trois lumières du jeu (impacts, effets,
+  // cadenas, PNJ ou jeeps restés dans la scène).
+  window.__decor = () => ({ fond: scene.background && scene.background.getHexString(),
+    horsCarte: scene.children.filter(o => !isMapObject(o) && o !== ambient && o !== sun && o !== fill).map(o => o.type) })
   // Visée (relectures du zoom) : __aim() dans la console
   window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), scoped: isVisible() })
   // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console

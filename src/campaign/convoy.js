@@ -1,6 +1,7 @@
 // Convoi de la mission 5 : trois jeeps qui traversent la route, avec leurs occupants.
 // convoy = { baseX, z, groundY, dir, speed, vehicles: [{ mesh, offsetX, riders: [{ npc, dx, dy, dz }] }] } :
 // baseX avance le long de X, z est l'axe de la route, groundY le dessus de sa chaussée (maps.js).
+import { disposeObject } from '../gfx/dispose.js'
 
 // Au-delà, le convoi a quitté la zone de tir.
 export const CONVOY_END_X = 60
@@ -25,4 +26,10 @@ export function stepConvoy(convoy, dt, target) {
     }
   }
   return false
+}
+
+// Retire les jeeps du convoi (relance, mission suivante, retour au menu) et libère leurs ressources (27 géométries
+// par jeep). Les occupants ne sont pas enfants des jeeps : ce sont des PNJ de la mission, retirés avec les autres.
+export function releaseConvoy(convoy) {
+  for (const v of convoy.vehicles) disposeObject(v.mesh)
 }

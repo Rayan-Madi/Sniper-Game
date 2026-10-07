@@ -4,8 +4,11 @@
 // fondus CSS sont figés. Rendu logiciel (SwiftShader) par défaut : même code, mêmes octets PNG. Sur la carte
 // graphique (GPU=1), deux sessions peuvent différer d'un niveau de couleur sur quelques pixels (shaders compilés par
 // le pilote).
-// Prérequis : npm run dev. Usage : node scripts/capture-mission.mjs <dossier> [menu] [1…6]
+// Prérequis : npm run dev. Usage : node scripts/capture-mission.mjs <dossier> [menu] [1…6] [retour1…retour6]
 //   ex. node scripts/capture-mission.mjs avant-lot1 menu 1 3 5 6   → shots/avant-lot1/m1.png, …
+//   retour<n> : mission n, trois tirs manqués (impacts au sol, poussière, traceurs encore en vie), puis retour au menu
+//   (pause, MENU ; MENU de l'écran d'échec si une cible a fui) → shots/<dossier>/retour-m<n>.png. Le décor de la
+//   scène (__decor() : fond, objets hors carte) est affiché avant et après le retour.
 // Variables : CHROME (chemin de Chrome), BASE_URL (défaut http://localhost:5173/), IMAGES (défaut 20),
 // GPU=1 (carte graphique au lieu du rendu logiciel), PARAMS (ajoutés à l'URL, ex. stats=1).
 // Le port DevTools est choisi par Chrome (--remote-debugging-port=0, relu dans DevToolsActivePort) : jamais un port
@@ -125,14 +128,23 @@ async function shoot(target) {
     // Sauvegarde posée sur une première page, avant le script de déterminisme
     await c.send('Page.navigate', { url: URL_JEU })
     await until(c, `document.readyState === 'complete'`)
-    const n = target === 'menu' ? 1 : +target
+    const retour = /^retour(\d)$/.exec(target)
+    const n = target === 'menu' ? 1 : retour ? +retour[1] : +target
     await js(c, `localStorage.setItem('sniper-save', ${JSON.stringify(JSON.stringify(saveAt(n)))})`)
     await c.send('Page.enable')
     await c.send('Runtime.enable')
     await c.send('Page.addScriptToEvaluateOnNewDocument', { source: DETERMINISME })
-    let charges = 0
+    // Modèles chargés : seuls comptent les messages de la page rechargée. La première page (celle de la sauvegarde)
+    // charge encore ses modèles quand on la quitte : un de ses messages pouvait compter pour la seconde, le clic partait
+    // avant la fin du chargement, et le hasard à graine tirait autre chose (décor et PNJ différents d'une capture à
+    // l'autre, au même code).
+    let charges = 0, page = null
     c.listeners.push(m => {
-      if (m.method === 'Runtime.consoleAPICalled' && String(m.params.args?.[0]?.value || '').startsWith('[characters] chargé')) charges++
+      if (m.method === 'Runtime.executionContextCreated' && m.params.context.auxData?.isDefault) {
+        page = m.params.context.id; charges = 0
+      }
+      if (m.method === 'Runtime.consoleAPICalled' && m.params.executionContextId === page &&
+        String(m.params.args?.[0]?.value || '').startsWith('[characters] chargé')) charges++
     })
     await c.send('Page.navigate', { url: URL_JEU })
     await until(c, `document.readyState === 'complete' && typeof window.__step === 'function'`)
@@ -143,14 +155,16 @@ async function shoot(target) {
       await js(c, `document.getElementById('btn-start').click()`)
       await until(c, `__mission().phase === 'playing'`)
     }
+    if (retour) await missThenMenu(c)
     await js(c, `__step(${IMAGES})`)
     await js(c, `__step(1)`)
     const { data } = await c.send('Page.captureScreenshot', { format: 'png' })
-    const out = resolve('shots', dir, target === 'menu' ? 'menu.png' : `m${n}.png`)
+    const out = resolve('shots', dir, target === 'menu' ? 'menu.png' : retour ? `retour-m${n}.png` : `m${n}.png`)
     mkdirSync(resolve('shots', dir), { recursive: true })
     const buf = Buffer.from(data, 'base64')
     writeFileSync(out, buf)
     console.log(out, createHash('sha256').update(buf).digest('hex').slice(0, 16))
+    if (retour) console.log('  décor au menu :', JSON.stringify(await js(c, '__decor()')))
   } finally {
     if (c) { try { await Promise.race([c.send('Browser.close'), sleep(2000)]) } catch { /* déjà fermé */ } c.ws.close() }
     await new Promise(r => { if (proc.exitCode !== null) r(); else { proc.once('exit', r); setTimeout(r, 3000) } })
@@ -159,6 +173,32 @@ async function shoot(target) {
       try { rmSync(profile, { recursive: true, force: true }); break } catch { await sleep(300) }
     }
   }
+}
+
+// Lunette ouverte, visée relevée au-dessus des PNJ : la balle passe haut et finit au sol très loin derrière eux (une
+// soixantaine de mètres au port), aucun ne fuit et la mission continue. Trois tirs manqués un peu décalés, puis
+// retour au menu pendant que poussière et traceur sont encore en vie.
+const mouse = (type, init) => `document.dispatchEvent(new MouseEvent('${type}', ${JSON.stringify(init)}))`
+const playing = c => js(c, `__mission().phase === 'playing'`)
+async function missThenMenu(c) {
+  await js(c, mouse('mousedown', { button: 2 }))
+  await js(c, mouse('mousemove', { movementX: 0, movementY: -160 }))
+  for (let i = 0; i < 3 && await playing(c); i++) {
+    if (i) await js(c, mouse('mousemove', { movementX: 40, movementY: 0 }))
+    await js(c, mouse('mousedown', { button: 0 }))
+    for (let k = 0; k < 120 && await js(c, '__mission().balle') && await playing(c); k++) await js(c, '__step(1)')
+  }
+  await js(c, '__step(2)')
+  console.log('  décor avant le retour :', JSON.stringify(await js(c, '__decor()')))
+  console.log('  mission :', JSON.stringify(await js(c, `(({ phase, tirs, touches, alertes }) => ({ phase, tirs, touches, alertes,
+    echec: phase === 'dead' ? document.getElementById('game-over-reason').textContent : null }))(__mission())`)))
+  if (await js(c, `__mission().phase === 'playing'`)) {
+    await js(c, `document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }))`)
+    await js(c, `document.getElementById('btn-pause-menu').click()`)
+  } else {
+    await js(c, `document.getElementById('btn-menu').click()`)
+  }
+  await js(c, mouse('mouseup', { button: 2 }))
 }
 
 let failed = 0
