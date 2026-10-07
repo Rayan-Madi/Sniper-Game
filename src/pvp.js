@@ -218,7 +218,14 @@ export function initMultiplayerMenu() {
     if (roundActive) endRound(null, reason)
   }
   net.on('peer_left', () => onPeerLost('peer_left'))
-  net.on('disconnected', () => onPeerLost('disconnected'))
+  // Relais perdu hors manche : l'attente en cours (partie créée, partie rejointe, manche suivante) ne peut plus
+  // aboutir. Un message la remplace ; ANNULER et QUITTER restent utilisables.
+  net.on('disconnected', () => {
+    if (roundActive || isPvpIntroActive()) return onPeerLost('disconnected')
+    if (mpCreate.style.display === 'flex') { codeDisplay.textContent = '----'; createStatus.textContent = 'Relais perdu.' }
+    if (mpJoin.style.display === 'flex') joinError.textContent = 'Relais perdu.'
+    if (mpResult.style.display === 'flex') { rematchBtn.disabled = true; rematchBtn.textContent = 'RELAIS PERDU.' }
+  })
   net.on('ability', (msg) => applyIncomingAbility(msg.kind))
   net.on('part_pickup', (msg) => removePartVisual(msg.idx))
   net.on('aim', (msg) => { sniperYaw = msg.yaw; sniperPitch = msg.pitch })

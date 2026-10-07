@@ -53,17 +53,22 @@ export function isConnected() { return !!ws && ws.readyState === WebSocket.OPEN 
 export function connect(onOpen, onError) {
   if (ws) { try { ws.close() } catch (e) {} }
   const sock = ws = new WebSocket(RELAY_URL)
-  sock.onopen = () => onOpen && onOpen()
+  let opened = false
+  sock.onopen = () => { opened = true; onOpen && onOpen() }
   sock.onerror = (e) => onError && onError(e)
+  // Seule la socket courante est entendue : une socket remplacée par connect()
+  // ou abandonnée par disconnect() (qui remet ws à null) peut encore livrer un
+  // message ou signaler sa fermeture après coup. Ni l'un ni l'autre ne doit
+  // réécrire l'écran ou couper la nouvelle manche.
   sock.onmessage = (ev) => {
+    if (ws !== sock) return
     let msg
     try { msg = JSON.parse(ev.data) } catch (e) { return }
     emit(msg.t, msg)
   }
-  // Seule la socket courante annonce la perte du relais : une socket
-  // remplacée par connect() ou abandonnée par disconnect() (qui remet ws à
-  // null) peut signaler sa fermeture après coup, sans couper la nouvelle manche.
-  sock.onclose = () => { if (ws === sock) emit('disconnected', {}) }
+  // Seule une liaison établie peut être perdue : un relais injoignable passe
+  // par onError (message « Connexion impossible »), pas par 'disconnected'.
+  sock.onclose = () => { if (ws === sock && opened) emit('disconnected', {}) }
 }
 
 export function disconnect() {

@@ -35,6 +35,8 @@ class FakeWebSocket {
   open() { this.readyState = 1; this.onopen && this.onopen() }
   receive(msg) { this.onmessage && this.onmessage({ data: JSON.stringify(msg) }) }
   drop() { this.readyState = 3; this.onclose && this.onclose() }
+  // relais absent : le navigateur signale une erreur puis la fermeture, sans jamais ouvrir la socket
+  refuse() { this.readyState = 3; this.onerror && this.onerror(new Event('error')); this.onclose && this.onclose() }
 }
 
 const param = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} })
@@ -167,5 +169,92 @@ describe('perte du relais en PvP', () => {
     expect(old.readyState).toBe(3)
     expect($('mp-result').style.display).not.toBe('flex')
     expect($('mp-hud').style.display).toBe('block')
+  })
+})
+
+// Hors manche, une attente figée sans issue : partie créée qui attend un adversaire, partie rejointe qui attend le
+// départ, écran de fin qui attend la manche suivante. Si le relais tombe, un message clair remplace l'attente et
+// le bouton d'annulation ou de retour reste utilisable.
+describe('perte du relais hors manche', () => {
+  it('partie créée, en attente d\'un adversaire : « Relais perdu. » remplace l\'attente, ANNULER ramène au menu multijoueur', () => {
+    $('btn-mp-create').onclick()
+    const ws = FakeWebSocket.last
+    ws.open()
+    ws.receive({ t: 'created', room: 'ABCD' })
+    expect($('mp-create-status').textContent).toBe('En attente d\'un adversaire…')
+    ws.drop()
+    expect($('mp-create').style.display).toBe('flex')
+    expect($('mp-create-status').textContent).toBe('Relais perdu.')
+    expect($('mp-code-display').textContent).toBe('----')   // le code d'une partie que le relais a oubliée
+    expect($('mp-result').style.display).not.toBe('flex')
+    $('btn-mp-create-cancel').onclick()
+    expect($('mp-create').style.display).toBe('none')
+    expect($('mp-menu').style.display).toBe('flex')
+  })
+
+  it('partie rejointe, en attente du départ : « Relais perdu. » remplace l\'attente, ANNULER ramène au menu multijoueur', () => {
+    $('btn-mp-join-show').onclick()
+    $('mp-join-input').value = 'ABCD'
+    $('btn-mp-join-go').onclick()
+    const ws = FakeWebSocket.last
+    ws.open()
+    ws.receive({ t: 'joined', room: 'ABCD' })
+    expect($('mp-join-error').textContent).toBe('Connecté. En attente du démarrage…')
+    ws.drop()
+    expect($('mp-join').style.display).toBe('flex')
+    expect($('mp-join-error').textContent).toBe('Relais perdu.')
+    $('btn-mp-join-cancel').onclick()
+    expect($('mp-join').style.display).toBe('none')
+    expect($('mp-menu').style.display).toBe('flex')
+  })
+
+  it('écran de fin, revanche demandée : « RELAIS PERDU » remplace l\'attente de l\'adversaire, QUITTER ramène au menu', () => {
+    const ws = startMatch('sniper')
+    intro.active = false; intro.onDone()
+    ws.receive({ t: 'hit_pnj' })                   // manche gagnée : l'écran de fin propose la suivante
+    expect($('mp-result-title').textContent).toBe('VICTOIRE')
+    $('btn-mp-rematch').onclick()
+    expect($('btn-mp-rematch').textContent).toBe('EN ATTENTE DE L\'ADVERSAIRE…')
+    ws.drop()
+    expect($('mp-result').style.display).toBe('flex')
+    expect($('mp-result-title').textContent).toBe('VICTOIRE')   // le résultat de la manche jouée reste affiché
+    expect($('btn-mp-rematch').textContent).toBe('RELAIS PERDU.')
+    expect($('btn-mp-rematch').disabled).toBe(true)
+    $('btn-mp-quit').onclick()
+    expect($('mp-result').style.display).toBe('none')
+    expect($('menu').style.display).toBe('flex')
+  })
+
+  it('relais absent dès la connexion : le message « Connexion impossible » reste (pas de « Relais perdu. » par-dessus)', () => {
+    $('btn-mp-create').onclick()
+    const ws = FakeWebSocket.last
+    ws.refuse()
+    expect($('mp-create-status').textContent).toMatch(/^Connexion impossible/)
+    $('btn-mp-create-cancel').onclick()
+    $('btn-mp-join-show').onclick()
+    $('mp-join-input').value = 'ABCD'
+    $('btn-mp-join-go').onclick()
+    FakeWebSocket.last.refuse()
+    expect($('mp-join-error').textContent).toBe('Impossible de se connecter au relais.')
+    $('btn-mp-join-cancel').onclick()
+  })
+
+  // Seule la socket courante livre ses messages : une réponse tardive d'une socket remplacée ne réécrit pas l'écran.
+  it('code erroné puis nouvel essai : un message tardif de l\'ancienne socket n\'est plus livré', () => {
+    $('btn-mp-join-show').onclick()
+    $('mp-join-input').value = 'ZZZZ'
+    $('btn-mp-join-go').onclick()
+    const old = FakeWebSocket.last
+    old.open()
+    $('mp-join-input').value = 'ABCD'
+    $('btn-mp-join-go').onclick()                  // net.connect remplace l'ancienne socket
+    expect($('mp-join-error').textContent).toBe('Connexion…')
+    old.receive({ t: 'error', message: 'Room introuvable.' })   // réponse au premier code, arrivée trop tard
+    expect($('mp-join-error').textContent).toBe('Connexion…')
+    const ws = FakeWebSocket.last
+    ws.open()
+    ws.receive({ t: 'joined', room: 'ABCD' })      // la socket courante, elle, est entendue
+    expect($('mp-join-error').textContent).toBe('Connecté. En attente du démarrage…')
+    $('btn-mp-join-cancel').onclick()
   })
 })
