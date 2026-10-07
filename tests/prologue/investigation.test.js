@@ -419,6 +419,34 @@ describe('l\'enquête — la photo des corps', () => {
   })
 })
 
+// ── finition : lisibilité de l'interface (règles de la feuille de style) ──
+describe('l\'enquête — lisibilité', () => {
+  const rule = sel => { const m = css.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}')); return m ? m[1] : '' }
+  const keyframes = name => { const m = css.match(new RegExp(`@keyframes ${name}\\s*\\{([\\s\\S]*?)\\}\\s*\\}`)); return m ? m[1] + '}' : '' }
+
+  it('« E — ÉCOUTER LE MESSAGE » : le E bat entre 1 et 0,45, il ne disparaît jamais', () => {
+    const anim = rule('.enq .enq-act.go b').match(/animation:\s*([\w-]+)/)
+    expect(anim).not.toBeNull()
+    const ops = [...keyframes(anim[1]).matchAll(/opacity:\s*([\d.]+)/g)].map(m => +m[1])
+    expect(ops.length).toBeGreaterThan(0)
+    expect(Math.min(...ops)).toBeCloseTo(0.45, 5)
+  })
+
+  it('l\'invite « E — EXAMINER » passe nettement sous le point de visée (≈ 6 vh), sans couvrir les petits objets', () => {
+    const top = rule('.enq .enq-prompt').match(/top:\s*calc\(50% \+ ([\d.]+)vh\)/)
+    expect(top).not.toBeNull()
+    expect(+top[1]).toBeGreaterThanOrEqual(5.5)
+  })
+
+  it('les légendes de la photo (lieu, tampon « 14 03 · 21:47 ») sur un fond sombre semi-transparent', () => {
+    for (const sel of ['.enq .enq-photo .stamp', '.enq .enq-photo .lieu']) {
+      const bg = rule(sel).match(/background:\s*rgba\(0,\s*0,\s*0,\s*([\d.]+)\)/)
+      expect(bg, sel).not.toBeNull()
+      expect(+bg[1]).toBeGreaterThanOrEqual(0.4); expect(+bg[1]).toBeLessThan(0.9)
+    }
+  })
+})
+
 describe('l\'enquête — le cadre suit le volume de visée', () => {
   it('le volume de visée invisible de l\'indice prime sur ce qui est semé autour', () => {
     const camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.05, 40); camera.updateMatrixWorld()
