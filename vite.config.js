@@ -14,5 +14,6 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['tests/**/*.test.js'],
     setupFiles: ['tests/setup.js'],
+    testTimeout: 20000,   // tests/briefing/ids.test.js et tests/scripts/port-maquette.test.js dépassent 5 s sur machine chargée
   },
 })
