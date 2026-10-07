@@ -49,3 +49,24 @@ describe('raccourci de mission : réservé au développement, jamais par-dessus 
     expect(levelShortcut('Digit3', { ...DEV_MENU, overlayOpen: true })).toBe(null)
   })
 })
+
+// main.js passe overlayOpen sous forme de fonction (getComputedStyle sur cinq écrans) : elle ne tourne qu'en dernier,
+// en dev, hors partie, sur une touche de mission, pas à chaque touche pressée.
+describe('raccourci de mission : écrans ouverts vérifiés seulement si utile', () => {
+  it('overlayOpen en fonction : son verdict compte (fermé : mission lancée, ouvert : rien)', () => {
+    expect(levelShortcut('Digit3', { ...DEV_MENU, overlayOpen: () => false })).toBe(3)
+    expect(levelShortcut('Digit3', { ...DEV_MENU, overlayOpen: () => true })).toBe(null)
+  })
+
+  it('en production, en pleine partie ou sur une autre touche : la fonction n\'est jamais appelée', () => {
+    let calls = 0
+    const overlayOpen = () => { calls++; return false }
+    levelShortcut('Digit3', { ...DEV_MENU, dev: false, overlayOpen })
+    levelShortcut('Digit3', { ...DEV_MENU, phase: 'playing', overlayOpen })
+    levelShortcut('KeyW', { ...DEV_MENU, overlayOpen })
+    levelShortcut('ShiftLeft', { ...DEV_MENU, overlayOpen })
+    expect(calls).toBe(0)
+    levelShortcut('Digit3', { ...DEV_MENU, overlayOpen })
+    expect(calls).toBe(1)
+  })
+})

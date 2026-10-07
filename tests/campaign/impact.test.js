@@ -36,4 +36,19 @@ describe('tir manqué : la balle finit sur le sol de la carte', () => {
     expect(point.distanceTo(r.origin)).toBeCloseTo(40, 9)
     expect(hole).toBe(null)
   })
+
+  // Le seuil du trou suit le sol de la carte (groundY + 1), pas l'ancien y < 1 : sur le port (0,345 m), une balle
+  // tirée à plat qui finit 40 m devant entre 1 et 1,345 m laisse encore un trou, au-delà non.
+  it('port, tir à plat à 1,2 m (sous groundY + 1 = 1,345) : la balle finit 40 m devant et laisse un trou', () => {
+    const { point, hole } = missImpact(ray([0, 1.2, 28], [0, 1.2, 0]), 0.345)
+    expect(point.y).toBeCloseTo(1.2, 9)
+    expect(point.z).toBeCloseTo(28 - 40, 9)
+    expect(hole).not.toBe(null)
+    expect(hole.y).toBeCloseTo(0.345 + 0.035, 9)
+  })
+
+  it('port, tir à plat à 1,4 m (au-dessus de groundY + 1) : pas de trou', () => {
+    const { hole } = missImpact(ray([0, 1.4, 28], [0, 1.4, 0]), 0.345)
+    expect(hole).toBe(null)
+  })
 })

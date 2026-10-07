@@ -71,7 +71,7 @@ let holdBreathKey = false  // touche Shift enfoncée
 let isHolding = false      // apnée effectivement active
 
 // Convoi (véhicule mobile)
-let convoyCar = null       // { mesh, x, dir, speed }
+let convoyCar = null       // { baseX, z, groundY, dir, speed, vehicles }, détaillé en tête de campaign/convoy.js
 let convoyTarget = null    // la cible assise dans le véhicule
 
 // Dernière mission réussie dans cette session (journal de Viktor, écran des améliorations). La sauvegarde, elle,
@@ -1128,7 +1128,7 @@ document.addEventListener('keydown', e => {
   // sauter à une mission (campaign/shortcuts.js). Jamais en production, ni pendant une saisie : les codes PvP
   // contiennent des chiffres.
   if (e.target.closest && e.target.closest('input, textarea')) return
-  const n = levelShortcut(e.code, { dev: import.meta.env.DEV, phase: gamePhase, overlayOpen: overlayOpen() })
+  const n = levelShortcut(e.code, { dev: import.meta.env.DEV, phase: gamePhase, overlayOpen })   // appelée au besoin
   if (n !== null) {
     jumpToLevel(upgradeState, n)   // la campagne reprend à cette mission : elle n'est plus finie
     launchLevel(upgradeState.currentLevel)

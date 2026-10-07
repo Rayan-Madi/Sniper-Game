@@ -4,7 +4,7 @@ import { stepConvoy } from '../../src/campaign/convoy.js'
 
 // Convoi de M5 tel que startLevel le monte : la jeep du colonel (chauffeur + colonel à l'arrière) et une escorte.
 // La route est une dalle dont le dessus est à 0,2 m (maps.js, buildMapConvoy).
-function makeConvoy(groundY = 0.2) {
+function makeConvoy(groundY = 0.2, z = -4) {
   const npc = () => ({ alive: true, mesh: new THREE.Object3D() })
   const driver = npc(), colonel = npc(), escort = npc()
   const mid = { mesh: new THREE.Object3D(), offsetX: 0, riders: [
@@ -12,8 +12,8 @@ function makeConvoy(groundY = 0.2) {
     { npc: colonel, dx: -1.4, dy: 0.82, dz: 0 },
   ] }
   const lead = { mesh: new THREE.Object3D(), offsetX: 16, riders: [{ npc: escort, dx: 0.6, dy: 0.62, dz: 0.55 }] }
-  const convoy = { baseX: -55, z: -4, groundY, dir: 1, speed: 8.5, vehicles: [lead, mid] }
-  return { convoy, mid, lead, driver, colonel }
+  const convoy = { baseX: -55, z, groundY, dir: 1, speed: 8.5, vehicles: [lead, mid] }
+  return { convoy, mid, lead, driver, colonel, escort }
 }
 
 // Avance de `seconds` par pas de 1/60 s, comme la boucle du jeu. Vrai si le convoi s'est échappé.
@@ -40,6 +40,16 @@ describe('convoi de M5 : jeeps et occupants posés sur la route', () => {
     expect(colonel.mesh.position.y).toBeCloseTo(0.2 + 0.82, 9)
     expect(colonel.mesh.position.x).toBeCloseTo(mid.mesh.position.x - 1.4, 9)
     expect(colonel.mesh.rotation.y).toBeCloseTo(Math.PI / 2, 9)   // face au sens de la marche
+  })
+
+  it('route déplacée à z = -6 : jeeps et occupants suivent l\'axe de la route du convoi, pas un z en dur', () => {
+    const { convoy, mid, lead, driver, colonel, escort } = makeConvoy(0.2, -6)
+    run(convoy, 1, colonel)
+    expect(mid.mesh.position.z).toBeCloseTo(-6, 9)
+    expect(lead.mesh.position.z).toBeCloseTo(-6, 9)
+    expect(driver.mesh.position.z).toBeCloseTo(-6 + 0.55, 9)
+    expect(escort.mesh.position.z).toBeCloseTo(-6 + 0.55, 9)
+    expect(colonel.mesh.position.z).toBeCloseTo(-6, 9)
   })
 })
 
