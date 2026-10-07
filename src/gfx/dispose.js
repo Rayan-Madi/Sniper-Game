@@ -56,6 +56,9 @@ export function isShared(resource) {
 // Ressources déjà libérées : une ressource commune à deux objets (lampadaire cloné, matériau réutilisé) ou un
 // second appel sur le même arbre ne la libèrent pas deux fois. Une ressource libérée n'est jamais réutilisée par le
 // jeu (chaque montage recrée la sienne) ; ce qui doit survivre est marqué partagé.
+// Cette retenue est définitive : un objet passé par disposeObject ne doit jamais revenir dans la scène. Redessiné,
+// il repartirait au GPU, et un second disposeObject ne le libérerait plus (fuite silencieuse). Un objet gardé pour
+// être remis plus tard (réserve, cache) est marqué partagé, ou seulement retiré par removeFromParent.
 const released = new WeakSet()
 
 // Retire root de son parent, puis libère ce qu'il possède. Renvoie le nombre de ressources libérées par cet appel.

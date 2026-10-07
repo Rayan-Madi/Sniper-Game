@@ -9,11 +9,23 @@ vi.mock('../../src/scene.js', async () => {
   return { scene: new THREE.Scene(), setLighting: () => {} }
 })
 
-import { scene } from '../../src/scene.js'
-import { spawnTracer, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole,
-  clearBulletHoles, MAX_HOLES } from '../../src/effects.js'
-import { isShared } from '../../src/gfx/dispose.js'
+import { MAX_HOLES } from '../../src/effects.js'
 import { createFakeRenderer, drawnGeometries, trackDisposals } from './fakeRenderer.js'
+
+// Modules neufs à chaque test : effects.js garde sa géométrie de particule partagée et dispose.js l'ensemble des
+// ressources déjà libérées, qui ne doivent pas passer d'un test à l'autre. Sinon un test ne voit pas une ressource
+// partagée libérée à tort : un test précédent l'a déjà libérée (et retenue comme telle), elle ne l'est plus une
+// seconde fois. Avec les modules gardés, « tir manqué » restait vert sous une libération du partagé.
+let scene, spawnTracer, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole,
+  clearBulletHoles, isShared
+beforeEach(async () => {
+  vi.resetModules()
+  ;({ scene } = await import('../../src/scene.js'))
+  ;({ spawnTracer, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles }
+    = await import('../../src/effects.js'))
+  ;({ isShared } = await import('../../src/gfx/dispose.js'))
+  scene.clear()
+})
 
 const FROM = new THREE.Vector3(0, 9.5, 28), AT = new THREE.Vector3(2, 1.2, -4)
 // Tir touché comme resolveBullet : traceur et éclaboussure de 16 particules. Tir manqué : traceur et poussière.
@@ -21,8 +33,6 @@ const hit = () => { spawnTracer(FROM, AT); spawnImpact(AT, 0xaa2222, 16) }
 const miss = () => { spawnTracer(FROM, AT); spawnDust(AT) }
 const expire = () => updateEffects(1)   // la plus longue vie d'un effet est de 0,7 s
 const splashes = () => scene.children.filter(o => o.isGroup)
-
-beforeEach(() => { clearEffects(); clearBulletHoles(); scene.clear() })
 
 describe('effets de tir, niveau 1 : en fin de vie, tout ce qui est possédé est libéré, rien de partagé', () => {
   for (const [name, shot] of [['tir touché', hit], ['tir manqué', miss], ['flash de bouche', () => spawnMuzzle(FROM, new THREE.Vector3(0, 0, -1))]]) {

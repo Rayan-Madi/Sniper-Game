@@ -30,7 +30,7 @@
 | B | **Libération par parcours avec marquage du partagé** : à la sortie, on parcourt l'objet retiré et on libère géométries, matériaux, textures et squelettes, sauf ce qui porte la marque « partagé » | Peu d'endroits à toucher (les points de retrait existent déjà) ; le piège principal (libérer une texture d'un GLB, d'où des modèles noirs) est traité à la source, au chargement | Une ressource partagée non marquée serait libérée : il faut un test qui le garde |
 | C | **Caches** de géométries et de matériaux par clé, jamais libérés | Borné par construction, moins d'objets | Clés partout dans les cartes ; ne règle ni les squelettes ni les matériaux clonés |
 
-**Choix : B**, complété par C là où c'est simple et rentable : les effets de tir et les trous d'impact partagent une géométrie et un matériau par type (ils sont créés en rafale). Les cartes restent en B dans ce lot (leur cache relève du lot poids).
+**Choix : B**, complété par C là où c'est simple et rentable : les effets de tir partagent une géométrie par type, les trous d'impact une géométrie et un matériau (ils sont créés en rafale ; détail au §4.2). Les cartes restent en B dans ce lot (leur cache relève du lot poids).
 
 ## 4. Conception
 
@@ -64,7 +64,7 @@ Règles de `disposeObject` :
 | Décor des cartes et pluie | `maps.js` `clear()` | `disposeObject` sur chaque objet de `mapObjects` ; la pluie (`ambientFn`) libère sa géométrie |
 | PNJ | `main.js` `clearEntities`, `showMenu` ; `npc.js:555` (corps retiré à 8 s) | nouvelle méthode `NPC.dispose()` : `mixer.stopAllAction()`, `mixer.uncacheRoot(model)`, puis `disposeObject(this.mesh)` (les matériaux **clonés** pour la teinte ne sont pas marqués partagés, donc libérés ; les géométries et textures du GLB sont marquées au chargement, donc gardées) ; le minuteur de 8 s devient une durée gérée dans `update` |
 | Modèles GLB | `characters.js` chargement | `markShared(gltf.scene)` au chargement ; la teinte blanche `0xffffff` ne clone plus le matériau |
-| Effets de tir | `effects.js` | une géométrie de particule et un matériau par couleur, partagés (marqués) ; l'opacité qui baisse passe par un matériau par impact (un seul, pas un par particule), libéré à la fin ; le traceur libère sa géométrie |
+| Effets de tir | `effects.js` | une géométrie de particule et une de flash, partagées (marquées) ; un seul matériau par impact (pas un par particule), à lui, libéré en fin de vie ; traceur et flash libèrent ce qu'ils possèdent. Pas de matériau partagé par couleur (écart de L2) : l'opacité de chaque impact baisse à son propre rythme, il lui faut son matériau, et `Material.clone` recopierait la marque `userData.shared` |
 | Trous d'impact | `main.js` tir manqué | géométrie et matériau uniques partagés ; le trou le plus ancien est retiré sans rien libérer |
 | Cadenas | `main.js` `startLevel`, tir | `disposeObject` au retrait |
 | Jeeps | `main.js` `clearConvoy` | `disposeObject` sur chaque jeep |
