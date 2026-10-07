@@ -973,7 +973,7 @@ function endRound(winnerRole, reason) {
       }
     }
   }
-  scoreEl.textContent = `Score · Vous : ${myPoints}  |  Adversaire : ${oppPoints}`
+  scoreEl.textContent = `Score : Vous ${myPoints}  |  Adversaire ${oppPoints}`
 
   clearCrowd()
   if (avatar) { scene.remove(avatar.group); avatar = null }

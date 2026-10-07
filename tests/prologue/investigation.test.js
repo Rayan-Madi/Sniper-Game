@@ -490,7 +490,7 @@ describe('l\'enquête — lisibilité', () => {
   const rule = sel => { const m = css.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}')); return m ? m[1] : '' }
   const keyframes = name => { const m = css.match(new RegExp(`@keyframes ${name}\\s*\\{([\\s\\S]*?)\\}\\s*\\}`)); return m ? m[1] + '}' : '' }
 
-  it('« E — ÉCOUTER LE MESSAGE » : le E bat entre 1 et 0,45, il ne disparaît jamais', () => {
+  it('« E : ÉCOUTER LE MESSAGE » : le E bat entre 1 et 0,45, il ne disparaît jamais', () => {
     const anim = rule('.enq .enq-act.go b').match(/animation:\s*([\w-]+)/)
     expect(anim).not.toBeNull()
     const ops = [...keyframes(anim[1]).matchAll(/opacity:\s*([\d.]+)/g)].map(m => +m[1])

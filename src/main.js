@@ -18,7 +18,7 @@ import { rankFor, precisionOf, isHit } from './campaign/rank.js'
 import { levelShortcut } from './campaign/shortcuts.js'
 import { stepConvoy } from './campaign/convoy.js'
 import { missImpact } from './campaign/impact.js'
-import { journalNote } from './campaign/journal.js'
+import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -161,7 +161,7 @@ function showJournal(onDone) {
   const note = journalNote(lvl, { freedVictims: upgradeState.freedVictims })
   const noteHtml = note ? `<div style="color:${note.color};margin-top:14px;">${note.text}</div>` : ''
   ov.innerHTML = `
-    <div style="background:linear-gradient(160deg,#d8cfb8,#c9bfa4);color:#2a241c;max-width:480px;width:86%;
+    <div style="background:linear-gradient(160deg,${JOURNAL_PAPER.join(',')});color:#2a241c;max-width:480px;width:86%;
       padding:34px 38px;border-radius:3px;box-shadow:0 24px 80px rgba(0,0,0,0.8), inset 0 0 60px rgba(120,100,60,0.25);
       transform:rotate(-1.2deg);position:relative;">
       <div style="position:absolute;left:30px;top:0;bottom:0;width:1px;background:rgba(160,60,60,0.35);"></div>
