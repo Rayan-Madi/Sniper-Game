@@ -313,6 +313,18 @@
     #upgrade-points { font-size: 18px; color: #ffd44e; }
     #level-info { font-size: 13px; color: rgba(200,240,200,0.5); letter-spacing: 0.08em; }
 
+    /* PERFORMANCES (?stats=1, src/gfx/stats.js) : une ligne sous la boîte STRESS du HUD, qui commence à 18 px du bas */
+    #perf-stats {
+      position: fixed; left: 8px; bottom: 0; z-index: 1000;
+      pointer-events: none; white-space: nowrap;
+      font: 10px/13px 'Courier New', monospace; letter-spacing: 0.06em; color: #c8f0c8;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(200,240,200,0.18); border-bottom: 0; border-radius: 3px 3px 0 0;
+      padding: 1px 8px;
+    }
+    #perf-stats .perf-dim { color: rgba(200,240,200,0.45); }
+    #perf-stats [data-lent] { color: #ffd44e; }   /* p95 au-delà de 22 ms */
+
     /* INSTRUCTION */
     #instruction {
       position: fixed; bottom: 60px; left: 50%;

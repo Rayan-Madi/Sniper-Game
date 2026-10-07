@@ -1,0 +1,173 @@
+import { describe, it, expect } from 'vitest'
+import { memtestSteps, withSeed, seedOf, measure, runMemtest } from '../../src/gfx/memtest.js'
+import { checkMemtest, parseDump } from '../../scripts/memtest.mjs'
+
+describe('memtestSteps : la partie scriptée de la spec du lot 1 §4.1', () => {
+  const steps = memtestSteps()
+  const names = steps.map(s => s.etape)
+
+  it('menu, M1 à M6, retour au menu, 10 montages de M6, menu, 5 arènes PvP, menu', () => {
+    expect(names).toEqual([
+      'menu', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'menu-campagne',
+      'M6-1', 'M6-2', 'M6-3', 'M6-4', 'M6-5', 'M6-6', 'M6-7', 'M6-8', 'M6-9', 'M6-10', 'menu-m6',
+      'pvp-1', 'pvp-2', 'pvp-3', 'pvp-4', 'pvp-5', 'menu-final',
+    ])
+  })
+
+  it('chaque étape dit quoi monter', () => {
+    expect(steps[0]).toEqual({ etape: 'menu', type: 'menu' })
+    expect(steps[3]).toEqual({ etape: 'M3', type: 'mission', n: 3 })
+    expect(steps[17]).toEqual({ etape: 'M6-10', type: 'mission', n: 6 })
+    expect(steps[19]).toEqual({ etape: 'pvp-1', type: 'pvp', i: 1 })
+    expect(steps[24]).toEqual({ etape: 'menu-final', type: 'menu', apresPvp: true })
+  })
+})
+
+describe('withSeed et seedOf : chaque montage d\'une même étape tire le même hasard', () => {
+  it('même graine, même suite ; Math.random rendu ensuite', () => {
+    const orig = Math.random
+    const a = withSeed(42, () => [Math.random(), Math.random(), Math.random()])
+    const b = withSeed(42, () => [Math.random(), Math.random(), Math.random()])
+    expect(a).toEqual(b)
+    expect(new Set(a).size).toBe(3)
+    expect(Math.random).toBe(orig)
+  })
+
+  it('Math.random rendu même si le montage échoue', () => {
+    const orig = Math.random
+    expect(() => withSeed(1, () => { throw new Error('carte') })).toThrow('carte')
+    expect(Math.random).toBe(orig)
+  })
+
+  it('les montages de M6 partagent une graine, différente de celle de M5', () => {
+    const steps = memtestSteps()
+    const m6 = steps.filter(s => s.type === 'mission' && s.n === 6).map(seedOf)
+    expect(new Set(m6).size).toBe(1)
+    expect(seedOf(steps.find(s => s.etape === 'M5'))).not.toBe(m6[0])
+    const pvp = steps.filter(s => s.type === 'pvp').map(seedOf)
+    expect(new Set(pvp).size).toBe(1)
+  })
+})
+
+describe('measure : compteurs du renderer et tas JS', () => {
+  it('relève géométries, textures, programmes, appels, triangles et tas en Mo', () => {
+    const info = { memory: { geometries: 461, textures: 31 }, programs: Array(14).fill({}), render: { calls: 312, triangles: 1254321 } }
+    expect(measure(info, { usedJSHeapSize: 85.4e6 }))
+      .toEqual({ geometries: 461, textures: 31, programmes: 14, appels: 312, triangles: 1254321, tasMo: 85 })
+  })
+
+  it('tas inconnu hors de Chrome : null', () => {
+    const info = { memory: { geometries: 0, textures: 0 }, programs: null, render: { calls: 0, triangles: 0 } }
+    expect(measure(info, undefined)).toEqual({ geometries: 0, textures: 0, programmes: 0, appels: 0, triangles: 0, tasMo: null })
+  })
+})
+
+describe('runMemtest : monte, rend, mesure, publie', () => {
+  const steps = [{ etape: 'menu', type: 'menu' }, { etape: 'M1', type: 'mission', n: 1 }]
+
+  it('une entrée par étape, dans l\'ordre, publiée au fil de l\'eau puis terminée', async () => {
+    const log = []
+    let k = 0
+    const reports = []
+    const entries = await runMemtest({
+      steps,
+      act: s => log.push('monte ' + s.etape),
+      render: s => log.push('rend ' + s.etape),
+      snapshot: () => ({ geometries: ++k }),
+      report: (e, state) => reports.push([e.length, state]),
+      pause: async () => {},
+    })
+    expect(log).toEqual(['monte menu', 'rend menu', 'monte M1', 'rend M1'])
+    expect(entries).toEqual([{ etape: 'menu', geometries: 1 }, { etape: 'M1', geometries: 2 }])
+    expect(reports).toEqual([[1, 'en-cours'], [2, 'en-cours'], [2, 'fini']])
+  })
+
+  it('une étape qui échoue arrête la mesure et le dit', async () => {
+    const reports = []
+    const entries = await runMemtest({
+      steps,
+      act: s => { if (s.etape === 'M1') throw new Error('carte introuvable') },
+      render: () => {},
+      snapshot: () => ({ geometries: 1 }),
+      report: (e, state) => reports.push([e.map(x => x.etape), state]),
+      pause: async () => {},
+    })
+    expect(entries.at(-1)).toEqual({ etape: 'M1', erreur: 'carte introuvable' })
+    expect(reports.at(-1)).toEqual([['menu', 'M1'], 'erreur'])
+  })
+})
+
+describe('checkMemtest : seuils du §6 de la spec', () => {
+  // Résultat qui tient tous les seuils : on en dérive un qui en casse un seul à la fois.
+  const base = { geometries: 500, textures: 40, programmes: 20, appels: 300, triangles: 900000, tasMo: 80 }
+  const good = () => memtestSteps().map(s => ({ etape: s.etape, ...base }))
+  const set = (entries, etape, patch) => entries.map(e => e.etape === etape ? { ...e, ...patch } : e)
+  const failed = r => r.filter(c => !c.ok).map(c => c.critere)
+
+  it('tout tenu : aucun échec', () => {
+    const r = checkMemtest(good())
+    expect(failed(r)).toEqual([])
+    expect(r.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('partie complète : géométries au plus 2 % au-dessus du menu, textures au plus 2 de plus', () => {
+    expect(failed(checkMemtest(set(good(), 'menu-campagne', { geometries: 510 })))).toEqual([])
+    expect(failed(checkMemtest(set(good(), 'menu-campagne', { geometries: 511 })))).toEqual(['partie complète'])
+    expect(failed(checkMemtest(set(good(), 'menu-campagne', { textures: 42 })))).toEqual([])
+    expect(failed(checkMemtest(set(good(), 'menu-campagne', { textures: 43 })))).toEqual(['partie complète'])
+  })
+
+  it('10 montages de M6 : rien ne bouge entre le 2e et le 10e', () => {
+    for (const k of ['geometries', 'textures', 'programmes']) {
+      expect(failed(checkMemtest(set(good(), 'M6-10', { [k]: base[k] + 1 })))).toEqual(['10 montages de M6'])
+    }
+    expect(failed(checkMemtest(set(good(), 'M6-1', { geometries: 400 })))).toEqual([])   // le 1er peut différer
+  })
+
+  it('PvP : rien ne bouge après la 1re arène', () => {
+    expect(failed(checkMemtest(set(good(), 'pvp-3', { textures: 41 })))).toEqual(['PvP'])
+    expect(failed(checkMemtest(set(good(), 'pvp-5', { geometries: 499 })))).toEqual(['PvP'])
+  })
+
+  it('triangles de M6 à la vue de départ : 1,5 M en Moyen (par défaut), 0,8 M en Bas', () => {
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1.5e6 })))).toEqual([])
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1.5e6 + 1 })))).toEqual(['triangles de M6'])
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 0.8e6 + 1 }), { qualite: 'bas' }))).toEqual(['triangles de M6'])
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 0.8e6 }), { qualite: 'bas' }))).toEqual([])
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1.5e6 + 1 }), { qualite: 'auto' }))).toEqual(['triangles de M6'])
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 3e6 }), { qualite: 'haut' }))).toEqual([])   // pas de seuil en Haut
+  })
+
+  it('étape absente ou en erreur : échec, jamais un succès par défaut', () => {
+    const sansPvp = good().filter(e => !e.etape.startsWith('pvp'))
+    expect(failed(checkMemtest(sansPvp))).toEqual(['PvP'])
+    const erreur = [...good().slice(0, 3), { etape: 'M3', erreur: 'x' }]
+    expect(failed(checkMemtest(erreur))).toEqual(['mesure complète', 'partie complète', '10 montages de M6', 'PvP', 'triangles de M6'])
+  })
+})
+
+describe('parseDump : sortie de Chrome --dump-dom', () => {
+  it('lit le titre, la qualité demandée et les étapes du <pre id="memtest">', () => {
+    const html = `<html><head><title>memtest:fini</title></head><body><div id="menu">x</div>
+<pre id="memtest" data-qualite="bas" style="position:fixed">[
+ {
+  "etape": "menu",
+  "geometries": 461
+ },
+ {
+  "etape": "M1",
+  "erreur": "a &lt; b &amp;&amp; c &gt; d"
+ }
+]</pre></body></html>`
+    expect(parseDump(html)).toEqual({
+      title: 'memtest:fini',
+      qualite: 'bas',
+      etapes: [{ etape: 'menu', geometries: 461 }, { etape: 'M1', erreur: 'a < b && c > d' }],
+    })
+  })
+
+  it('page sans mesure : titre lu, aucune étape', () => {
+    expect(parseDump('<html><head><title>Sniper</title></head><body></body></html>'))
+      .toEqual({ title: 'Sniper', qualite: '', etapes: [] })
+  })
+})

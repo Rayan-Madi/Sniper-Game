@@ -9,7 +9,7 @@ import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLeve
 import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys } from './settings.js'
 import { preloadCharacters } from './characters.js'
-import { initMultiplayerMenu } from './pvp.js'
+import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
 import { fovFor, aimAngles } from './aim.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
@@ -19,6 +19,7 @@ import { levelShortcut } from './campaign/shortcuts.js'
 import { stepConvoy } from './campaign/convoy.js'
 import { missImpact } from './campaign/impact.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
+import { createStatsPanel } from './gfx/stats.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -97,9 +98,13 @@ const instruction  = document.getElementById('instruction')
 initScene()
 loadSettings()
 loadProgress()        // reprend l'histoire là où le joueur s'était arrêté
-preloadCharacters()   // charge les .glb configurés (no-op si aucun) — voir characters.js
+const charactersLoading = preloadCharacters()   // charge les .glb configurés (rien si aucun), voir characters.js
 MAP_BUILDERS[0]()     // décor vivant derrière le menu principal (caméra qui dérive)
 initMultiplayerMenu() // mode 1v1 Sniper vs Contre-tueur (voir pvp.js)
+
+// Panneau de performances : ?stats=1 (voir syncStatsPanel)
+const STATS_URL = new URLSearchParams(location.search).has('stats')
+const statsPanel = createStatsPanel({ renderer })
 
 // Libellé du bouton selon la progression sauvegardée
 function refreshMenuButtons() {
@@ -337,7 +342,7 @@ function investigate(onNext, options = {}) {
   import('./prologue/investigation.js')
     .then(m => {
       if (run.ended) return
-      const h = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options })
+      const h = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options: { stats: STATS_URL, ...options } })
       if (run.ended) { try { h.stop() } catch (e) { /* déjà démontée */ } return }
       run.handle = h
       gamePhase = 'investigation'
@@ -391,6 +396,12 @@ function clearConvoy() {
 
 // Retire toutes les entités de jeu de la scène (PNJ, véhicules, effets)
 function clearEntities() {
+  unmountLevel()
+}
+
+// Démontage de la scène d'une mission (PNJ, convoi, impacts, effets) : relance, mission suivante, retour au menu, et
+// la route ?memtest=1. Retirés de la scène seulement : la libération des ressources GPU vient au lot 1, tâche L2.
+function unmountLevel() {
   for (const npc of npcs) scene.remove(npc.mesh)
   clearConvoy()
   npcs = []; targets = []; guards = []; civilians = []
@@ -405,10 +416,54 @@ function startLevel(n) {
   statShots = 0; statHits = 0; statStart = performance.now(); statAlerts = 0
   timeScale = 1; killcamActive = false; failPending = false; lastTargetKillAt = -99999
   const token = missionToken   // minuteurs de cette mission : sans effet si elle est relancée ou abandonnée
+  if (((n - 1) % 6) + 1 === 3) upgradeState.freedVictims = false   // chaque essai du port repart d'un choix vierge
+
+  mountLevel(n)
+
+  // Cadenas du port : indice au bout de quelques secondes
+  if (moralLockMesh) {
+    setTimeout(() => {
+      if (token === missionToken && gamePhase === 'playing' && moralLockMesh) {
+        addKillFeed('👂 Des coups sourds... le conteneur rouge, à gauche.')
+      }
+    }, 5000)
+  }
+
+  stress = 0; alertActive = false; alertTimer = 0; bulletInFlight = false
+  document.getElementById('game-over-reason').textContent = 'Vous avez été repéré'
+  score = upgradeState.totalScore
+
+  hudEl.style.display = 'block'
+  hudLevel.textContent = `${currentLevelData.name}  ·  ${Math.min(n, MAX_LEVEL)}/${MAX_LEVEL}`
+  alertBanner.style.display = 'none'
+  startMissionAmbience()   // nappe sonore de tension pendant la mission
+
+  // Dossier d'indices (cible cachée)
+  const hidden = currentMapInfo.hiddenTarget
+  const dossier = document.getElementById('target-dossier')
+  if (hidden && dossier) {
+    document.getElementById('dossier-text').textContent = hidden.clue
+    dossier.style.display = 'block'
+  } else if (dossier) {
+    dossier.style.display = 'none'
+  }
+
+  updateHUD()
+  gamePhase = 'playing'
+  clock.getDelta()
+
+  // Aide des 5 premières secondes. Quitter ou relancer la mission la masque (showMenu, launchLevel) ; le jeton
+  // empêche seulement l'ancien minuteur d'éteindre l'aide de la mission suivante.
+  instruction.style.opacity = '1'
+  setTimeout(() => { if (token === missionToken) instruction.style.opacity = '0' }, 5000)
+}
+
+// Montage de la scène d'une mission (carte, PNJ, cadenas, convoi, caméra de départ), sans écran, son ni minuteur :
+// startLevel l'appelle, la route ?memtest=1 aussi. Le hasard est tiré dans le même ordre qu'avant l'extraction.
+function mountLevel(n) {
   if (moralLockMesh) { scene.remove(moralLockMesh); moralLockMesh = null; moralLockBox = null; moralLockLight = null }
 
   currentLevelData = getLevel(n)
-  if (((n - 1) % 6) + 1 === 3) upgradeState.freedVictims = false   // chaque essai du port repart d'un choix vierge
 
   // Choisir la map selon le niveau (cyclique si > 5)
   const mapIdx = (n - 1) % MAP_BUILDERS.length
@@ -432,12 +487,6 @@ function startLevel(n) {
     scene.add(moralLockMesh)
     moralLockBox = new THREE.Box3().setFromCenterAndSize(
       new THREE.Vector3(lx, ly + 0.1, lz), new THREE.Vector3(0.9, 1.0, 0.7))
-    // indice au bout de quelques secondes
-    setTimeout(() => {
-      if (token === missionToken && gamePhase === 'playing' && moralLockMesh) {
-        addKillFeed('👂 Des coups sourds... le conteneur rouge, à gauche.')
-      }
-    }, 5000)
   }
 
   // Positionner la caméra depuis le point sniper de la map
@@ -452,15 +501,6 @@ function startLevel(n) {
   }
 
   setZoom(4)   // le champ de vision suit dans loop() (syncFov)
-
-  stress = 0; alertActive = false; alertTimer = 0; bulletInFlight = false
-  document.getElementById('game-over-reason').textContent = 'Vous avez été repéré'
-  score = upgradeState.totalScore
-
-  hudEl.style.display = 'block'
-  hudLevel.textContent = `${currentLevelData.name}  ·  ${Math.min(n, MAX_LEVEL)}/${MAX_LEVEL}`
-  alertBanner.style.display = 'none'
-  startMissionAmbience()   // nappe sonore de tension pendant la mission
 
   const b = currentMapInfo.spawnBounds
   const groundY = mapGround()   // les pieds des PNJ sur la dalle du port, le tarmac, la route du convoi
@@ -490,15 +530,6 @@ function startLevel(n) {
     // Assis sur le canapé (la pose "Talk" est assise) → il se démarque des danseurs
     if (useHidden && hidden.seatY !== undefined) npc.mesh.position.y = hidden.seatY
     npcs.push(npc); targets.push(npc)
-  }
-
-  // Dossier d'indices (cible cachée)
-  const dossier = document.getElementById('target-dossier')
-  if (hidden && dossier) {
-    document.getElementById('dossier-text').textContent = hidden.clue
-    dossier.style.display = 'block'
-  } else if (dossier) {
-    dossier.style.display = 'none'
   }
 
   // Spawner gardes
@@ -581,23 +612,12 @@ function startLevel(n) {
     // Route le long de X à z = -4, chaussée à groundY : jeeps et occupants sont posés dessus (campaign/convoy.js)
     convoyCar = { baseX: -55, z: -4, groundY, dir: 1, speed: 8.5, vehicles }
   }
-
-  updateHUD()
-  gamePhase = 'playing'
-  clock.getDelta()
-
-  // Aide des 5 premières secondes. Quitter ou relancer la mission la masque (showMenu, launchLevel) ; le jeton
-  // empêche seulement l'ancien minuteur d'éteindre l'aide de la mission suivante.
-  instruction.style.opacity = '1'
-  setTimeout(() => { if (token === missionToken) instruction.style.opacity = '0' }, 5000)
 }
 
 function showMenu() {
   abortInvestigation()
   missionToken++   // la mission est abandonnée : ses minuteurs de fin (kill-cam, civil abattu) ne doivent plus tomber sur le menu
-  for (const npc of npcs) scene.remove(npc.mesh)
-  clearConvoy()
-  npcs = []; targets = []; guards = []; civilians = []
+  unmountLevel()   // PNJ, convoi, et désormais aussi les impacts et les effets de la mission quittée
   hideScope()
   releaseMouse()
   hudEl.style.display = 'none'
@@ -1201,8 +1221,41 @@ function syncFov() {
   if (camera.fov !== f) { camera.fov = f; camera.updateProjectionMatrix() }
 }
 
+// Caméra sniper (position fixe, rotation libre, zoom de la lunette) : chaque image de la mission, et la vue de départ
+// de la route ?memtest=1.
+function aimMissionCamera() {
+  syncFov()
+  const [baseX, baseY, baseZ] = currentMapInfo ? currentMapInfo.cameraPos : [0, 8, 30]
+  const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ')
+  const dir = new THREE.Vector3(0, 0, -1).applyEuler(euler)
+  camera.position.set(baseX, baseY, baseZ)
+  camera.lookAt(baseX + dir.x, baseY + dir.y, baseZ + dir.z)
+}
+
+// Menu principal : la caméra tourne lentement autour du décor (tm en secondes).
+function driftMenuCamera(tm) {
+  camera.position.set(Math.sin(tm * 0.07) * 26, 11 + Math.sin(tm * 0.045) * 2, Math.cos(tm * 0.07) * 26)
+  camera.lookAt(0, 4, 0)
+  camera.fov = 55
+  camera.updateProjectionMatrix()
+}
+
+// Panneau de performances (?stats=1) : toutes les phases, PvP compris (sa boucle rend, celle-ci mesure), sauf
+// l'enquête, qui affiche son propre compteur au même endroit. Il relève la dernière image rendue.
+let lastFrameAt = performance.now()
+function syncStatsPanel() {
+  const t = performance.now()
+  const frameMs = t - lastFrameAt
+  lastFrameAt = t
+  const wanted = STATS_URL && gamePhase !== 'investigation'
+  if (wanted && !statsPanel.visible) statsPanel.show()
+  else if (!wanted && statsPanel.visible) statsPanel.hide()
+  statsPanel.update(frameMs)
+}
+
 function loop() {
   requestAnimationFrame(loop)
+  syncStatsPanel()
   if (campaignPaused) return
   // timeScale < 1 pendant la kill-cam (ralenti)
   const dt = Math.min(clock.getDelta(), 0.05) * timeScale
@@ -1293,13 +1346,7 @@ function loop() {
     // Effets (traceurs, impacts, poussière)
     updateEffects(dt)
 
-    // Caméra sniper (position fixe, rotation libre, zoom de la lunette)
-    syncFov()
-    const [baseX, baseY, baseZ] = currentMapInfo ? currentMapInfo.cameraPos : [0, 8, 30]
-    const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ')
-    const dir = new THREE.Vector3(0, 0, -1).applyEuler(euler)
-    camera.position.set(baseX, baseY, baseZ)
-    camera.lookAt(baseX + dir.x, baseY + dir.y, baseZ + dir.z)
+    aimMissionCamera()
 
     updateHUD()
   } else {
@@ -1307,11 +1354,7 @@ function loop() {
     updateEffects(dt)
     // Menu principal : la caméra dérive lentement autour du décor (fond vivant)
     if (gamePhase === 'menu') {
-      const tm = performance.now() / 1000
-      camera.position.set(Math.sin(tm * 0.07) * 26, 11 + Math.sin(tm * 0.045) * 2, Math.cos(tm * 0.07) * 26)
-      camera.lookAt(0, 4, 0)
-      camera.fov = 55
-      camera.updateProjectionMatrix()
+      driftMenuCamera(performance.now() / 1000)
     } else {
       syncFov()   // pause, échec, réussite : lunette fermée, la vue revient à 60° sous l'écran affiché
     }
@@ -1357,6 +1400,60 @@ if (import.meta.env.DEV) {
     if (avance && convoyCar && what !== 'cadenas') p.x += convoyCar.dir * convoyCar.speed * avance
     ;({ yaw, pitch } = aimAngles(camera.position.toArray(), p.toArray()))
     return true
+  }
+  // ?memtest=1&images=3 : mesure mémoire scriptée (spec du lot 1 §4.1), lue par scripts/memtest.mjs. Pas de
+  // requestAnimationFrame : la boucle du jeu est suspendue, chaque étape monte sa scène par les fonctions du jeu
+  // (showMenu, clearEntities puis mountLevel, buildRoundScene et releaseRoundScene, le bouton QUITTER du PvP), rend
+  // quelques images par appel direct, puis relève renderer.info. Résultat en JSON dans <pre id="memtest">,
+  // document.title passe à 'memtest:fini' (ou 'memtest:erreur').
+  if (q.has('memtest')) {
+    import('./gfx/memtest.js').then(async ({ memtestSteps, withSeed, seedOf, measure, runMemtest }) => {
+      setCampaignPaused(true)   // seuls les rendus de la mesure comptent
+      const pre = document.createElement('pre')
+      pre.id = 'memtest'
+      pre.dataset.qualite = q.get('qualite') || ''
+      pre.style.cssText = `position:fixed;top:0;right:0;z-index:2000;max-height:100vh;overflow:auto;margin:0;padding:8px;
+        background:rgba(0,0,0,0.85);color:#c8f0c8;font:10px/1.3 'Courier New',monospace;`
+      document.body.appendChild(pre)
+      document.title = 'memtest:modeles'
+      await charactersLoading   // sans les modèles, les PNJ seraient procéduraux et la mesure fausse
+      const images = Math.max(1, +q.get('images') || 3)
+      let round = false
+      const act = step => withSeed(seedOf(step), () => {
+        if (step.type === 'mission') {
+          clearEntities()   // comme launchLevel puis startLevel
+          mountLevel(step.n)
+          aimMissionCamera()
+        } else if (step.type === 'pvp') {
+          if (round) releaseRoundScene()   // fin de la manche précédente (endRound)
+          const arena = buildRoundScene(seedOf(step), 'sniper')
+          round = true
+          // Vue du nid du sniper, comme setupSniper puis sniperFrame (regard par défaut de la carte)
+          const [x, y, z] = arena.nest.cameraPos
+          const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(arena.nest.defaultPitch ?? -0.2, 0, 0, 'YXZ'))
+          camera.position.set(x, y, z)
+          camera.lookAt(x + dir.x, y + dir.y, z + dir.z)
+          camera.fov = 74
+          camera.updateProjectionMatrix()
+        } else {
+          if (step.apresPvp && round) {
+            releaseRoundScene()
+            round = false
+            document.getElementById('btn-mp-quit').click()   // quitToMenu : la rue revient derrière le menu
+            setCampaignPaused(true)                          // quitToMenu relance la boucle du jeu
+          }
+          showMenu()
+          driftMenuCamera(0)
+        }
+      })
+      const render = () => { for (let i = 0; i < images; i++) renderer.render(scene, camera) }
+      const snapshot = () => {
+        if (typeof window.gc === 'function') window.gc()   // Chrome lancé avec --js-flags=--expose-gc
+        return measure(renderer.info, performance.memory)
+      }
+      const report = (entries, state) => { pre.textContent = JSON.stringify(entries, null, 1); document.title = 'memtest:' + state }
+      await runMemtest({ steps: memtestSteps(), act, render, snapshot, report })
+    }).catch(err => { console.error('[memtest]', err); document.title = 'memtest:erreur' })
   }
   if (q.has('cine')) {
     menuEl.style.display = 'none'

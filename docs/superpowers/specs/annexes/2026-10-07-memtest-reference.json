@@ -1,0 +1,237 @@
+{
+  "date": "2026-10-07T21:02:43.033Z",
+  "commit": "b8b3f4b (modifié)",
+  "url": "http://localhost:5173/?memtest=1&images=3",
+  "rendu": "SwiftShader (Chrome sans interface)",
+  "images": 3,
+  "qualite": null,
+  "duree_s": 204,
+  "etat": "memtest:fini",
+  "etapes": [
+    {
+      "etape": "menu",
+      "geometries": 416,
+      "textures": 3,
+      "programmes": 5,
+      "appels": 549,
+      "triangles": 10944,
+      "tasMo": 50
+    },
+    {
+      "etape": "M1",
+      "geometries": 876,
+      "textures": 52,
+      "programmes": 11,
+      "appels": 630,
+      "triangles": 567572,
+      "tasMo": 50
+    },
+    {
+      "etape": "M2",
+      "geometries": 1146,
+      "textures": 99,
+      "programmes": 21,
+      "appels": 393,
+      "triangles": 703390,
+      "tasMo": 50
+    },
+    {
+      "etape": "M3",
+      "geometries": 1211,
+      "textures": 141,
+      "programmes": 34,
+      "appels": 179,
+      "triangles": 799412,
+      "tasMo": 49
+    },
+    {
+      "etape": "M4",
+      "geometries": 1291,
+      "textures": 186,
+      "programmes": 46,
+      "appels": 221,
+      "triangles": 904528,
+      "tasMo": 50
+    },
+    {
+      "etape": "M5",
+      "geometries": 1464,
+      "textures": 203,
+      "programmes": 59,
+      "appels": 297,
+      "triangles": 486082,
+      "tasMo": 50
+    },
+    {
+      "etape": "M6",
+      "geometries": 1553,
+      "textures": 358,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 57
+    },
+    {
+      "etape": "menu-campagne",
+      "geometries": 1561,
+      "textures": 358,
+      "programmes": 69,
+      "appels": 145,
+      "triangles": 2890,
+      "tasMo": 49
+    },
+    {
+      "etape": "M6-1",
+      "geometries": 1650,
+      "textures": 513,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 57
+    },
+    {
+      "etape": "M6-2",
+      "geometries": 1739,
+      "textures": 668,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 58
+    },
+    {
+      "etape": "M6-3",
+      "geometries": 1828,
+      "textures": 823,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 58
+    },
+    {
+      "etape": "M6-4",
+      "geometries": 1917,
+      "textures": 978,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 58
+    },
+    {
+      "etape": "M6-5",
+      "geometries": 2006,
+      "textures": 1133,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 59
+    },
+    {
+      "etape": "M6-6",
+      "geometries": 2095,
+      "textures": 1288,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 59
+    },
+    {
+      "etape": "M6-7",
+      "geometries": 2184,
+      "textures": 1443,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 59
+    },
+    {
+      "etape": "M6-8",
+      "geometries": 2273,
+      "textures": 1598,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 59
+    },
+    {
+      "etape": "M6-9",
+      "geometries": 2362,
+      "textures": 1753,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 60
+    },
+    {
+      "etape": "M6-10",
+      "geometries": 2451,
+      "textures": 1908,
+      "programmes": 69,
+      "appels": 448,
+      "triangles": 2645608,
+      "tasMo": 60
+    },
+    {
+      "etape": "menu-m6",
+      "geometries": 2459,
+      "textures": 1908,
+      "programmes": 69,
+      "appels": 145,
+      "triangles": 2890,
+      "tasMo": 52
+    },
+    {
+      "etape": "pvp-1",
+      "geometries": 2543,
+      "textures": 2237,
+      "programmes": 78,
+      "appels": 778,
+      "triangles": 5506390,
+      "tasMo": 69
+    },
+    {
+      "etape": "pvp-2",
+      "geometries": 2627,
+      "textures": 2566,
+      "programmes": 78,
+      "appels": 778,
+      "triangles": 5506390,
+      "tasMo": 69
+    },
+    {
+      "etape": "pvp-3",
+      "geometries": 2711,
+      "textures": 2895,
+      "programmes": 78,
+      "appels": 778,
+      "triangles": 5506390,
+      "tasMo": 70
+    },
+    {
+      "etape": "pvp-4",
+      "geometries": 2795,
+      "textures": 3224,
+      "programmes": 78,
+      "appels": 778,
+      "triangles": 5506390,
+      "tasMo": 70
+    },
+    {
+      "etape": "pvp-5",
+      "geometries": 2879,
+      "textures": 3553,
+      "programmes": 78,
+      "appels": 778,
+      "triangles": 5506390,
+      "tasMo": 70
+    },
+    {
+      "etape": "menu-final",
+      "geometries": 3288,
+      "textures": 3553,
+      "programmes": 78,
+      "appels": 540,
+      "triangles": 10506,
+      "tasMo": 57
+    }
+  ]
+}

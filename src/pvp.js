@@ -293,16 +293,6 @@ function onMatchStart(msg) {
   const instr = el('instruction'); if (instr) instr.style.display = 'none'
 
   setCampaignPaused(true)
-  // Seed partagé (même serverTime chez les deux) → décor + foule IDENTIQUES.
-  matchSeed = (msg.serverTime >>> 0) || 1
-  arena = withSeed(matchSeed, () => buildPvpArena())
-  withSeed(matchSeed ^ SEED_CROWD, () => spawnCrowd())
-
-  // Les pièces d'arme sont INVISIBLES pour le sniper : il ne doit pas savoir où
-  // elles sont ni camper les spots. (Fait au build, avant la boucle → pas de
-  // recompilation de shaders en cours de partie.)
-  if (myRole === 'sniper') for (const p of arena.partSpots) p.mesh.visible = false
-
   partsCollected = 0; oppPartsCount = 0
   pistolMesh = null
   emoteUntil = 0; pnjAiming = false
@@ -313,14 +303,14 @@ function onMatchStart(msg) {
   oppAvatar = null
   setScoped(false)
 
+  // Seed partagé (même serverTime chez les deux) → décor + foule IDENTIQUES.
+  matchSeed = (msg.serverTime >>> 0) || 1
+  buildRoundScene(matchSeed, myRole)
+
   roleBanner.textContent = myRole === 'sniper' ? 'RÔLE : SNIPER' : 'RÔLE : CONTRE-TUEUR'
   partsEl.style.display = myRole === 'pnj' ? 'block' : 'none'
   abilitiesEl.style.display = myRole === 'sniper' ? 'flex' : 'none'
   crosshairEl.style.display = 'none'
-
-  // Le laser rouge du sniper est créé pour LES DEUX joueurs : c'est la
-  // mécanique centrale — le contre-tueur repère le nid grâce au trait.
-  createLaser()
 
   if (myRole === 'sniper') setupSniper()
   else setupPnj()
@@ -343,6 +333,39 @@ function onMatchStart(msg) {
     if (rafHandle) cancelAnimationFrame(rafHandle)
     loop()
   })
+}
+
+// Décor d'une manche, tiré du seed partagé (le même chez les deux joueurs) : arène, foule, laser, et avatar du
+// contre-tueur (le sien chez lui, celui de l'adversaire chez le sniper). onMatchStart l'appelle ; la route ?memtest=1
+// de main.js aussi, pour monter des arènes hors réseau. Sans écran, caméra ni pointeur : setupSniper et setupPnj.
+export function buildRoundScene(seed, role) {
+  arena = withSeed(seed, () => buildPvpArena())
+  withSeed(seed ^ SEED_CROWD, () => spawnCrowd())
+
+  // Les pièces d'arme sont INVISIBLES pour le sniper : il ne doit pas savoir où
+  // elles sont ni camper les spots. (Fait au build, avant la boucle → pas de
+  // recompilation de shaders en cours de partie.)
+  if (role === 'sniper') for (const p of arena.partSpots) p.mesh.visible = false
+
+  // Le laser rouge du sniper est créé pour LES DEUX joueurs : c'est la
+  // mécanique centrale, le contre-tueur repère le nid grâce au trait.
+  createLaser()
+
+  // Même seed des deux côtés → le contre-tueur a la même allure chez lui et chez le sniper.
+  const av = withSeed(seed ^ SEED_AVATAR, makeCivilianAvatar)
+  if (role === 'sniper') oppAvatar = av
+  else avatar = av
+  return arena
+}
+
+// Retire le décor de la manche (fin de manche, route ?memtest=1). Retiré de la scène seulement : la libération des
+// ressources GPU vient au lot 1, tâche L3.
+export function releaseRoundScene() {
+  clearCrowd()
+  if (avatar) { scene.remove(avatar.group); avatar = null }
+  if (oppAvatar) { scene.remove(oppAvatar.group); oppAvatar = null }
+  if (laserCore) { scene.remove(laserCore); scene.remove(laserGlow); laserCore = null; laserGlow = null }
+  clearPvpMap()
 }
 
 // Pendant l'intro, la boucle de jeu normale ne tourne pas encore — on garde
@@ -442,9 +465,8 @@ function setupSniper() {
   camera.fov = SNIPER_FOV
   camera.updateProjectionMatrix()
 
-  // Avatar de l'adversaire (le contre-tueur) rendu chez le sniper à sa
+  // Avatar de l'adversaire (le contre-tueur, créé par buildRoundScene) rendu chez le sniper à sa
   // position réseau — sinon le sniper n'a personne à repérer parmi la foule.
-  oppAvatar = withSeed(matchSeed ^ SEED_AVATAR, makeCivilianAvatar)
   oppAvatar.group.position.set(...arena.pnjSpawn)
   oppAvatar.group.rotation.y = Math.PI
   // Pose idle dès le départ (évite la T-pose pendant l'intro)
@@ -631,8 +653,7 @@ function setupPnj() {
   camera.fov = 60
   camera.updateProjectionMatrix()
 
-  // Même seed que l'avatar rendu chez le sniper → allure identique des 2 côtés.
-  avatar = withSeed(matchSeed ^ SEED_AVATAR, makeCivilianAvatar)
+  // Avatar créé par buildRoundScene, avec le même seed que celui rendu chez le sniper.
   avatar.group.position.copy(pnjPos)
 
   el('canvas').requestPointerLock()
@@ -975,11 +996,7 @@ function endRound(winnerRole, reason) {
   }
   scoreEl.textContent = `Score : Vous ${myPoints}  |  Adversaire ${oppPoints}`
 
-  clearCrowd()
-  if (avatar) { scene.remove(avatar.group); avatar = null }
-  if (oppAvatar) { scene.remove(oppAvatar.group); oppAvatar = null }
-  if (laserCore) { scene.remove(laserCore); scene.remove(laserGlow); laserCore = null; laserGlow = null }
-  clearPvpMap()
+  releaseRoundScene()
 
   hideAllMpScreens()
   mpResult.style.display = 'flex'
