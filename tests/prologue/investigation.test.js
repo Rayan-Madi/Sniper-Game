@@ -457,6 +457,23 @@ describe('l\'enquête — lisibilité', () => {
     expect(+top[1]).toBeGreaterThanOrEqual(5.5)
   })
 
+  it('« PASSER L\'ENQUÊTE » de la carte est inerte tant qu\'il est invisible : un clic pour commencer ne tombe pas dessus', () => {
+    const r = rule('.enq .enq-card .skip')
+    expect(r).toMatch(/pointer-events:\s*none/)                      // inerte au départ : le clic traverse jusqu'à la carte
+    // animation: nom durée [fonction] délai [remplissage], séparées par des virgules
+    const ms = t => parseFloat(t) * (t.endsWith('ms') ? 1 : 1000)
+    const anims = Object.fromEntries(r.match(/animation:\s*([^;]+);/)[1].split(',').map(a => {
+      const [name, dur, , delay] = a.trim().split(/\s+/)
+      return [name, { end: ms(delay) + ms(dur), fill: /forwards/.test(a) }]
+    }))
+    expect(anims['enq-in']).toBeDefined()
+    expect(anims['enq-live']).toBeDefined()
+    expect(anims['enq-live'].fill).toBe(true)                         // reste cliquable une fois l'animation finie
+    expect(anims['enq-live'].end).toBeGreaterThanOrEqual(anims['enq-in'].end)   // jamais cliquable avant d'être apparu
+    expect(keyframes('enq-live')).toMatch(/pointer-events:\s*auto/)
+    expect(keyframes('enq-live')).not.toMatch(/pointer-events:\s*none/)
+  })
+
   it('les légendes de la photo (lieu, tampon « 14 03 · 21:47 ») sur un fond sombre semi-transparent', () => {
     for (const sel of ['.enq .enq-photo .stamp', '.enq .enq-photo .lieu']) {
       const bg = rule(sel).match(/background:\s*rgba\(0,\s*0,\s*0,\s*([\d.]+)\)/)

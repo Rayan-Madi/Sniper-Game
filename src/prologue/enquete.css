@@ -49,12 +49,16 @@
   border: 1px solid rgba(215,220,207,.4); border-bottom-width: 2px; border-radius: 3px; background: rgba(215,220,207,.06); }
 .enq .enq-card kbd + kbd { margin-left: -.35em; }
 .enq .enq-card .go { margin-top: 3.4vh; font-size: clamp(12px, 1.1vw, 16px); letter-spacing: .4em; padding-left: .4em; color: #f0c040; animation: enq-in .6s ease-out 1.6s forwards, enq-pulse 1.6s ease-in-out 2.2s infinite; }
-/* sortie de secours (verrouillage du pointeur refusé) : petit bouton discret au pied de la carte, style de la pause */
+/* sortie de secours (verrouillage du pointeur refusé) : petit bouton discret au pied de la carte, style de la pause.
+   Invisible jusqu'à 2,9 s (délai 2,2 s + apparition 0,7 s), il est inerte jusque-là : un clic sur la carte pour commencer
+   ne doit pas tomber sur un bouton qu'on n'a pas vu (le clic traverse alors jusqu'à la carte, qui demande le verrou) */
 .enq .enq-card .skip { position: absolute; left: 0; right: 0; bottom: 5vh; width: max-content; margin: 0 auto; font: inherit; font-size: clamp(10px, .78vw, 12px); letter-spacing: .3em;
-  padding: .9vh 1.4vw; background: transparent; color: rgba(215,220,207,.45); border: 1px solid rgba(215,220,207,.22); cursor: pointer; animation-delay: 2.2s; }
+  padding: .9vh 1.4vw; background: transparent; color: rgba(215,220,207,.45); border: 1px solid rgba(215,220,207,.22); cursor: pointer;
+  pointer-events: none; animation: enq-in .7s ease-out 2.2s forwards, enq-live .01s linear 2.9s forwards; }
 .enq .enq-card .skip:hover { border-color: #f0c040; color: #f0c040; }
 @keyframes enq-in { 0% { opacity: 0; transform: translateY(.8vh) } 100% { opacity: 1; transform: none } }
 @keyframes enq-line { to { transform: scaleX(1) } }
+@keyframes enq-live { from, to { pointer-events: auto } }   /* sans remplissage « backwards » : tant que le délai court, c'est le pointer-events: none de la règle */
 @keyframes enq-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .3 } }
 
 /* ── fiche d'indice : dossier du fixeur, photo de scène de crime ── */
