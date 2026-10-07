@@ -487,7 +487,15 @@ export function buildApartment() {
   const T_rug = tex(512, 384, drawRug); T_rug.anisotropy = 4
   const T_city = tex(1024, 512, drawCity)
   const T_glow = tex(512, 256, drawGlows)
-  const T_shade = tex(4, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#4a4a4a'); gr.addColorStop(0.7, '#ffffff'); gr.addColorStop(1, '#b0b0b0'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
+  // abat-jour : dehors, la lueur ne mord que le bord de la grande ouverture (haut de la carte = v = 1 = grand bout) ;
+  // dedans, plus clair près de l'ampoule (bas de la carte = petit bout)
+  const T_shade = tex(4, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.08, '#707070'); gr.addColorStop(0.3, '#000000'); gr.addColorStop(1, '#000000'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
+  // dedans : la lumière vient du fond (l'ampoule) et s'éteint vers le bord ; une côte sombre par pli (18 plis sur u)
+  const T_shadeIn = tex(144, 64, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2a2a2a'); gr.addColorStop(0.45, '#8a8a8a'); gr.addColorStop(1, '#ffffff')
+    g.fillStyle = gr; g.fillRect(0, 0, w, h)
+    g.fillStyle = 'rgba(0,0,0,.38)'; for (let k = 0; k < 18; k++) g.fillRect(k * 8 + 5, 0, 3, h)
+  })
   const T_palier = tex(2048, 512, drawPalier); T_palier.anisotropy = 8
   const T_palierLit = tex(2048, 512, (g, w, h) => drawPalierLit(g, w, h, T_palier.image)); T_palierLit.anisotropy = 8
   const T_neonGrad = tex(4, 64, (g, w, h) => { const gr = g.createLinearGradient(0, h, 0, 0); gr.addColorStop(0, '#000'); gr.addColorStop(0.45, '#2a2a2a'); gr.addColorStop(1, '#ffffff'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
@@ -510,7 +518,10 @@ export function buildApartment() {
     livres: lambert(0xffffff, { vertexColors: true }, { cast: true }),
     metal: lambert(0x6a6e76),
     miroir: new THREE.MeshPhongMaterial({ color: 0x10141a, specular: 0x8899aa, shininess: 90 }),
-    abatJour: lambert(0x3a2616, { emissive: 0xffa060, emissiveMap: T_shade, emissiveIntensity: 0.5, side: THREE.DoubleSide }, { receive: false }),
+    // abat-jour : tissu bordeaux plissé dehors (jamais couleur chair : coupé au bord de l'image, l'ancien cône lisse et
+    // orangé se lisait comme un doigt), lueur chaude dedans, vue par l'ouverture, et au bord seulement
+    abatJour: lambert(0x4a1a24, { emissive: 0xff8a50, emissiveMap: T_shade, emissiveIntensity: 0.55, flatShading: true }, { receive: false }),
+    abatJourDedans: new THREE.MeshBasicMaterial({ color: 0xffa040, map: T_shadeIn, side: THREE.BackSide, toneMapped: false }),   // ambre vif : une lumière, pas une peau
     neon: lambert(0x202428, { emissive: 0xdfeaff, emissiveIntensity: 1.2 }, { receive: false }),
     veilleuse: new THREE.MeshBasicMaterial({ vertexColors: true }),   // l'étoile de la veilleuse (rose) et l'ampoule de la lampe (blanc chaud)
     vitre: new THREE.MeshLambertMaterial({ color: 0x9fb8d8, transparent: true, opacity: 0.18, depthWrite: false }),
@@ -518,8 +529,8 @@ export function buildApartment() {
     lueurs: new THREE.MeshBasicMaterial({ map: T_glow, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
     halo: new THREE.MeshBasicMaterial({ map: T_glow, color: 0xbfd4ff, side: THREE.DoubleSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
   }
-  for (const k of ['miroir', 'veilleuse', 'vitre', 'ville', 'lueurs', 'halo']) owned.mats.push(M[k])
-  for (const k of ['veilleuse', 'vitre', 'ville', 'lueurs', 'halo']) M[k].userData.receive = false
+  for (const k of ['miroir', 'veilleuse', 'abatJourDedans', 'vitre', 'ville', 'lueurs', 'halo']) owned.mats.push(M[k])
+  for (const k of ['veilleuse', 'abatJourDedans', 'vitre', 'ville', 'lueurs', 'halo']) M[k].userData.receive = false
   for (const k in M) M[k].name = k
 
   const neonLit = [[M.murPalier, 1.3], [M.portePalier, 0.6], [M.carrelage, 0.14]]   // matériaux « éclairés » par le néon du palier (intensité émissive de base)
@@ -793,7 +804,23 @@ export function buildApartment() {
   const shadeDir = new THREE.Vector3().subVectors(aim, lampHead).setY(0.02).normalize()
   const joint = lampHead.clone().add(V(0, 0.04, 0))
   const shadeEnd = joint.clone().addScaledVector(shadeDir, 0.28)
-  B.add(M.abatJour, between(new THREE.CylinderGeometry(0.21, 0.08, 0.28, 24, 1, true), joint, shadeEnd))
+  // l'abat-jour plissé (18 plis), sa face intérieure, et son armature : un jonc à chaque ouverture, quatre rayons vers la douille
+  const pleated = () => {
+    const g = new THREE.CylinderGeometry(0.21, 0.08, 0.28, 36, 1, true), p = g.attributes.position
+    for (let i = 0; i < p.count; i++) { const s = (i % 37) % 2 ? 0.94 : 1.03; p.setX(i, p.getX(i) * s); p.setZ(i, p.getZ(i) * s) }
+    g.computeVertexNormals()
+    return g
+  }
+  B.add(M.abatJour, between(pleated(), joint, shadeEnd))
+  B.add(M.abatJourDedans, between(pleated().scale(0.985, 1, 0.985), joint, shadeEnd))
+  for (const [at, r] of [[joint, 0.08], [shadeEnd, 0.21]]) {
+    const ring = new THREE.TorusGeometry(r * 1.035, 0.0045, 5, 36)
+    ring.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), shadeDir)); ring.translate(at.x, at.y, at.z)
+    B.add(M.metal, ring)
+  }
+  { const u = new THREE.Vector3().crossVectors(shadeDir, V(0, 1, 0)).normalize(), w = new THREE.Vector3().crossVectors(u, shadeDir)
+    const hub = joint.clone().addScaledVector(shadeDir, 0.035)
+    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; B.add(M.metal, rod(joint.clone().addScaledVector(u, Math.cos(a) * 0.078).addScaledVector(w, Math.sin(a) * 0.078), hub, 0.003, 5)) } }
   B.add(M.veilleuse, tint(new THREE.SphereGeometry(0.045, 12, 8), 0xfff0d6), { x: joint.x + shadeDir.x * 0.1, y: joint.y + shadeDir.y * 0.1, z: joint.z + shadeDir.z * 0.1 })
   const spot = new THREE.SpotLight(0xffa860, 24, 9, 0.8, 0.45, 2)
   spot.position.copy(joint).addScaledVector(shadeDir, 0.12)

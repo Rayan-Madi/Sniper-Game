@@ -116,6 +116,25 @@ describe('l\'appartement', () => {
     expect(apt.group.children.length).toBe(0)
   })
 
+  // finition : coupé au bord de l'image, l'ancien abat-jour (cône lisse, brun éclairé d'orange) se lisait comme un doigt
+  it('l\'abat-jour se lit comme un abat-jour : tissu sombre et pas couleur chair dehors, lueur chaude dedans', () => {
+    const apt = buildApartment()
+    const byMat = name => { const r = []; apt.group.traverse(o => { if (o.material && o.material.name === name) r.push(o) }); return r }
+    const [outer] = byMat('abatJour'), [inner] = byMat('abatJourDedans')
+    expect(outer, 'tissu extérieur').toBeDefined(); expect(inner, 'intérieur').toBeDefined()
+    const hsl = c => c.getHSL({})
+    const o = hsl(outer.material.color)
+    expect(o.l).toBeLessThan(0.25)                                   // un tissu sombre…
+    const h = o.h * 360
+    expect(h >= 330 || h <= 5 || (h >= 90 && h <= 260), `teinte ${h.toFixed(0)}° : bordeaux, vert ou gris-bleu, pas chair`).toBe(true)
+    expect(outer.material.side).toBe(THREE.FrontSide)                // dehors seulement : la lueur ne traverse pas le tissu
+    expect(outer.material.emissiveIntensity * Math.max(...outer.material.emissive.toArray())).toBeLessThan(0.7)
+    expect(inner.material.side).toBe(THREE.BackSide)                 // la face intérieure, vue par l'ouverture
+    const i = hsl(inner.material.color)
+    expect(i.l).toBeGreaterThan(0.45); expect(i.h * 360).toBeGreaterThan(15); expect(i.h * 360).toBeLessThan(50)   // chaude
+    apt.dispose()
+  })
+
   it('update anime sans erreur', () => {
     const apt = buildApartment()
     expect(() => { for (let i = 0; i < 10; i++) apt.update(0.016) }).not.toThrow()
