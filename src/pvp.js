@@ -217,7 +217,11 @@ export function initMultiplayerMenu() {
     if (isPvpIntroActive()) { stopPvpIntro(); roundActive = true /* pour laisser endRound nettoyer normalement */ }
     if (roundActive) endRound(null, reason)
   }
-  net.on('peer_left', () => onPeerLost('peer_left'))
+  // Départ de l'adversaire sur l'écran de fin : le relais a fermé la partie, la manche suivante ne viendra plus.
+  net.on('peer_left', () => {
+    if (roundActive || isPvpIntroActive()) return onPeerLost('peer_left')
+    if (mpResult.style.display === 'flex') { rematchBtn.disabled = true; rematchBtn.textContent = 'ADVERSAIRE PARTI.' }
+  })
   // Relais perdu hors manche : l'attente en cours (partie créée, partie rejointe, manche suivante) ne peut plus
   // aboutir. Un message la remplace ; ANNULER et QUITTER restent utilisables.
   net.on('disconnected', () => {

@@ -258,3 +258,34 @@ describe('perte du relais hors manche', () => {
     $('btn-mp-join-cancel').onclick()
   })
 })
+
+// L'adversaire quitte l'écran de fin : le relais ferme la partie (server/index.js) et nous annonce 'peer_left'. La
+// manche suivante ne viendra plus, que la revanche soit déjà demandée ou pas encore : un message remplace l'attente.
+describe('départ de l\'adversaire hors manche', () => {
+  it('écran de fin, revanche demandée, l\'adversaire part : « ADVERSAIRE PARTI » remplace l\'attente, QUITTER ramène au menu', () => {
+    const ws = startMatch('sniper')
+    intro.active = false; intro.onDone()
+    ws.receive({ t: 'hit_pnj' })
+    $('btn-mp-rematch').onclick()
+    expect($('btn-mp-rematch').textContent).toBe('EN ATTENTE DE L\'ADVERSAIRE…')
+    ws.receive({ t: 'peer_left' })
+    expect($('mp-result').style.display).toBe('flex')
+    expect($('mp-result-title').textContent).toBe('VICTOIRE')   // le résultat de la manche jouée reste affiché
+    expect($('btn-mp-rematch').textContent).toBe('ADVERSAIRE PARTI.')
+    expect($('btn-mp-rematch').disabled).toBe(true)
+    $('btn-mp-quit').onclick()
+    expect($('mp-result').style.display).toBe('none')
+    expect($('menu').style.display).toBe('flex')
+  })
+
+  it('écran de fin, l\'adversaire part avant la revanche : MANCHE SUIVANTE n\'est plus proposée', () => {
+    const ws = startMatch('pnj')
+    intro.active = false; intro.onDone()
+    ws.receive({ t: 'hit_sniper' })
+    expect($('btn-mp-rematch').textContent).toBe('MANCHE SUIVANTE')
+    ws.receive({ t: 'peer_left' })
+    expect($('mp-result-title').textContent).toBe('VICTOIRE')
+    expect($('btn-mp-rematch').textContent).toBe('ADVERSAIRE PARTI.')
+    expect($('btn-mp-rematch').disabled).toBe(true)
+  })
+})
