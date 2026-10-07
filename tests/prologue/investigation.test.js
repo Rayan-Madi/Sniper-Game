@@ -113,6 +113,8 @@ describe('l\'enquête', () => {
     expect($('#enq-fiche').classList.contains('on')).toBe(true)
     await vi.advanceTimersByTimeAsync(150)
     click()                                               // le second clic du double-clic
+    await vi.advanceTimersByTimeAsync(400)
+    click()                                               // 550 ms après l'ouverture : encore dans la garde de 600 ms
     await vi.advanceTimersByTimeAsync(2000)
     expect(onDone).not.toHaveBeenCalled()
     expect(h.debug.state.mode).toBe('examining')
