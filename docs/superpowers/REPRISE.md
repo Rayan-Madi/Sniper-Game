@@ -1,7 +1,12 @@
 # Prompt de reprise — Sniper-Game
 
-> À coller tel quel au début d'une nouvelle conversation Claude Code ouverte dans `C:\Users\Rayan\dev\Sniper-Game`.
+> À coller tel quel au début d'une nouvelle conversation Claude Code ouverte dans le dossier du jeu.
 > Mis à jour le 7 octobre 2026, après la fusion de l'enquête jouable (main = `af8b22e`).
+>
+> **Sur un autre PC** : ce fichier est sur GitHub. Ouvrir Claude Code dans un dossier vide et commencer par :
+> « Clone https://github.com/Rayan-Madi/Sniper-Game, fais `npm install`, puis lis docs/superpowers/REPRISE.md et reprends à partir de là. »
+> Ne sont PAS sur GitHub (restés sur le premier PC) : les journaux de chantier `.superpowers/sdd/`, la config des serveurs
+> `.claude/launch.json` (à recréer, contenu ci-dessous) et la mémoire de Claude. Tout l'essentiel est dans les specs et les plans.
 
 ---
 
@@ -38,5 +43,12 @@ Fait et fusionné dans `main` (tout est relu, testé, 174 tests verts) :
 
 - Skills superpowers : `brainstorming` → spec dans `docs/superpowers/specs/` → `writing-plans` → exécution par sous-agents (implémenteur → relecture conformité + qualité → correction) avec un journal `.superpowers/sdd/<date>-<sujet>/progress.md` → revue finale de branche → fusion en avance rapide dans `main` → push.
 - Commits en français dans le style du dépôt, terminés par `Co-Authored-By: Claude …`.
-- Serveurs : `.claude/launch.json` (`sniper-dev` sur 5173, `maquettes` sur 5193). Routes de dev : `?cine=<id>&freeze=<ms>` (cinématiques), `?enquete=1&cam=x,y,z,lacet,tangage&ouvrir=<indice>&indices=n&stats=1` (enquête). Captures : `scripts/shots.mjs` (Chrome sans interface ; sous Windows, chemin `--screenshot` absolu et `--user-data-dir` jetable). Si le volet du navigateur intégré est caché, `requestAnimationFrame` ne tourne pas : tester le rendu par captures sans interface.
+- Serveurs : `.claude/launch.json` (non versionné ; à recréer s'il manque) :
+  ```json
+  { "version": "0.0.1", "configurations": [
+    { "name": "sniper-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5173 },
+    { "name": "maquettes", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "docs/superpowers/maquettes/cinematiques", "--port", "5193", "--strictPort"], "port": 5193 }
+  ] }
+  ```
+  Tests : `npx vitest run` (174 attendus). Build : `npx vite build`. Routes de dev : `?cine=<id>&freeze=<ms>` (cinématiques), `?enquete=1&cam=x,y,z,lacet,tangage&ouvrir=<indice>&indices=n&stats=1` (enquête). Captures : `scripts/shots.mjs` (Chrome sans interface ; sous Windows, chemin `--screenshot` absolu et `--user-data-dir` jetable). Si le volet du navigateur intégré est caché, `requestAnimationFrame` ne tourne pas : tester le rendu par captures sans interface.
 - Style « dossier du fixeur » : Anton (le fixeur) n'est jamais vu et ne dit jamais « tu entres » ; Viktor tire toujours de loin et en hauteur ; aucun corps montré.
