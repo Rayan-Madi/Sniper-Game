@@ -17,6 +17,7 @@ const END_MS = 700          // noir de fin, puis démontage et onDone
 const GLITCH_MS = 250
 const SUB_HOLD_MS = 2200    // un sous-titre reste lisible ce temps-là après sa réplique
 const RETRY_MS = 600        // REPRENDRE sans verrou revenu au bout de ce temps : Chrome l'a refusé (trop tôt après Échap)
+const LISTEN_GUARD_MS = 600 // fiche du téléphone : E ou clic ignorés ce temps-là après l'ouverture (un double-clic n'écoute pas le message)
 const PHOTO_W = 640         // largeur de l'instantané (4:3)
 const PHOTO_CROP = 0.74     // cadre le plus large : 74 % du 4:3 central (aussi celui d'un indice introuvable à l'image)
 const PHOTO_MIN = 0.35      // cadre le plus serré : 35 % de la hauteur de l'image (plus serré, l'agrandissement se verrait)
@@ -138,6 +139,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
   let saved = null, savedAuto = null, style = null, ui = null, $ = () => null
   let ready = false, started = false, ending = false, stopped = false, reported = false
   let glitchTimer = 0, subTimer = 0, lineTimer = 0, retryTimer = 0
+  let phoneOpenedAt = 0  // horodatage (performance.now) de l'ouverture de la fiche du téléphone
   const listening = []   // [cible, type, fonction] à retirer au démontage
 
   const report = payload => {
@@ -260,6 +262,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     if (r.type === 'phone') {
       const p = r.phone, n = p.appels.length
       openFiche({ id, tab: p.titre, lieu: p.lieu, titre: `${n} APPEL${n > 1 ? 'S' : ''} MANQUÉ${n > 1 ? 'S' : ''}`, calls: p.appels, lines: p.viktor, act: p.action, go: true })
+      phoneOpenedAt = performance.now()
       return
     }
     const c = r.clue
@@ -268,11 +271,15 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     setCount(r.count, r.first)
   }
 
-  // E ou clic gauche : examiner ce qu'on vise, fermer la fiche, ou écouter le message
+  // E ou clic gauche : examiner ce qu'on vise, fermer la fiche, ou écouter le message (pas dans la foulée de
+  // l'ouverture : le second clic d'un double-clic sur le téléphone terminait l'enquête par accident)
   function act() {
     if (!started || ending || stopped) return
     if (state.mode === 'exploring') { if (interact.current) examine(interact.current) }
-    else if (state.mode === 'examining') { if (state.current === PHONE.id) finish('listened'); else closeFiche() }
+    else if (state.mode === 'examining') {
+      if (state.current !== PHONE.id) closeFiche()
+      else if (performance.now() - phoneOpenedAt >= LISTEN_GUARD_MS) finish('listened')
+    }
   }
 
   // ── départ, pause, fin ──

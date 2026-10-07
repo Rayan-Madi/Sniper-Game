@@ -5,20 +5,28 @@ import { moveCircle } from '../../src/prologue/fpsController.js'
 import { CLUES, PHONE } from '../../src/prologue/clues.js'
 
 const IDS = [...CLUES.map(c => c.id), PHONE.id]
-const inside = (p, b) => p.x > b.minX && p.x < b.maxX && p.z > b.minZ && p.z < b.maxZ
+// emprise du joueur : moveCircle teste un carré de demi-côté r = 0,28 (rayon par défaut de createFpsController)
+const R = 0.28
+// le carré du joueur centré en p chevauche la boîte b (un contact bord à bord ne compte pas, même tolérance que moveCircle)
+const blocks = (p, b, r = R) => {
+  const E = 1e-6
+  return p.x + r > b.minX + E && p.x - r < b.maxX - E && p.z + r > b.minZ + E && p.z - r < b.maxZ - E
+}
 // marche en ligne droite par petits pas, comme le contrôleur
 const walk = (apt, from, to, steps = 400) => {
   let p = { ...from }
-  for (let i = 0; i < steps; i++) p = moveCircle(p, (to.x - from.x) / steps, (to.z - from.z) / steps, 0.28, apt.colliders)
+  for (let i = 0; i < steps; i++) p = moveCircle(p, (to.x - from.x) / steps, (to.z - from.z) / steps, R, apt.colliders)
   return p
 }
 
 describe('l\'appartement', () => {
-  it('tient le budget : moins de 60 objets dessinés et de 50 000 triangles', () => {
+  // valeurs mesurées par stats() : 47 objets et 16 550 triangles (REPRISE.md, 44 appels en capture réelle après
+  // élagage). Toute hausse est un choix assumé : mettre ce test à jour en même temps que REPRISE.md.
+  it('tient le budget mesuré : au plus 47 objets dessinés et 16 600 triangles', () => {
     const apt = buildApartment()
     const { drawables, triangles } = apt.stats()
-    expect(drawables).toBeLessThan(60)
-    expect(triangles).toBeLessThan(50000)
+    expect(drawables).toBeLessThanOrEqual(47)
+    expect(triangles).toBeLessThanOrEqual(16600)
     apt.dispose()
   })
 
@@ -59,10 +67,10 @@ describe('l\'appartement', () => {
     apt.dispose()
   })
 
-  it('le départ est sur le palier et hors de toute collision', () => {
+  it('le départ est sur le palier et hors de toute collision, emprise du joueur comprise', () => {
     const apt = buildApartment()
     expect(apt.start).toMatchObject({ x: 6, z: 7.85, yaw: 0 })
-    for (const b of apt.colliders) expect(inside(apt.start, b)).toBe(false)
+    for (const b of apt.colliders) expect(blocks(apt.start, b)).toBe(false)
     apt.dispose()
   })
 
@@ -90,14 +98,33 @@ describe('l\'appartement', () => {
     apt.dispose()
   })
 
-  it('les ancres des indices sont accessibles (à moins de 1,5 m d\'un point atteignable)', () => {
+  // Chaque ancre a un point d'accès (le dernier point de sa route) : le joueur y tient avec son emprise, à moins de
+  // 1,5 m de l'ancre, et il y arrive depuis le palier en marchant, étape par étape, sans être arrêté.
+  it('les ancres des indices sont accessibles : un point où le joueur tient, à moins de 1,5 m, relié au palier', () => {
     const apt = buildApartment()
-    const reach = { serrure: { x: 6.0, z: 7.6 }, lutte: { x: 6.4, z: 6.0 }, corps: { x: 9.6, z: 5.6 }, photo: { x: 10.6, z: 6.3 }, mot: { x: 9.5, z: 4.2 }, doudou: { x: 2.45, z: 3.9 }, telephone: { x: 5.4, z: 6.3 } }
-    for (const id of IDS) {
-      const a = apt.anchors[id]
-      expect(Math.hypot(a.x - reach[id].x, a.z - reach[id].z), id).toBeLessThan(1.5)
-      for (const b of apt.colliders) expect(inside(reach[id], b), `${id} : point d'accès dans une collision`).toBe(false)
+    const PORTE = { x: 6.0, z: 5.8 }   // juste derrière la porte d'entrée
+    const routes = {
+      serrure: [{ x: 6.0, z: 7.6 }],
+      lutte: [PORTE, { x: 6.4, z: 6.0 }],
+      corps: [PORTE, { x: 9.6, z: 5.8 }],                                // devant le drap, côté couloir du salon
+      photo: [PORTE, { x: 10.6, z: 5.8 }, { x: 10.6, z: 6.3 }],
+      mot: [PORTE, { x: 9.4, z: 5.8 }, { x: 9.4, z: 4.2 }],              // entre le drap et la table basse
+      doudou: [PORTE, { x: 6.0, z: 5.15 }, { x: 2.45, z: 5.15 }, { x: 2.45, z: 3.9 }],
+      // milieu de l'entrée : le passage entre la console et le battant ouvert (0,43 m) est plus étroit que le joueur
+      telephone: [PORTE, { x: 5.6, z: 5.6 }],
     }
+    const bad = []
+    for (const id of IDS) {
+      const route = routes[id], reach = route[route.length - 1], a = apt.anchors[id]
+      if (Math.hypot(a.x - reach.x, a.z - reach.z) >= 1.5) bad.push(`${id} : point d'accès à plus de 1,5 m de l'ancre`)
+      if (apt.colliders.some(b => blocks(reach, b))) bad.push(`${id} : l'emprise du joueur chevauche une collision au point d'accès`)
+      let p = apt.start
+      for (const q of route) {
+        p = walk(apt, p, q)
+        if (Math.hypot(p.x - q.x, p.z - q.z) > 1e-3) { bad.push(`${id} : arrêté avant (${q.x} ; ${q.z})`); break }
+      }
+    }
+    expect(bad).toEqual([])
     apt.dispose()
   })
 

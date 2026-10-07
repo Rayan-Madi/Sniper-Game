@@ -26,7 +26,7 @@ const keyE = () => document.dispatchEvent(new KeyboardEvent('keydown', { code: '
 const $ = sel => document.querySelector(sel)
 // pose la caméra sur un point accessible proche d'un indice (mêmes points que tests/prologue/apartment.test.js), en
 // visant le centre de son objet (lacet = atan2(−dx, −dz), convention du contrôleur)
-const REACH = { mot: { x: 9.5, z: 4.2 }, telephone: { x: 5.4, z: 6.3 } }
+const REACH = { mot: { x: 9.4, z: 4.2 }, telephone: { x: 5.6, z: 5.6 } }
 const lookAt = (apt, id, y = 1.65) => {
   const target = new THREE.Box3().setFromObject(apt.targets.find(t => t.userData.clueId === id)).getCenter(new THREE.Vector3())
   const from = REACH[id]
@@ -91,12 +91,37 @@ describe('l\'enquête', () => {
     expect($('#enq-fiche').textContent).toContain('06 39 98 41 07')
     expect($('#enq-fiche').textContent).toContain('MAISON')
     expect($('#enq-fiche').textContent).toContain('ÉCOUTER LE MESSAGE')
+    await vi.advanceTimersByTimeAsync(700)             // la fiche lue, on écoute
     keyE()
     expect(onDone).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(800)
     expect(onDone).toHaveBeenCalledTimes(1)
     expect(onDone).toHaveBeenCalledWith({ result: 'listened' })
     expect($('#enq-root')).toBeNull()
+  })
+
+  it('un double-clic sur le téléphone ouvre la fiche sans écouter le message', async () => {
+    const renderer = fakeRenderer(), camera = new THREE.PerspectiveCamera()
+    const probe = startInvestigation({ renderer, camera, onDone: vi.fn() })
+    const cam = lookAt(probe.debug.apartment, 'telephone'); probe.stop()
+    const onDone = vi.fn()
+    const h = startInvestigation({ renderer, camera, onDone, options: { cam, indices: 4 } })
+    lockEl = renderer.domElement                          // pointeur verrouillé : le clic gauche agit
+    const click = () => document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    h.update(0.016)
+    click()
+    expect($('#enq-fiche').classList.contains('on')).toBe(true)
+    await vi.advanceTimersByTimeAsync(150)
+    click()                                               // le second clic du double-clic
+    await vi.advanceTimersByTimeAsync(400)
+    click()                                               // 550 ms après l'ouverture : encore dans la garde de 600 ms
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(onDone).not.toHaveBeenCalled()
+    expect(h.debug.state.mode).toBe('examining')
+    expect($('#enq-fiche').classList.contains('on')).toBe(true)
+    click()                                               // un clic voulu, plus tard : on écoute
+    await vi.advanceTimersByTimeAsync(800)
+    expect(onDone).toHaveBeenCalledWith({ result: 'listened' })
   })
 
   it('perdre le pointeur ouvre la pause ; « PASSER L\'ENQUÊTE » termine en « skipped »', async () => {
