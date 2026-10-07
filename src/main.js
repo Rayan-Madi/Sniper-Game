@@ -12,6 +12,7 @@ import { preloadCharacters } from './characters.js'
 import { initMultiplayerMenu } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
 import { fovFor, aimAngles } from './aim.js'
+import { MAX_LEVEL, recordClear } from './campaign/progress.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -59,7 +60,9 @@ let isHolding = false      // apnée effectivement active
 let convoyCar = null       // { mesh, x, dir, speed }
 let convoyTarget = null    // la cible assise dans le véhicule
 
-const MAX_LEVEL = 6        // dernier niveau (la fête)
+// Dernière mission réussie dans cette session (journal de Viktor, écran des améliorations). La sauvegarde, elle,
+// pointe déjà sur la mission suivante dès la réussite.
+let lastCleared = 0
 
 // ─── DOM ───────────────────────────────────────────────────────────
 const menuEl       = document.getElementById('menu')
@@ -86,10 +89,11 @@ initMultiplayerMenu() // mode 1v1 Sniper vs Contre-tueur (voir pvp.js)
 // Libellé du bouton selon la progression sauvegardée
 function refreshMenuButtons() {
   const lvl = upgradeState.currentLevel
+  const done = upgradeState.campaignDone   // M6 réussie, épilogue pas encore vu jusqu'au bout
   document.getElementById('btn-start').textContent =
-    lvl > 1 ? `REPRENDRE — MISSION ${Math.min(lvl, MAX_LEVEL)}` : 'COMMENCER'
+    done ? 'VOIR LA FIN' : lvl > 1 ? `REPRENDRE : MISSION ${Math.min(lvl, MAX_LEVEL)}` : 'COMMENCER'
   const rs = document.getElementById('btn-reset-save')
-  if (rs) rs.style.display = lvl > 1 ? 'block' : 'none'
+  if (rs) rs.style.display = (done || lvl > 1) ? 'block' : 'none'
 }
 refreshMenuButtons()
 const resetBtn = document.getElementById('btn-reset-save')
@@ -113,7 +117,8 @@ function playPrologue() {
 }
 
 document.getElementById('btn-start').onclick = () => {
-  if (upgradeState.currentLevel === 1 && !upgradeState.prologueSeen) playPrologue()
+  if (upgradeState.campaignDone) playEnding()   // campagne finie : la fin, jamais un rejeu de M6 qui recréditerait
+  else if (upgradeState.currentLevel === 1 && !upgradeState.prologueSeen) playPrologue()
   else launchLevel(upgradeState.currentLevel)
 }
 document.getElementById('btn-retry').onclick     = () => launchLevel(upgradeState.currentLevel)
@@ -131,7 +136,7 @@ const JOURNAL = {
 }
 
 function showJournal(onDone) {
-  const lvl = upgradeState.currentLevel
+  const lvl = lastCleared
   const lines = JOURNAL[((lvl - 1) % 6) + 1] || []
   levelClearEl.style.display = 'none'
 
@@ -157,12 +162,13 @@ function showJournal(onDone) {
   document.body.appendChild(ov)
   ov.querySelector('#journal-next').onclick = () => { ov.remove(); onDone() }
 }
-document.getElementById('btn-next-level').onclick = () => {
-  upgradeState.currentLevel++
-  saveProgress()
-  launchLevel(upgradeState.currentLevel)
-}
-document.getElementById('btn-see-ending').onclick = () => {
+// La mission suivante est déjà enregistrée par triggerLevelClear (recordClear) : il ne reste qu'à la lancer.
+document.getElementById('btn-next-level').onclick = () => launchLevel(upgradeState.currentLevel)
+
+// Épilogue, puis nouvelle campagne. Depuis l'écran de réussite de M6, ou depuis le menu si le jeu a été quitté
+// avant la fin de l'épilogue (campaignDone est sauvegardé dès la réussite).
+function playEnding() {
+  menuEl.style.display = 'none'
   levelClearEl.style.display = 'none'
   hudEl.style.display = 'none'
   clearEntities()
@@ -172,7 +178,7 @@ document.getElementById('btn-see-ending').onclick = () => {
     audio: cinematicAudio(),
     params: { port: upgradeState.freedVictims ? 'libres' : 'enfermes' },
     onDone: () => {
-      // Nouvelle campagne : retour à la mission 1, choix du port, briefings vus et prologue remis à zéro
+      // Nouvelle campagne : retour à la mission 1, choix du port, briefings vus, prologue et fin remis à zéro
       upgradeState.currentLevel = 1
       resetCampaignFlags()
       saveProgress()
@@ -180,6 +186,7 @@ document.getElementById('btn-see-ending').onclick = () => {
     },
   })
 }
+document.getElementById('btn-see-ending').onclick = () => playEnding()
 
 // ── Menu pause ──
 const pauseEl    = document.getElementById('pause-menu')
@@ -643,9 +650,12 @@ function triggerLevelClear() {
   releaseMouse()
   playLevelClear()
   hudEl.style.display = 'none'
-  upgradeState.totalScore = score
+  // Réussite enregistrée en une fois : points, score ET mission suivante, avant la sauvegarde.
+  // Quitter le jeu ici ne doit pas laisser rejouer (et recréditer) la mission qu'on vient de réussir.
+  const n = upgradeState.currentLevel
   const reward = currentLevelData.pointsReward
-  upgradeState.points += reward
+  const { last } = recordClear(upgradeState, { level: n, reward, score })
+  lastCleared = n
   saveProgress()
   // Rapport de mission : rang + temps, tirs, précision
   const elapsed = Math.max(1, Math.round((performance.now() - statStart) / 1000))
@@ -660,10 +670,9 @@ function triggerLevelClear() {
     `<span style="color:rgba(200,240,200,0.55);font-size:12px;">⏱ ${elapsed}s &nbsp;·&nbsp; ${statShots} tir${statShots > 1 ? 's' : ''} &nbsp;·&nbsp; précision ${precision}% &nbsp;·&nbsp; alertes ${statAlerts}</span>`
 
   // Dernier niveau : on propose de voir la fin au lieu d'enchaîner
-  const lastLevel = upgradeState.currentLevel >= MAX_LEVEL
-  document.getElementById('lc-title').textContent = lastLevel ? 'RÉSEAU ANÉANTI' : 'MISSION ACCOMPLIE'
-  document.getElementById('btn-upgrades').style.display    = lastLevel ? 'none' : 'block'
-  document.getElementById('btn-see-ending').style.display  = lastLevel ? 'block' : 'none'
+  document.getElementById('lc-title').textContent = last ? 'RÉSEAU ANÉANTI' : 'MISSION ACCOMPLIE'
+  document.getElementById('btn-upgrades').style.display    = last ? 'none' : 'block'
+  document.getElementById('btn-see-ending').style.display  = last ? 'block' : 'none'
 
   levelClearEl.style.display = 'flex'
 }
@@ -1067,7 +1076,7 @@ document.addEventListener('keyup', e => {
 function renderUpgradeUI() {
   document.getElementById('upgrade-points').textContent = `Points disponibles : ${upgradeState.points}`
   document.getElementById('level-info').textContent =
-    `Mission ${upgradeState.currentLevel} terminée → Mission ${upgradeState.currentLevel + 1}`
+    `Mission ${lastCleared} terminée → Mission ${lastCleared + 1}`
 
   const grid = document.getElementById('upgrade-grid')
   grid.innerHTML = ''
