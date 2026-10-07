@@ -110,6 +110,33 @@ describe('machine à états', () => {
     expect(s.tick(100)).toBeNull()
   })
 
+  // la spec : « après 40 s d'exploration sans NOUVELLE découverte »
+  it('une pause ne compte pas dans les 40 s', () => {
+    const s = createInvestigationState()
+    expect(s.tick(30)).toBeNull()
+    s.pause()
+    expect(s.tick(100)).toBeNull()
+    s.resume()
+    expect(s.tick(9)).toBeNull()                               // 39 s d'exploration
+    expect(s.tick(1.5)).toBe(CLUES[0].piste)                    // 40,5 s
+  })
+
+  it('relire un indice déjà vu (fiche ouverte puis fermée) ne repousse pas la piste', () => {
+    const s = createInvestigationState()
+    s.examine('serrure'); s.close()                             // vraie découverte : l'attente repart de zéro
+    expect(s.tick(30)).toBeNull()
+    expect(s.examine('serrure')).toMatchObject({ first: false })
+    s.close()
+    expect(s.tick(10.5)).toBe(CLUES[1].piste)                   // 40,5 s depuis la découverte
+  })
+
+  it('le téléphone verrouillé ne repousse pas la piste', () => {
+    const s = createInvestigationState()
+    expect(s.tick(30)).toBeNull()
+    expect(s.examine('telephone')).toMatchObject({ type: 'phone-locked' })
+    expect(s.tick(10.5)).toBe(CLUES[0].piste)
+  })
+
   it('found pré-valide des indices (route de développement)', () => {
     const s = createInvestigationState({ found: ['serrure', 'lutte', 'corps', 'photo', 'inconnu'] })
     expect(s.count).toBe(4)

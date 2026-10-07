@@ -19,23 +19,25 @@ export function createInvestigationState({ clues = CLUES, phone = PHONE, anchors
     examine(id) {
       if (s.mode !== 'exploring') return null
       if (id === phone.id) {
-        if (!api.phoneUnlocked) { s.idle = 0; return { type: 'phone-locked', line: phone.verrouille } }
+        if (!api.phoneUnlocked) return { type: 'phone-locked', line: phone.verrouille }
         s.mode = 'examining'; s.current = phone.id
         return { type: 'phone', phone }
       }
       const clue = clues.find(c => c.id === id)
       if (!clue) return null
       const first = !s.found.has(id)
-      s.found.add(id); s.idle = 0
+      s.found.add(id)
+      if (first) s.idle = 0     // seule une vraie découverte repousse la piste (pas une relecture, ni le téléphone verrouillé)
       s.mode = 'examining'; s.current = id
       return { type: 'clue', clue, first, count: s.found.size, total: clues.length }
     },
-    close() { if (s.mode === 'examining') { s.mode = 'exploring'; s.current = null; s.idle = 0 } },
+    close() { if (s.mode === 'examining') { s.mode = 'exploring'; s.current = null } },
     pause() { if (s.mode === 'exploring' || s.mode === 'examining') { s.before = s.mode; s.mode = 'paused' } },
     resume() { if (s.mode === 'paused') { s.mode = s.before; s.before = null } },
     finish(reason) { if (s.mode === 'done') return false; s.mode = 'done'; s.result = reason; return true },
 
-    // à chaque image : une piste quand on explore depuis hintDelay secondes sans rien trouver, sinon null
+    // à chaque image : une piste après hintDelay secondes d'exploration (fiches et pauses non comptées) sans nouvelle
+    // découverte, sinon null
     tick(dt, pos = null) {
       if (s.mode !== 'exploring') return null
       s.idle += dt
