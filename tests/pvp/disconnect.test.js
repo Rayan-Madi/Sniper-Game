@@ -79,10 +79,13 @@ function startMatch(role) {
   return ws
 }
 
-afterEach(() => {
-  // Retour au menu entre deux scénarios (sans fin de manche, l'écran de fin n'a pas de bouton visible)
+afterEach(async () => {
+  // Retour au menu entre deux scénarios (sans fin de manche, l'écran de fin n'a pas de bouton visible).
+  // Une manche restée ouverte est d'abord close proprement (départ de l'adversaire).
+  if ($('mp-hud').style.display === 'block') FakeWebSocket.last.receive({ t: 'peer_left' })
   if ($('mp-result').style.display === 'flex') $('btn-mp-quit').onclick()
   $('mp-result').style.display = 'none'
+  await new Promise(r => setTimeout(r, 5))         // les fermetures de socket en attente arrivent ici
 })
 
 describe('perte du relais en PvP', () => {
@@ -104,6 +107,7 @@ describe('perte du relais en PvP', () => {
     ws.drop()
     expect($('mp-hud').style.display).toBe('none')
     expect($('mp-result').style.display).toBe('flex')
+    expect($('mp-result-title').textContent).toBe('CONNEXION PERDUE')
     expect($('btn-mp-rematch').style.display).toBe('none')
   })
 
@@ -125,5 +129,43 @@ describe('perte du relais en PvP', () => {
     await new Promise(r => setTimeout(r, 5))       // l'événement close arrive après coup
     expect(ws.readyState).toBe(3)
     expect($('mp-result').style.display).not.toBe('flex')
+  })
+
+  // Une socket remplacée (net.connect) ou abandonnée (net.disconnect) peut
+  // annoncer sa fermeture après coup : elle ne doit pas couper la manche
+  // jouée sur la nouvelle socket.
+  it('code erroné puis nouvel essai : la fermeture tardive de l\'ancienne socket ne coupe pas la manche', async () => {
+    intro.active = false; intro.onDone = null
+    $('btn-mp-join-show').onclick()
+    $('mp-join-input').value = 'ZZZZ'
+    $('btn-mp-join-go').onclick()
+    const old = FakeWebSocket.last
+    old.open()
+    old.receive({ t: 'error', message: 'Room introuvable.' })
+    $('mp-join-input').value = 'ABCD'
+    $('btn-mp-join-go').onclick()                  // net.connect ferme l'ancienne socket
+    const ws = FakeWebSocket.last
+    expect(ws).not.toBe(old)
+    ws.open()
+    ws.receive({ t: 'joined', room: 'ABCD' })
+    ws.receive({ t: 'start', role: 'pnj', serverTime: 123456 })
+    intro.active = false; intro.onDone()           // la manche démarre avant l'écho du close
+    await new Promise(r => setTimeout(r, 5))
+    expect(old.readyState).toBe(3)
+    expect($('mp-result').style.display).not.toBe('flex')
+    expect($('mp-hud').style.display).toBe('block')
+  })
+
+  it('annuler puis recréer : la fermeture tardive de la socket annulée ne coupe pas la manche', async () => {
+    $('btn-mp-create').onclick()
+    const old = FakeWebSocket.last
+    old.open()
+    $('btn-mp-create-cancel').onclick()            // net.disconnect : le close arrive plus tard
+    startMatch('sniper')
+    intro.active = false; intro.onDone()
+    await new Promise(r => setTimeout(r, 5))
+    expect(old.readyState).toBe(3)
+    expect($('mp-result').style.display).not.toBe('flex')
+    expect($('mp-hud').style.display).toBe('block')
   })
 })
