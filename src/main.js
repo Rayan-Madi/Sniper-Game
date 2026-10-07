@@ -18,6 +18,7 @@ import { rankFor, precisionOf, isHit } from './campaign/rank.js'
 import { levelShortcut } from './campaign/shortcuts.js'
 import { stepConvoy } from './campaign/convoy.js'
 import { missImpact } from './campaign/impact.js'
+import { journalNote } from './campaign/journal.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -118,7 +119,7 @@ if (resetBtn) resetBtn.onclick = () => { resetProgress(); refreshMenuButtons() }
 function playPrologue() {
   menuEl.style.display = 'none'
   hudEl.style.display = 'none'
-  instruction.style.opacity = '0' // l'aide des missions (CLIC DROIT — Viser…) ne s'affiche pas sur l'appartement
+  instruction.style.opacity = '0' // l'aide des missions (CLIC DROIT : Viser…) ne s'affiche pas sur l'appartement
   gamePhase = 'briefing'          // cinématique en motion design : pas de rendu WebGL
   clock.getDelta()
   cinematic('prologue-a', {
@@ -157,19 +158,19 @@ function showJournal(onDone) {
   const ov = document.createElement('div')
   ov.style.cssText = `position:fixed;inset:0;z-index:170;display:flex;align-items:center;justify-content:center;
     background:rgba(0,0,0,0.9);font-family:'Courier New',monospace;`
-  const freedNote = (lvl === 3 && upgradeState.freedVictims)
-    ? `<div style="color:#7ab87a;margin-top:14px;">P.S. — Je les ai vus courir hors du conteneur. Libres.</div>` : ''
+  const note = journalNote(lvl, { freedVictims: upgradeState.freedVictims })
+  const noteHtml = note ? `<div style="color:${note.color};margin-top:14px;">${note.text}</div>` : ''
   ov.innerHTML = `
     <div style="background:linear-gradient(160deg,#d8cfb8,#c9bfa4);color:#2a241c;max-width:480px;width:86%;
       padding:34px 38px;border-radius:3px;box-shadow:0 24px 80px rgba(0,0,0,0.8), inset 0 0 60px rgba(120,100,60,0.25);
       transform:rotate(-1.2deg);position:relative;">
       <div style="position:absolute;left:30px;top:0;bottom:0;width:1px;background:rgba(160,60,60,0.35);"></div>
-      <div style="font-size:12px;letter-spacing:0.25em;color:#7a6a4a;margin-bottom:14px;">— JOURNAL DE VIKTOR —</div>
+      <div style="font-size:12px;letter-spacing:0.25em;color:#7a6a4a;margin-bottom:14px;">JOURNAL DE VIKTOR</div>
       <div style="font-size:15px;line-height:2.1;">
         ${lines.map(l => `<div>${l}</div>`).join('')}
-        ${freedNote}
+        ${noteHtml}
       </div>
-      <div style="margin-top:22px;font-size:11px;color:#8a7a5a;">Mission ${lvl} — terminée. <span style="text-decoration:line-through;">cible</span></div>
+      <div style="margin-top:22px;font-size:11px;color:#8a7a5a;">Mission ${lvl} : terminée. <span style="text-decoration:line-through;">cible</span></div>
       <button id="journal-next" style="margin-top:18px;background:transparent;border:1px solid #6a5a3a;color:#4a3d28;
         padding:9px 26px;font-family:inherit;font-size:13px;letter-spacing:0.12em;cursor:pointer;">CONTINUER →</button>
     </div>`
@@ -248,7 +249,7 @@ invertChk.onchange = () => { settings.invertY = invertChk.checked; saveSettings(
 // Code physique (e.code) → étiquette lisible. 'Key*'/'Digit*' sont les seuls
 // codes utilisés par défaut, mais on reste tolérant à un remap plus exotique.
 function codeToLabel(code) {
-  if (!code) return '—'
+  if (!code) return 'AUCUNE'
   if (code.startsWith('Key')) return code.slice(3)
   if (code.startsWith('Digit')) return code.slice(5)
   return code
@@ -678,7 +679,7 @@ function triggerAlert(reason) {
   alertTimer = 6
   alertBanner.style.display = 'block'
   playAlert()
-  addKillFeed(reason || '⚠ ALERTE — Restez caché', true)
+  addKillFeed(reason || '⚠ ALERTE : restez caché', true)
 
   // Gardes réagissent
   for (const g of guards) {
@@ -727,7 +728,7 @@ function triggerLevelClear() {
   const { label: rank, color: rankCol } = rankFor({ shots: statShots, hits: statHits, alerts: statAlerts })
   document.getElementById('lc-score').innerHTML =
     `<div style="font-size:24px;letter-spacing:0.35em;color:${rankCol};margin-bottom:8px;text-shadow:0 0 18px ${rankCol}55;">${rank}</div>` +
-    `Score : ${score} pts  —  +${reward} point${reward > 1 ? 's' : ''} d'amélioration<br>` +
+    `Score : ${score} pts  ·  +${reward} point${reward > 1 ? 's' : ''} d'amélioration<br>` +
     `<span style="color:rgba(200,240,200,0.55);font-size:12px;">⏱ ${elapsed}s &nbsp;·&nbsp; ${statShots} tir${statShots > 1 ? 's' : ''} &nbsp;·&nbsp; précision ${precision}% &nbsp;·&nbsp; alertes ${statAlerts}</span>`
 
   // Dernier niveau : on propose de voir la fin au lieu d'enchaîner
@@ -760,7 +761,7 @@ function triggerConvoyEscaped() {
   releaseMouse()
   clearForEndScreen()
   hudEl.style.display = 'none'
-  document.getElementById('game-over-reason').textContent = 'Le convoi a filé — le colonel a rejoint la frontière'
+  document.getElementById('game-over-reason').textContent = 'Le convoi a filé : le colonel a rejoint la frontière'
   gameOverEl.style.display = 'flex'
 }
 
@@ -858,7 +859,7 @@ function resolveBullet() {
     moralLockMesh = null; moralLockBox = null
     upgradeState.freedVictims = true
     score += 150
-    addKillFeed('🔓 Conteneur ouvert — ils s\'échappent... (+150 pts)')
+    addKillFeed('🔓 Conteneur ouvert : ils s\'échappent... (+150 pts)')
     // trois silhouettes s'enfuient du conteneur
     for (let i = 0; i < 3; i++) {
       const freed = new NPC({
@@ -893,7 +894,7 @@ function resolveBullet() {
       reactNearby(shotPos, 28)
       checkGuardAlert(shotPos, stats)
     }
-    addKillFeed('Tir manqué — cibles en fuite')
+    addKillFeed('Tir manqué : cibles en fuite')
   }
 
   updateHUD()
@@ -903,7 +904,7 @@ function killCivilian(npc) {
   npc.die()
   fleeNearby(npc.mesh.position, 25)
   playCivilKill()
-  addKillFeed('⚠ CIVIL ABATTU — MISSION ÉCHOUÉE', true)
+  addKillFeed('⚠ CIVIL ABATTU : MISSION ÉCHOUÉE', true)
   failPending = true   // d'ici l'échec : ni pause, ni tir, ni briefing revu
   const token = missionToken
   setTimeout(() => {
@@ -920,7 +921,7 @@ function killTarget(npc, headshot = false) {
   if (headshot) bonus *= 2
   score += bonus
   stress = Math.max(0, stress - 0.1)
-  addKillFeed(headshot ? `🎯 HEADSHOT — Cible éliminée (+${bonus} pts)` : `✓ Cible éliminée (+${bonus} pts)`)
+  addKillFeed(headshot ? `🎯 HEADSHOT : cible éliminée (+${bonus} pts)` : `✓ Cible éliminée (+${bonus} pts)`)
 
   // Double élimination : deux cibles en moins de 4 secondes
   const nowK = performance.now()
@@ -966,7 +967,7 @@ function hitGuard(npc, stats) {
       if (g.alive) g.react(npc.mesh.position)
     }
   } else {
-    triggerAlert('⚠ Garde touché — ALERTE DÉCLENCHÉE')
+    triggerAlert('⚠ Garde touché : ALERTE DÉCLENCHÉE')
     stress = Math.min(1, stress + 0.45)
   }
 }
@@ -1172,7 +1173,7 @@ function renderUpgradeUI() {
       <div class="upg-level">${Array.from({ length: upg.max }, (_, i) =>
         `<div class="upg-pip ${i < lvl ? 'filled' : ''}"></div>`
       ).join('')}</div>
-      <div class="upg-cost">${maxed ? 'MAX' : canAfford ? `Coût : ${cost} pt` : `<span style="color:#ff8080">${cost} pt — insuffisant</span>`}</div>
+      <div class="upg-cost">${maxed ? 'MAX' : canAfford ? `Coût : ${cost} pt` : `<span style="color:#ff8080">${cost} pt, insuffisant</span>`}</div>
     `
 
     if (!maxed && canAfford) {

@@ -365,6 +365,32 @@ const SCENARIOS = {
     }
   },
 
+  // Port réussi, puis AMÉLIORER : la page du journal de Viktor dit le choix moral dans les deux sens (victimes
+  // libérées par le cadenas, ou conteneur resté fermé), sans tiret cadratin.
+  async journal() {
+    for (const libres of [true, false]) {
+      const variante = libres ? 'libres' : 'enfermes'
+      const c = await play(3)
+      try {
+        if (libres) check(await aimAndShoot(c, 'cadenas'), 'cadenas touché', null)
+        for (let i = 0; i < 6 && (await mission(c)).cibles > 0 && (await mission(c)).phase === 'playing'; i++) {
+          await aimAndShoot(c, 'cible', 0)
+        }
+        await until(c, `__mission().phase !== 'playing'`, 5000)   // après le ralenti de 1,5 s
+        const m = await mission(c)
+        if (m.phase !== 'cleared') throw new Error(`cible manquée ou civil sur la ligne de tir : scénario non concluant (${m.phase})`)
+        await capture(c, `journal-${variante}-reussite`)
+        await click(c, 'btn-upgrades')
+        const page = await js(c, `document.getElementById('journal-next').parentElement.innerText`)
+        await capture(c, `journal-${variante}`)
+        const attendu = libres ? 'P.S. Je les ai vus courir hors du conteneur. Libres.' : 'P.S. Le conteneur rouge est resté fermé. Je l\'entends encore.'
+        check(page.includes(attendu), `${variante} : la note du port`, page)
+        check(!page.includes(libres ? 'resté fermé' : 'courir'), `${variante} : pas la note de l'autre choix`, page)
+        check(!page.includes('\u2014'), `${variante} : aucun tiret cadratin sur la page`, page)
+      } finally { await c.close() }
+    }
+  },
+
   // Convoi (M5) : jeeps et occupants sur la route (0,2 m). Le colonel abattu suit sa jeep, qui roule encore à 15 %
   // pendant le ralenti, au lieu de rester suspendu en l'air.
   async convoi() {

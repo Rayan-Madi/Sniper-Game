@@ -1,7 +1,7 @@
 export const LEVELS = [
   {
     id: 1,
-    name: 'Niveau 1 — Marché',
+    name: 'Niveau 1 : Marché',
     targets: 1,
     guards: 1,
     targetSpeed: 0.4,
@@ -12,7 +12,7 @@ export const LEVELS = [
   },
   {
     id: 2,
-    name: 'Niveau 2 — Parking',
+    name: 'Niveau 2 : Parking',
     targets: 2,
     guards: 2,
     targetSpeed: 0.6,
@@ -23,7 +23,7 @@ export const LEVELS = [
   },
   {
     id: 3,
-    name: 'Niveau 3 — Port',
+    name: 'Niveau 3 : Port',
     targets: 2,
     guards: 3,
     targetSpeed: 0.7,
@@ -34,7 +34,7 @@ export const LEVELS = [
   },
   {
     id: 4,
-    name: 'Niveau 4 — Base militaire',
+    name: 'Niveau 4 : Base militaire',
     targets: 3,
     guards: 4,
     targetSpeed: 0.8,
@@ -45,7 +45,7 @@ export const LEVELS = [
   },
   {
     id: 5,
-    name: 'Niveau 5 — Le Convoi',
+    name: 'Niveau 5 : Le Convoi',
     targets: 1,             // le colonel, dans une voiture en mouvement
     guards: 4,              // 3 chauffeurs + 1 passager d'escorte
     civilians: 0,
@@ -58,7 +58,7 @@ export const LEVELS = [
   },
   {
     id: 6,
-    name: 'Niveau 6 — La Fête',
+    name: 'Niveau 6 : La Fête',
     targets: 1,             // le commanditaire — cible unique finale
     guards: 2,
     civilians: 24,          // foule TRÈS dense — un tir raté sur un innocent = échec

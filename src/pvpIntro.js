@@ -41,7 +41,7 @@ function buildConfig(role, arena) {
         { time: 10,  pos: [nx, ny, nz], look: aimEnd },
       ],
       textCues: [
-        { from: 0.3, to: 3.3, text: "Vous êtes le SNIPER. Poste fixe — impossible de bouger de ce nid." },
+        { from: 0.3, to: 3.3, text: "Vous êtes le SNIPER. Poste fixe : impossible de bouger de ce nid." },
         { from: 3.6, to: 6.8, text: "Visez à la souris. Votre laser rouge est visible des DEUX côtés : c'est votre talon d'Achille." },
         { from: 7.1, to: 9.8, text: "3 capacités de sabotage (touches configurables dans Paramètres). Repérez le contre-tueur et abattez-le avant lui." },
       ],
@@ -62,7 +62,7 @@ function buildConfig(role, arena) {
       { time: 11,  pos: [spawn[0], 2.4, spawn[2] + 5],          look: [spawn[0], 1.6, spawn[2]] },
     ],
     textCues: [
-      { from: 0.3, to: 2.8,  text: "Vous êtes le CONTRE-TUEUR. Fondez-vous dans la foule — déplacement en ZQSD." },
+      { from: 0.3, to: 2.8,  text: "Vous êtes le CONTRE-TUEUR. Fondez-vous dans la foule, déplacement en ZQSD." },
       { from: 3.1, to: 8.2,  text: "Ramassez les 3 pièces d'arme dispersées dans la pièce pour assembler votre pistolet." },
       { from: 8.5, to: 10.8, text: "Repérez le laser du sniper et évitez sa ligne de mire. Une touche d'émote vous fait danser/saluer pour vous fondre parmi les invités." },
     ],

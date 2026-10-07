@@ -86,7 +86,7 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
     sceneStyle = document.createElement('style'); sceneStyle.textContent = mod.css
     document.head.appendChild(sceneStyle)
     root.classList.remove('k-leaving')
-    root.innerHTML = `<div class="${mod.stClass}" id="st">${mod.html}</div><div class="k-skip">ÉCHAP · ENTRÉE · ESPACE — PASSER</div>`
+    root.innerHTML = `<div class="${mod.stClass}" id="st">${mod.html}</div><div class="k-skip">ÉCHAP · ENTRÉE · ESPACE : PASSER</div>`
     root.hidden = false
     K = handle.kit = createKit({ root, audio, freeze })
     document.addEventListener('keydown', onKey, true)

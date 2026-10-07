@@ -98,7 +98,7 @@ const HTML = `
   <div class="enq-count" id="enq-count">INDICES <b>0</b> / 6</div>
   <div class="enq-time" id="enq-time"><i>●</i> 14/03 · 21:47</div>
   <div class="enq-cross"></div>
-  <div class="enq-prompt" id="enq-prompt"><b>E</b> — EXAMINER</div>
+  <div class="enq-prompt" id="enq-prompt"><b>E</b> : EXAMINER</div>
   <div class="enq-sub" id="enq-sub"><span class="spk">VIKTOR</span><span class="tx"></span></div>
   <div class="enq-fiche" id="enq-fiche">
     <div class="enq-tab"></div>
@@ -231,7 +231,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     const q = fiche.querySelector('.enq-quote'); q.hidden = !quote; q.textContent = quote ? `« ${quote} »` : ''
     const list = fiche.querySelector('.enq-calls'); list.hidden = !calls
     list.innerHTML = calls ? calls.map(a => `<div><b>${esc(a.de)} · ${esc(a.heure)}</b><small>${esc(a.note)}</small></div>`).join('') : ''
-    const actEl = fiche.querySelector('.enq-act'); actEl.innerHTML = `<b>E</b> — ${esc(act)}`; actEl.classList.toggle('go', !!go)
+    const actEl = fiche.querySelector('.enq-act'); actEl.innerHTML = `<b>E</b> : ${esc(act)}`; actEl.classList.toggle('go', !!go)
     cancel(actTimer); actTimer = 0; actEl.style.visibility = ''
     // phrases de Viktor : la première tout de suite, la suivante après la fin estimée de la précédente + 400 ms
     const rows = [...fiche.querySelectorAll('.enq-line')]
@@ -449,7 +449,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     const render = labels => {
       const el = $('.enq-card .k'); if (!el) return
       const kb = s => `<kbd>${esc(s)}</kbd>`
-      el.innerHTML = `<span>${labels.map(kb).join('')} SE DÉPLACER</span><i></i><span>SOURIS — REGARDER</span><i></i>` +
+      el.innerHTML = `<span>${labels.map(kb).join('')} SE DÉPLACER</span><i></i><span>SOURIS : REGARDER</span><i></i>` +
         `<span>${kb('E')} EXAMINER</span><i></i><span>${kb('ÉCHAP')} PAUSE</span>`
     }
     render(codes.map(keyLabel))

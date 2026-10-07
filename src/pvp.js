@@ -580,8 +580,8 @@ function applyAbilityLocal(kind) {
   } else if (kind === 'alarm') {
     playAlarmSound()
     scatterCrowd(tgt)         // TOUTE la foule panique et court
-    if (myRole === 'pnj') { alarmUntil = now + 2500; showKillfeed('🚨 Une alarme retentit — la foule panique !') }
-    else showKillfeed('🚨 Alarme déclenchée — la foule se disperse')
+    if (myRole === 'pnj') { alarmUntil = now + 2500; showKillfeed('🚨 Une alarme retentit : la foule panique !') }
+    else showKillfeed('🚨 Alarme déclenchée : la foule se disperse')
   } else if (kind === 'cling') {
     clingerUntil = now + 4000
     let closest = null, cd = Infinity
@@ -754,7 +754,7 @@ function pnjFrame(dt) {
 }
 
 function armPnj() {
-  showKillfeed('Pistolet assemblé — CLIC DROIT pour viser le nid, CLIC GAUCHE pour tirer !')
+  showKillfeed('Pistolet assemblé : CLIC DROIT pour viser le nid, CLIC GAUCHE pour tirer !')
   pistolMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.4),
     new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.6, roughness: 0.3 }))
   pistolMesh.position.set(0.32, 1.1, 0.35)
@@ -767,7 +767,7 @@ function removePartVisual(idx) {
   const p = arena.partSpots[idx]
   if (p && !p.taken) takePart(p)
   oppPartsCount = Math.min(3, oppPartsCount + 1)
-  if (oppPartsCount >= 3) showKillfeed('⚠️ Le contre-tueur est ARMÉ — il peut riposter !')
+  if (oppPartsCount >= 3) showKillfeed('⚠️ Le contre-tueur est ARMÉ : il peut riposter !')
   else showKillfeed(`⚠️ Le contre-tueur a récupéré une pièce d'arme (${oppPartsCount}/3)`)
 }
 
@@ -955,7 +955,7 @@ function endRound(winnerRole, reason) {
     rematchBtn.style.display = 'inline-block'
     if (winnerRole === null) {
       resultTitle.textContent = 'TEMPS ÉCOULÉ'
-      resultDetail.textContent = 'Match nul — personne n\'a été éliminé à temps.'
+      resultDetail.textContent = 'Match nul : personne n\'a été éliminé à temps.'
     } else {
       const iWon = winnerRole === myRole
       const pts = winnerRole === 'sniper' ? 1 : 2
@@ -964,7 +964,7 @@ function endRound(winnerRole, reason) {
       if (reason === 'civilian') {
         // Le sniper a abattu un innocent : bavure. Le contre-tueur l'emporte.
         resultDetail.textContent = iWon
-          ? 'Le sniper a abattu un innocent — bavure ! (+2)'
+          ? 'Le sniper a abattu un innocent : bavure ! (+2)'
           : 'Vous avez touché un civil. Bavure fatale. (+2 pour l\'adversaire)'
       } else {
         resultDetail.textContent = winnerRole === 'sniper'
@@ -973,7 +973,7 @@ function endRound(winnerRole, reason) {
       }
     }
   }
-  scoreEl.textContent = `Score — Vous : ${myPoints}  |  Adversaire : ${oppPoints}`
+  scoreEl.textContent = `Score · Vous : ${myPoints}  |  Adversaire : ${oppPoints}`
 
   clearCrowd()
   if (avatar) { scene.remove(avatar.group); avatar = null }

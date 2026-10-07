@@ -98,7 +98,7 @@
 .enq .enq-act { margin-top: auto; padding-top: 1vh; font-size: clamp(11px, 1vw, 14px); letter-spacing: .3em; color: rgba(215,220,207,.6); } .enq .enq-act b { color: #f0c040; font-weight: normal; }
 /* l'action qui mène à la suite (écouter le message) : plus présente, la touche bat */
 .enq .enq-act.go { color: #f1f4ea; } .enq .enq-act.go b { animation: enq-beat 1.1s steps(2) infinite; }
-/* la touche bat sans s'éteindre (à 0, on lisait « — ÉCOUTER… » la moitié du temps) */
+/* la touche bat sans s'éteindre (à 0, on lisait « : ÉCOUTER… » la moitié du temps) */
 @keyframes enq-beat { 50% { opacity: .45 } }
 
 /* ── pause : au-dessus du noir, comme la carte ── */

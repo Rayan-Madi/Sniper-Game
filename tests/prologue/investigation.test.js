@@ -498,7 +498,7 @@ describe('l\'enquête — lisibilité', () => {
     expect(Math.min(...ops)).toBeCloseTo(0.45, 5)
   })
 
-  it('l\'invite « E — EXAMINER » passe nettement sous le point de visée (≈ 6 vh), sans couvrir les petits objets', () => {
+  it('l\'invite « E : EXAMINER » passe nettement sous le point de visée (≈ 6 vh), sans couvrir les petits objets', () => {
     const top = rule('.enq .enq-prompt').match(/top:\s*calc\(50% \+ ([\d.]+)vh\)/)
     expect(top).not.toBeNull()
     expect(+top[1]).toBeGreaterThanOrEqual(5.5)
