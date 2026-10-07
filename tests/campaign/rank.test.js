@@ -53,6 +53,8 @@ describe('ce qui compte comme touche', () => {
     expect(isHit('civilian')).toBe(false)
   })
 
+  // La règle seulement : le câblage (statHits++ dans resolveBullet de main.js, qui ne s'importe pas sous jsdom) est
+  // vérifié dans le navigateur par `node scripts/verif-mission.mjs cadenas`.
   it('port : une cible et le cadenas, deux tirs, aucune alerte : FANTÔME', () => {
     const shots = ['target', 'lock']
     const hits = shots.filter(isHit).length

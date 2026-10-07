@@ -357,6 +357,7 @@ function launchLevel(n, { forceBriefing = false } = {}) {
   pauseEl.style.display = 'none'
   settingsEl.style.display = 'none'
   hudEl.style.display = 'none'
+  instruction.style.opacity = '0'   // l'aide revient avec la mission (startLevel), jamais sous le briefing
   hideScope()
   releaseMouse()
 
@@ -573,6 +574,8 @@ function startLevel(n) {
   gamePhase = 'playing'
   clock.getDelta()
 
+  // Aide des 5 premières secondes. Quitter ou relancer la mission la masque (showMenu, launchLevel) ; le jeton
+  // empêche seulement l'ancien minuteur d'éteindre l'aide de la mission suivante.
   instruction.style.opacity = '1'
   setTimeout(() => { if (token === missionToken) instruction.style.opacity = '0' }, 5000)
 }
@@ -586,6 +589,7 @@ function showMenu() {
   hideScope()
   releaseMouse()
   hudEl.style.display = 'none'
+  instruction.style.opacity = '0'   // l'aide d'une mission quittée avant 5 s ne reste pas sous le menu
   menuEl.style.display = 'flex'
   gameOverEl.style.display = 'none'
   levelClearEl.style.display = 'none'
@@ -682,7 +686,9 @@ function triggerGameOver(reason) {
 }
 
 function triggerLevelClear() {
-  if (!canClear(missionPhase())) return   // mort pendant la kill-cam : rien n'est crédité, la mission n'avance pas
+  // Défense en profondeur : canFail refuse déjà l'échec pendant la kill-cam. Mission déjà finie (échec, réussite),
+  // quittée ou sous la pause : rien n'est crédité, la mission n'avance pas.
+  if (!canClear(missionPhase())) return
   gamePhase = 'cleared'
   stopMissionAmbience()
   hideScope()
@@ -1322,7 +1328,19 @@ if (import.meta.env.DEV) {
   // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console
   window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,
     pnj: npcs.map(n => n.mesh.position.toArray().map(v => +v.toFixed(3))),
-    chronoMs: Math.round(performance.now() - statStart), tirs: statShots, touches: statHits, alertes: statAlerts, score })
+    chronoMs: Math.round(performance.now() - statStart), tirs: statShots, touches: statHits, alertes: statAlerts, score,
+    balle: bulletInFlight })
+  // Visée scriptée (scripts/verif-mission.mjs) : __aimAt('cadenas') vise le cadenas du port, __aimAt('civil', 2) le
+  // troisième civil vivant ('cible', 'garde', 'civil'). Faux si rien ne correspond. Le tir reste celui du joueur.
+  window.__aimAt = (what, n = 0) => {
+    const role = npc => npc.isTarget ? 'cible' : npc.isCivilian ? 'civil' : 'garde'
+    const p = what === 'cadenas'
+      ? moralLockBox && moralLockBox.getCenter(new THREE.Vector3())
+      : npcs.filter(npc => npc.alive && role(npc) === what)[n]?.getBounds().center
+    if (!p) return false
+    ;({ yaw, pitch } = aimAngles(camera.position.toArray(), p.toArray()))
+    return true
+  }
   if (q.has('cine')) {
     menuEl.style.display = 'none'
     gamePhase = 'briefing'

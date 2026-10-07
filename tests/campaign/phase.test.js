@@ -7,7 +7,9 @@ describe('fin de la kill-cam : la réussite n\'est enregistrée que si la missio
     expect(canClear({ phase: 'playing' })).toBe(true)
   })
 
-  it('joueur mort pendant le ralenti : la réussite est refusée', () => {
+  // canFail refuse l'échec pendant la kill-cam : ce cas ne se produit plus en jeu. La garde reste en défense en
+  // profondeur, au cas où une autre fin de mission passerait un jour à 'dead' sans canFail.
+  it('mission déjà échouée : la réussite est refusée', () => {
     expect(canClear({ phase: 'dead' })).toBe(false)
   })
 
@@ -29,10 +31,11 @@ describe('fin de la kill-cam : la réussite n\'est enregistrée que si la missio
     expect(canClear({ phase: 'briefing' })).toBe(false)
   })
 
-  it('mort pendant le ralenti : ni points, ni score, ni mission suivante (RÉESSAYER relance la même mission)', () => {
+  // Défense en profondeur : depuis que canFail refuse l'échec pendant la kill-cam, la fin du ralenti ne trouve plus
+  // la mission en 'dead'. Si une fin de mission y arrivait quand même, rien ne serait crédité.
+  it('mission déjà échouée à la fin du ralenti : ni points, ni score, ni mission suivante (RÉESSAYER relance la même)', () => {
     const s = { points: 1, totalScore: 400, currentLevel: 2, campaignDone: false }
-    const m = { phase: 'playing' }
-    m.phase = 'dead'   // un échec tombe pendant la kill-cam de la dernière cible
+    const m = { phase: 'dead' }   // échec déjà affiché quand le minuteur de la kill-cam tombe
     // fin du ralenti, comme main.js : la réussite n'est enregistrée que si la garde l'accepte
     if (canClear(m)) recordClear(s, { level: 2, reward: 2, score: 1250 })
     expect(s).toEqual({ points: 1, totalScore: 400, currentLevel: 2, campaignDone: false })
