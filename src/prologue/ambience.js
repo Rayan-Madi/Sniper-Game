@@ -13,11 +13,12 @@ export function createAmbience(audio) {
   const c = audio && audio.ctx ? audio.ctx : null
   const live = () => !dead && !!c && c.state === 'running'
 
-  // pluie : bruit en boucle filtré, tenu tant que l'enquête dure
+  // pluie : bruit en boucle filtré, tenu tant que l'enquête dure ; 6 s de bruit (une boucle de 2 s s'entendait se répéter)
+  const RAIN_S = 6
   let rain = null
   function startRain() {
     if (!live() || rain) return
-    const buf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate)
+    const buf = c.createBuffer(1, c.sampleRate * RAIN_S, c.sampleRate)
     const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
     const src = c.createBufferSource(); src.buffer = buf; src.loop = true
     const band = c.createBiquadFilter(); band.type = 'bandpass'; band.frequency.value = 1400; band.Q.value = 0.5
@@ -60,7 +61,8 @@ export function createAmbience(audio) {
       timers.forEach(clearTimeout); timers.clear(); intervals.forEach(clearInterval); intervals.clear()
       if (rain) {
         const { src, g } = rain; rain = null
-        try { g.gain.setTargetAtTime(0.0001, c.currentTime, 0.08) } catch (e) { /* contexte fermé */ }
+        // la montée de 2 s peut être encore programmée : l'annuler d'abord, sinon elle reprend le dessus sur le fondu
+        try { g.gain.cancelScheduledValues(c.currentTime); g.gain.setTargetAtTime(0.0001, c.currentTime, 0.08) } catch (e) { /* contexte fermé */ }
         setTimeout(() => { try { src.stop() } catch (e) { /* déjà arrêtée */ } try { g.disconnect() } catch (e) { /* déjà débranché */ } }, 300)
       }
     },

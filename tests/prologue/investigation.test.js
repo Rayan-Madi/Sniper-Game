@@ -176,7 +176,7 @@ describe('l\'enquête', () => {
 })
 
 // ── finitions relevées aux relectures des modules (tâches 4 et 5) et au plan ──
-const param = () => ({ value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn() })
+const param = () => ({ value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() })
 const node = () => ({ connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), gain: param(), frequency: param(), Q: param(), loop: false, buffer: null })
 function fakeAudio(state = 'running') {
   const ctx = { state, currentTime: 0, sampleRate: 100,

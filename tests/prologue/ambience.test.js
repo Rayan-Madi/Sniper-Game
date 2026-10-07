@@ -6,12 +6,12 @@ const FAKE = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInter
 beforeEach(() => vi.useFakeTimers(FAKE))
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
-const param = () => ({ value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn() })
+const param = () => ({ value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() })
 const node = () => ({ connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), gain: param(), frequency: param(), Q: param(), loop: false, buffer: null })
 function fakeAudio(state = 'running') {
   const ctx = { state, currentTime: 0, sampleRate: 100,
     createGain: vi.fn(node), createOscillator: vi.fn(node), createBufferSource: vi.fn(node), createBiquadFilter: vi.fn(node),
-    createBuffer: vi.fn(() => ({ getChannelData: () => new Float32Array(200) })) }
+    createBuffer: vi.fn((ch, length) => ({ length, getChannelData: () => new Float32Array(length) })) }
   return { ctx, dest: node() }
 }
 // vrai si le signal de n arrive jusqu'à dest en suivant ses branchements
@@ -37,6 +37,27 @@ describe('le son de l\'enquête', () => {
     expect(reaches(rain[0], audio.dest)).toBe(true)
     expect(audio.dest.connect).not.toHaveBeenCalled()   // ce sont les nœuds qui se branchent sur dest, pas l'inverse
     a.stop()
+  })
+
+  it("la pluie boucle sur un bruit de 6 s (2 s se répétaient à l'oreille)", () => {
+    const audio = fakeAudio()
+    const a = createAmbience(audio); a.start()
+    const [rain] = audio.ctx.createBufferSource.mock.results.map(r => r.value)
+      .filter(s => s.loop && s.start.mock.calls.length && !s.stop.mock.calls.length)
+    expect(rain.buffer.length).toBeGreaterThanOrEqual(6 * audio.ctx.sampleRate)
+    a.stop()
+  })
+
+  it("à l'arrêt, le fondu de la pluie annule d'abord la montée programmée", () => {
+    const audio = fakeAudio()
+    const a = createAmbience(audio); a.start()
+    const [rain] = audio.ctx.createBufferSource.mock.results.map(r => r.value)
+      .filter(s => s.loop && s.start.mock.calls.length && !s.stop.mock.calls.length)
+    const g = rain.connect.mock.calls[0][0].connect.mock.calls[0][0].connect.mock.calls[0][0].gain   // source → passe-bande → passe-haut → gain
+    a.stop()
+    expect(g.cancelScheduledValues).toHaveBeenCalled()
+    expect(g.setTargetAtTime).toHaveBeenCalled()
+    expect(g.cancelScheduledValues.mock.invocationCallOrder[0]).toBeLessThan(g.setTargetAtTime.mock.invocationCallOrder[0])
   })
 
   it('le cœur bat plus vite près du salon', async () => {
