@@ -19,7 +19,7 @@ import { levelShortcut } from './campaign/shortcuts.js'
 import { stepConvoy } from './campaign/convoy.js'
 import { missImpact } from './campaign/impact.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
-import { createStatsPanel } from './gfx/stats.js'
+import { createStatsPanel, statsRequested } from './gfx/stats.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -103,7 +103,7 @@ MAP_BUILDERS[0]()     // décor vivant derrière le menu principal (caméra qui 
 initMultiplayerMenu() // mode 1v1 Sniper vs Contre-tueur (voir pvp.js)
 
 // Panneau de performances : ?stats=1 (voir syncStatsPanel)
-const STATS_URL = new URLSearchParams(location.search).has('stats')
+const STATS_URL = statsRequested(location.search)
 const statsPanel = createStatsPanel({ renderer })
 
 // Libellé du bouton selon la progression sauvegardée
@@ -1466,7 +1466,8 @@ if (import.meta.env.DEV) {
       onDone: () => showMenu(),
     })
   }
-  // ?enquete=1&indices=4&cam=9.5,1.65,4.3,0.4,-0.6&ouvrir=mot&stats=1 : l'enquête directement (captures, réglages)
+  // ?enquete=1&indices=4&cam=9.5,1.65,4.3,0.4,-0.6&ouvrir=mot&stats=1 : l'enquête directement (captures, réglages).
+  // Son compteur suit STATS_URL, passé par investigate comme sur le chemin du prologue.
   if (q.has('enquete')) {
     menuEl.style.display = 'none'
     hudEl.style.display = 'none'
@@ -1477,7 +1478,6 @@ if (import.meta.env.DEV) {
       indices: +q.get('indices') || 0,
       cam: cam && cam.length === 5 ? { x: cam[0], y: cam[1], z: cam[2], yaw: cam[3], pitch: cam[4] } : null,
       ouvrir: q.get('ouvrir') || null,
-      stats: q.has('stats'),
     })
   }
 }

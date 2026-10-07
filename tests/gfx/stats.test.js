@@ -1,5 +1,40 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { frameStats, createStatsPanel } from '../../src/gfx/stats.js'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { frameStats, createStatsPanel, statsRequested } from '../../src/gfx/stats.js'
+
+// Le panneau s'affiche par ?stats=1 (spec du lot 1 §4.1), comme le compteur de dev/enquete-decor.js : ni ?stats=0, ni
+// un paramètre vide ou une autre valeur ne l'allument.
+describe('statsRequested', () => {
+  it('?stats=1 l\'affiche, seul ou parmi d\'autres paramètres', () => {
+    expect(statsRequested('?stats=1')).toBe(true)
+    expect(statsRequested('?enquete=1&indices=4&stats=1')).toBe(true)
+  })
+
+  it('?stats=0 ne l\'affiche pas', () => {
+    expect(statsRequested('?stats=0')).toBe(false)
+  })
+
+  it('sans paramètre, paramètre vide ou autre valeur : masqué', () => {
+    expect(statsRequested('')).toBe(false)
+    expect(statsRequested('?memtest=1')).toBe(false)
+    expect(statsRequested('?stats')).toBe(false)
+    expect(statsRequested('?stats=')).toBe(false)
+    expect(statsRequested('?stats=oui')).toBe(false)
+  })
+})
+
+// main.js lit le paramètre par statsRequested, une seule fois : le panneau du jeu et le compteur de l'enquête (route
+// ?enquete=1 comprise) suivent la même valeur.
+describe('main.js et ?stats', () => {
+  const src = readFileSync(resolve(__dirname, '../../src/main.js'), 'utf8')
+  it('aucune lecture directe du paramètre stats', () => {
+    expect(src).not.toMatch(/\.(has|get)\(\s*['"]stats['"]\s*\)/)
+  })
+  it('STATS_URL vient de statsRequested(location.search)', () => {
+    expect(src).toMatch(/const STATS_URL = statsRequested\(location\.search\)/)
+  })
+})
 
 // Durées d'image en ms : images par seconde = 1000 / moyenne ; p50 et p95 au rang le plus proche (valeur réellement
 // observée, jamais interpolée) : rang = ⌈p × n⌉ dans la liste triée.

@@ -16,8 +16,14 @@ export function frameStats(samplesMs) {
   return { fps: mean > 0 ? 1000 / mean : 0, p50: rank(0.5), p95: rank(0.95) }
 }
 
+// Paramètre d'adresse du panneau (location.search) : ?stats=1 seulement, comme dev/enquete-decor.js. ?stats=0, un
+// paramètre vide ou une autre valeur le laissent masqué.
+export function statsRequested(search) {
+  return new URLSearchParams(search).get('stats') === '1'
+}
+
 // ─── Panneau ─────────────────────────────────────────────────────────────────────────────────────────────────────
-const WINDOW = 120        // images retenues pour p50 et p95
+const WINDOW = 120       // images retenues pour p50 et p95
 const REFRESH_MS = 250    // au plus 4 rafraîchissements par seconde
 const BUDGET_MS = 22      // p95 au-delà : signalée (seuil de baisse de la résolution dynamique, spec du lot 1 §4.3)
 
