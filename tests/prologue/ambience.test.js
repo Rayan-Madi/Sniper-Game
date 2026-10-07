@@ -8,9 +8,10 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 const param = () => ({ value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() })
 const node = () => ({ connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), gain: param(), frequency: param(), Q: param(), loop: false, buffer: null })
-function fakeAudio(state = 'running') {
+// hold : les gains offrent cancelAndHoldAtTime (Chrome) ; sans lui, comme Firefox, le fondu retombe sur cancelScheduledValues
+function fakeAudio(state = 'running', { hold = false } = {}) {
   const ctx = { state, currentTime: 0, sampleRate: 100,
-    createGain: vi.fn(node), createOscillator: vi.fn(node), createBufferSource: vi.fn(node), createBiquadFilter: vi.fn(node),
+    createGain: vi.fn(() => { const n = node(); if (hold) n.gain.cancelAndHoldAtTime = vi.fn(); return n }), createOscillator: vi.fn(node), createBufferSource: vi.fn(node), createBiquadFilter: vi.fn(node),
     createBuffer: vi.fn((ch, length) => ({ length, getChannelData: () => new Float32Array(length) })) }
   return { ctx, dest: node() }
 }
@@ -48,16 +49,37 @@ describe('le son de l\'enquête', () => {
     a.stop()
   })
 
-  it("à l'arrêt, le fondu de la pluie annule d'abord la montée programmée", () => {
-    const audio = fakeAudio()
-    const a = createAmbience(audio); a.start()
+  // le gain de la pluie : source → passe-bande → passe-haut → gain
+  const rainGain = audio => {
     const [rain] = audio.ctx.createBufferSource.mock.results.map(r => r.value)
       .filter(s => s.loop && s.start.mock.calls.length && !s.stop.mock.calls.length)
-    const g = rain.connect.mock.calls[0][0].connect.mock.calls[0][0].connect.mock.calls[0][0].gain   // source → passe-bande → passe-haut → gain
+    return rain.connect.mock.calls[0][0].connect.mock.calls[0][0].connect.mock.calls[0][0].gain
+  }
+
+  it("à l'arrêt, sans cancelAndHoldAtTime, le fondu de la pluie annule la montée puis repart du niveau atteint (pas de coupure sèche)", () => {
+    const audio = fakeAudio()
+    const a = createAmbience(audio); a.start()
+    const g = rainGain(audio)
+    audio.ctx.currentTime = 0.7; g.value = 0.03                      // en pleine montée de 2 s : la valeur lue est celle atteinte
     a.stop()
-    expect(g.cancelScheduledValues).toHaveBeenCalled()
-    expect(g.setTargetAtTime).toHaveBeenCalled()
-    expect(g.cancelScheduledValues.mock.invocationCallOrder[0]).toBeLessThan(g.setTargetAtTime.mock.invocationCallOrder[0])
+    expect(g.cancelScheduledValues).toHaveBeenCalledWith(0.7)
+    expect(g.setValueAtTime).toHaveBeenCalledWith(0.03, 0.7)         // sans cela, cancelScheduledValues ramènerait le gain à 0,0001
+    expect(g.setTargetAtTime).toHaveBeenCalledWith(0.0001, 0.7, expect.any(Number))
+    const order = f => f.mock.invocationCallOrder[0]
+    expect(order(g.cancelScheduledValues)).toBeLessThan(order(g.setValueAtTime))
+    expect(order(g.setValueAtTime)).toBeLessThan(order(g.setTargetAtTime))
+  })
+
+  it("à l'arrêt, avec cancelAndHoldAtTime, le fondu de la pluie fige la montée à l'instant présent puis s'éteint", () => {
+    const audio = fakeAudio('running', { hold: true })
+    const a = createAmbience(audio); a.start()
+    const g = rainGain(audio)
+    audio.ctx.currentTime = 0.7; g.value = 0.03
+    a.stop()
+    expect(g.cancelAndHoldAtTime).toHaveBeenCalledWith(0.7)
+    expect(g.cancelScheduledValues).not.toHaveBeenCalled()           // il remettrait le gain à sa valeur intrinsèque
+    expect(g.setTargetAtTime).toHaveBeenCalledWith(0.0001, 0.7, expect.any(Number))
+    expect(g.cancelAndHoldAtTime.mock.invocationCallOrder[0]).toBeLessThan(g.setTargetAtTime.mock.invocationCallOrder[0])
   })
 
   it('le cœur bat plus vite près du salon', async () => {

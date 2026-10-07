@@ -61,8 +61,14 @@ export function createAmbience(audio) {
       timers.forEach(clearTimeout); timers.clear(); intervals.forEach(clearInterval); intervals.clear()
       if (rain) {
         const { src, g } = rain; rain = null
-        // la montée de 2 s peut être encore programmée : l'annuler d'abord, sinon elle reprend le dessus sur le fondu
-        try { g.gain.cancelScheduledValues(c.currentTime); g.gain.setTargetAtTime(0.0001, c.currentTime, 0.08) } catch (e) { /* contexte fermé */ }
+        // la montée de 2 s peut être encore programmée : l'annuler d'abord, sinon elle reprend le dessus sur le fondu, mais en
+        // gardant le niveau déjà atteint (cancelScheduledValues seul ramènerait le gain à 0,0001 : coupure sèche au lieu d'un fondu)
+        try {
+          const t = c.currentTime
+          if (g.gain.cancelAndHoldAtTime) g.gain.cancelAndHoldAtTime(t)
+          else { const v = g.gain.value; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(v, t) }   // Firefox n'a pas cancelAndHoldAtTime
+          g.gain.setTargetAtTime(0.0001, t, 0.08)
+        } catch (e) { /* contexte fermé */ }
         setTimeout(() => { try { src.stop() } catch (e) { /* déjà arrêtée */ } try { g.disconnect() } catch (e) { /* déjà débranché */ } }, 300)
       }
     },
