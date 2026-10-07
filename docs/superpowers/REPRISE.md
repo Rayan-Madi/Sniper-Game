@@ -1,7 +1,7 @@
 # Prompt de reprise — Sniper-Game
 
 > À coller tel quel au début d'une nouvelle conversation Claude Code ouverte dans le dossier du jeu.
-> Mis à jour le 7 octobre 2026, après la fusion de l'enquête jouable (main = `af8b22e`).
+> Mis à jour le 7 octobre 2026, après la fusion de l'enquête jouable (`main` à jour sur GitHub).
 >
 > **Sur un autre PC** : ce fichier est sur GitHub. Ouvrir Claude Code dans un dossier vide et commencer par :
 > « Clone https://github.com/Rayan-Madi/Sniper-Game, fais `npm install`, puis lis docs/superpowers/REPRISE.md et reprends à partir de là. »
@@ -11,6 +11,14 @@
 ---
 
 On reprend mon jeu **Sniper-Game** (Three.js 0.185 + Vite 8, build Electron, son 100 % procédural, mode histoire en 6 missions + PvP 1v1). Réponds-moi **toujours en français**. Je délègue beaucoup : tu peux utiliser des sous-agents et des workflows, commiter, **fusionner dans `main` après relecture et pousser sur GitHub** sans me redemander. Préviens-moi quand c'est fini. Mon PC s'éteint parfois en pleine session : tiens un journal pour pouvoir reprendre.
+
+Ce que j'attends : le résultat le plus « stylé » possible (qualité visuelle et narrative avant tout), jouable sur un PC correct de milieu de gamme (pas de config extrême), et **rien de payant** pour l'instant (pas d'abonnement, pas de service payant ; pas ma propre voix).
+
+## L'histoire en bref
+
+- **Viktor Kane**, ancien tireur d'élite, a refusé par principe de travailler pour un réseau criminel (appel du 21 février, « Un tir, cent mille »). Le **14 mars**, sa femme et sa fille sont tuées chez lui. **Anton**, un fixeur qui vend des infos (jamais vu, voix radio seulement), avait tenté de le prévenir : message à 18:52 depuis un numéro jetable (06 39 98 41 07) ; sa femme a appelé à 19:04 depuis le fixe ; Viktor, rentré à 21:47, avait oublié son téléphone (en silencieux). Il rappelle Anton à 22:41, qui lui donne les noms.
+- Les cibles : **M1** Markov (traite humaine, le marché) ; **M2** les frères Sanctechair, Luc et Marc (bouchers) ; **M3** Vosko le passeur et Mira, au port — **choix moral** : libérer ou non les victimes enfermées (`upgradeState.freedVictims`), qui change l'**épilogue** (variantes `libres` / `enfermes`) ; **M4** trois officiers, Verne, Halder et Rossi ; **M5** le colonel Kessler, « sans visage », dans un convoi ; **M6** le commanditaire, inconnu.
+- Tout le texte des cinématiques est dans les maquettes (`docs/superpowers/maquettes/cinematiques/*.html`).
 
 ## Où on en est
 
@@ -39,9 +47,18 @@ Fait et fusionné dans `main` (tout est relu, testé, 174 tests verts) :
 2. Sous-projet **gameplay** (distances de tir, sensations, missions).
 3. Sous-projet **légèreté** : le jeu n'appelle `dispose()` nulle part, la mémoire GPU monte à chaque mission (mesuré : 346 géométries au menu → 1 284 après les 6 missions) ; le bundle principal fait 779 kB (+31 kB de modules three partagés avec l'enquête : voir le découpage `manualChunks`).
 
+Budget de poids des cinématiques (spec §8) : moins de 1,5 Mo ajouté au total ; on en est à ≈ 1,36 Mo (images des portraits dans `public/briefing/img/`, recompressées par `scripts/compress-briefing-img.ps1`). Toute nouvelle image (casting, kill-cams) doit tenir dans la marge, ou passer les PNG à transparence en WebP.
+
+## Bugs et restes connus
+
+- **PvP** : le vecteur « droite » du contre-tueur est inversé (`src/pvp.js`, vers la ligne 625 : la touche D fait aller à gauche). À corriger avec le gameplay.
+- **Build Electron** : les modèles 3D sont chargés par un chemin absolu `/models/…`, qui casse sous `file://` (spec cinématiques §11). Les images des cinématiques, elles, sont en chemin relatif.
+- **Enquête** (mineurs relevés à la revue finale) : entre le battant ouvert de la porte d'entrée et la console il reste 0,45 m, un peu juste pour longer le battant jusqu'au téléphone (on passe par le milieu de l'entrée) ; vu de très près sous un certain angle, le bord du drap éclairé par la lampe prend une teinte pêche.
+
 ## Comment on travaille (à garder)
 
-- Skills superpowers : `brainstorming` → spec dans `docs/superpowers/specs/` → `writing-plans` → exécution par sous-agents (implémenteur → relecture conformité + qualité → correction) avec un journal `.superpowers/sdd/<date>-<sujet>/progress.md` → revue finale de branche → fusion en avance rapide dans `main` → push.
+- Skills superpowers : `brainstorming` → spec dans `docs/superpowers/specs/` → `writing-plans` → exécution par sous-agents (implémenteur → relecture conformité + qualité → correction) avec un journal `.superpowers/sdd/<date>-<sujet>/progress.md` → revue finale de branche → fusion en avance rapide dans `main` → push. Si ces skills ne sont pas installées sur la machine, suivre le même processus à la main.
+- Environnement : **Node 24** (jsdom 30 exige Node ≥ 22.22) ; Windows + Git Bash ; Chrome installé pour les captures (`C:/Program Files/Google/Chrome/Application/chrome.exe` par défaut dans `scripts/shots.mjs`, variable `CHROME` sinon).
 - Commits en français dans le style du dépôt, terminés par `Co-Authored-By: Claude …`.
 - Serveurs : `.claude/launch.json` (non versionné ; à recréer s'il manque) :
   ```json
