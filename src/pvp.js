@@ -6,6 +6,7 @@ import { spawnCharacter } from './characters.js'
 import { NPC, STATES } from './npc.js'
 import { playPvpIntro, isPvpIntroActive, stopPvpIntro } from './pvpIntro.js'
 import * as net from './net.js'
+import { groundForward, groundRight } from './pvpMath.js'
 import { sensMultiplier, invertY, settings } from './settings.js'
 import { setCampaignPaused } from './main.js'
 
@@ -209,10 +210,15 @@ export function initMultiplayerMenu() {
   net.on('joined', () => { joinError.textContent = 'Connecté. En attente du démarrage…' })
   net.on('error', (msg) => { joinError.textContent = msg.message || 'Erreur.' })
   net.on('start', onMatchStart)   // le serveur renvoie aussi 'start' après une revanche votée à 2
-  net.on('peer_left', () => {
+  // L'adversaire est parti, ou c'est notre liaison au relais qui a lâché :
+  // dans les deux cas la manche ne peut plus continuer. Un seul écran de fin
+  // (endRound ne fait rien si la manche est déjà close).
+  const onPeerLost = (reason) => {
     if (isPvpIntroActive()) { stopPvpIntro(); roundActive = true /* pour laisser endRound nettoyer normalement */ }
-    if (roundActive) endRound(null, 'peer_left')
-  })
+    if (roundActive) endRound(null, reason)
+  }
+  net.on('peer_left', () => onPeerLost('peer_left'))
+  net.on('disconnected', () => onPeerLost('disconnected'))
   net.on('ability', (msg) => applyIncomingAbility(msg.kind))
   net.on('part_pickup', (msg) => removePartVisual(msg.idx))
   net.on('aim', (msg) => { sniperYaw = msg.yaw; sniperPitch = msg.pitch })
@@ -621,8 +627,8 @@ function setupPnj() {
   el('canvas').requestPointerLock()
 }
 
-function pnjForward() { return new THREE.Vector3(Math.sin(pnjYaw), 0, Math.cos(pnjYaw)) }
-function pnjRight() { return new THREE.Vector3(Math.sin(pnjYaw + Math.PI / 2), 0, Math.cos(pnjYaw + Math.PI / 2)) }
+function pnjForward() { return groundForward(pnjYaw) }
+function pnjRight() { return groundRight(pnjYaw) }
 // Direction de visée du pistolet (yaw + pitch) : la balle part par là.
 function pnjAimDir() {
   const cp = Math.cos(pnjPitch)
@@ -929,6 +935,10 @@ function endRound(winnerRole, reason) {
   if (reason === 'peer_left') {
     resultTitle.textContent = "ADVERSAIRE PARTI"
     resultDetail.textContent = "L'adversaire a quitté la partie."
+    rematchBtn.style.display = 'none'
+  } else if (reason === 'disconnected') {
+    resultTitle.textContent = 'CONNEXION PERDUE'
+    resultDetail.textContent = 'La liaison avec le relais est coupée : manche interrompue.'
     rematchBtn.style.display = 'none'
   } else {
     rematchBtn.style.display = 'inline-block'

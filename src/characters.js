@@ -52,6 +52,9 @@ const cache = {}   // type -> [ {scene, animations, cfg} ]
 
 export function hasModel(type) { return !!cache[type] }
 
+// URL des modèles chargés pour un type, dans l'ordre du pool (relecture, tests).
+export function poolUrls(type) { return (cache[type] || []).map(p => p.cfg.url) }
+
 // Liste des variantes d'un type, chacune avec sa config (héritée du type)
 function variantsFor(type, cfg) {
   const base = { ...cfg }; delete base.variants
@@ -63,14 +66,20 @@ export async function preloadCharacters() {
   const entries = Object.entries(MODELS)
   if (entries.length === 0) return
   await Promise.all(entries.map(async ([type, cfg]) => {
-    const pool = []
-    await Promise.all(variantsFor(type, cfg).map(async (vcfg) => {
+    // Promise.all garde l'ordre des variantes, pas celui d'arrivée des fichiers :
+    // en PvP, les deux machines tirent leurs modèles avec la même graine et
+    // doivent donc avoir des pools rangés pareil.
+    const loaded = await Promise.all(variantsFor(type, cfg).map(async (vcfg) => {
       try {
         const gltf = await loader.loadAsync(vcfg.url)
-        pool.push({ scene: gltf.scene, animations: gltf.animations, cfg: vcfg })
         console.log('[characters] chargé:', type, vcfg.url)
-      } catch (e) { console.warn('[characters] échec', vcfg.url, e) }
+        return { scene: gltf.scene, animations: gltf.animations, cfg: vcfg }
+      } catch (e) {
+        console.warn('[characters] échec', vcfg.url, e)
+        return null
+      }
     }))
+    const pool = loaded.filter(Boolean)
     if (pool.length) cache[type] = pool
   }))
 }
