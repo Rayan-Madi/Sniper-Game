@@ -297,6 +297,7 @@ function cinematicAudio() {
 // Elle ne doit jamais bloquer la partie : erreur de chargement, de démarrage ou en cours d'image → on enchaîne.
 let enquete = null   // { handle, next, ended }
 function investigate(onNext, options = {}) {
+  abortInvestigation()   // une enquête déjà en cours (ou en chargement) ne reste pas orpheline
   const run = { handle: null, ended: false, next: null }
   run.next = () => {
     if (run.ended) return
