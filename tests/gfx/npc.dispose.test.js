@@ -126,6 +126,26 @@ describe('NPC.dispose, niveau 1 : tout ce que le PNJ possède est libéré, rien
     })
   }
 
+  // Témoin direct des copies teintées : écoute leur 'dispose' sans passer par la marque « partagé » (trackDisposals
+  // classe toute ressource marquée comme partagée, et le faux renderer ne compte pas les matériaux). Une copie qui
+  // garderait la marque recopiée par Material.clone ne serait jamais libérée : ce test rougit.
+  it('civil teinté : chaque matériau copié pour la teinte émet dispose au NPC.dispose, ceux du modèle non', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5)   // teinte du milieu de la liste, jamais la blanche
+    const npc = civilian()
+    random.mockRestore()
+    const source = gltf.loaded.find(g => g.url.endsWith(npc.character.cfg.url)).scene
+    const copies = skinnedIn(npc.mesh).map(m => m.material)
+    const originals = skinnedIn(source).map(m => m.material)
+    expect(copies).toHaveLength(2)
+    expect(copies.filter(m => originals.includes(m))).toEqual([])   // des copies, pas les matériaux du modèle
+    const freed = copies.map(() => 0)
+    copies.forEach((m, i) => m.addEventListener('dispose', () => { freed[i]++ }))
+    const glb = countDisposals(glbResources())
+    npc.dispose()
+    expect(freed).toEqual([1, 1])
+    expect(glb.labels).toEqual([])
+  })
+
   it('marqueurs de la cible et téléphone du commanditaire : possédés, donc libérés', () => {
     const target = KINDS['cible marquée']()
     const boss = KINDS['commanditaire au téléphone']()

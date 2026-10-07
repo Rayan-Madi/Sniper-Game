@@ -1433,8 +1433,9 @@ if (import.meta.env.DEV) {
             document.getElementById('btn-mp-quit').click()   // quitToMenu : la rue revient derrière le menu
             setCampaignPaused(true)                          // quitToMenu relance la boucle du jeu
           }
-          showMenu()
-          driftMenuCamera(0)
+          // Graine du menu tirée à nouveau : la rue de quitToMenu a déjà consommé le début de la suite, et showMenu en
+          // reconstruirait une autre (fenêtres allumées, arbres), avec d'autres objets dans le champ que les étapes menu.
+          withSeed(seedOf(step), () => { showMenu(); driftMenuCamera(0) })
         }
       })
       const render = () => { for (let i = 0; i < images; i++) renderer.render(scene, camera) }

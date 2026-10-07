@@ -134,6 +134,8 @@ Quand un briefing se joue avant une mission, la carte de la mission est montée 
 | Confort | les trois réglages d'effets atténués changent bien l'opacité du flash et les appels de secousse (tests) |
 | Général | `npx vitest run` vert ; `npx vite build` sans erreur ; aucune régression visuelle sur les captures de M1, M3, M5, M6 et d'une cinématique comparées avant et après |
 
+Relecture de L3 : le critère « partie complète » ne peut pas tenir tel qu'écrit, le menu de départ n'ayant dessiné aucun personnage alors que les ressources des modèles GLB (partagées) restent au GPU après leur premier dessin. Reformulation proposée dans la tâche L8 du plan, à acter par le porteur de la spec ; le critère ci-dessus reste celui en vigueur d'ici là.
+
 ## 7. Risques
 
 - **Libérer une ressource partagée** (modèles noirs ou sans texture) : traité par le marquage au chargement et par le test « 0 partagé libéré ».
