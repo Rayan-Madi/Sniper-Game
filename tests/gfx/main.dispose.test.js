@@ -30,6 +30,7 @@ const CALLS = [
   ['unmountLevel', 'removeMoralLock'],    // sinon le cadenas du port restait sous le menu, dans la rue
   ['unmountLevel', 'clearBulletHoles'],
   ['unmountLevel', 'clearEffects'],       // effets encore en vie libérés
+  ['unmountLevel', 'npc.dispose'],        // PNJ libérés (clone, matériaux teintés, marqueurs), modèles partagés gardés
   ['clearConvoy', 'releaseConvoy'],
   ['removeMoralLock', 'releaseMoralLock'],
   ['mountLevel', 'removeMoralLock'],

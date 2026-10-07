@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { scene, setLighting } from './scene.js'
 import { clearMap } from './maps.js'
+import { disposeObject } from './gfx/dispose.js'
 
 // ─── Arène PvP dédiée : grande fête d'appartement nocturne ───────────
 // Auto-contenue (ne partage pas le tableau d'objets de maps.js) pour ne
@@ -37,8 +38,11 @@ function cyl(rt, rb, h, color, x, y, z) {
   return add(m)
 }
 
+// Retire l'arène et libère ses ressources GPU (géométries, matériaux, cartes d'ombre des lumières) : sans cela,
+// chaque manche laissait au renderer toute l'arène précédente (environ 150 géométries). Rien n'y est partagé : chaque
+// manche reconstruit la sienne.
 export function clearPvpMap() {
-  for (const o of objects) scene.remove(o)
+  for (const o of objects) disposeObject(o)
   objects = []
 }
 

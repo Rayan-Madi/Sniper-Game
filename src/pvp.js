@@ -9,6 +9,8 @@ import * as net from './net.js'
 import { groundForward, groundRight } from './pvpMath.js'
 import { sensMultiplier, invertY, settings } from './settings.js'
 import { setCampaignPaused } from './main.js'
+import { audioContext, masterNode } from './audio.js'
+import { disposeObject } from './gfx/dispose.js'
 
 // ─── Mode PvP : Sniper vs Contre-tueur ───────────────────────────────
 // Réseau : relais WebSocket pur (voir net.js + server/index.js). Chaque
@@ -93,13 +95,19 @@ function withSeed(seed, fn) {
 }
 const SEED_CROWD = 0x1b873593, SEED_AVATAR = 0x85ebca6b
 
-// ─── Petits sons synthétiques (isolés de audio.js) ──────────────────
-let actx = null
-function ctx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx }
+// ─── Petits sons synthétiques ───────────────────────────────────────
+// Sur le contexte audio commun (audio.js) et branchés sur son maître : un seul AudioContext pour tout le jeu, et le
+// volume des Paramètres s'applique au PvP. Le PvP avait son propre contexte, branché sur sa propre sortie : il
+// ignorait le volume et n'était jamais fermé.
+function ctx() {
+  const c = audioContext()
+  if (c.state === 'suspended') c.resume()
+  return c
+}
 function beep(freq, dur, type = 'sine', gain = 0.3, delay = 0) {
   const c = ctx(), o = c.createOscillator(), g = c.createGain()
   o.type = type; o.frequency.value = freq
-  o.connect(g); g.connect(c.destination)
+  o.connect(g); g.connect(masterNode())
   g.gain.setValueAtTime(0.0001, c.currentTime + delay)
   g.gain.linearRampToValueAtTime(gain, c.currentTime + delay + 0.02)
   g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + delay + dur)
@@ -128,8 +136,8 @@ function positionalRingtone(worldPos) {
   const c = ctx()
   const panner = c.createStereoPanner ? c.createStereoPanner() : null
   const bus = c.createGain(); bus.gain.value = gain
-  if (panner) { panner.pan.value = pan; bus.connect(panner); panner.connect(c.destination) }
-  else bus.connect(c.destination)
+  if (panner) { panner.pan.value = pan; bus.connect(panner); panner.connect(masterNode()) }
+  else bus.connect(masterNode())
   const ring = (freq, dur, delay) => {
     const o = c.createOscillator(), g = c.createGain()
     o.type = 'square'; o.frequency.value = freq; o.connect(g); g.connect(bus)
@@ -146,7 +154,7 @@ let ambienceTimer = null, ambienceNodes = null, ambienceStep = 0
 function startPvpAmbience() {
   stopPvpAmbience()
   const c = ctx()
-  const master = c.createGain(); master.gain.value = 0.5; master.connect(c.destination)
+  const master = c.createGain(); master.gain.value = 0.5; master.connect(masterNode())
   // Brouhaha de foule : bruit filtré passe-bas, continu et discret
   const bufferSize = 2 * c.sampleRate
   const noiseBuf = c.createBuffer(1, bufferSize, c.sampleRate)
@@ -161,7 +169,6 @@ function startPvpAmbience() {
   const bass = [55, 55, 82.4, 65.4]
   ambienceStep = 0
   ambienceTimer = setInterval(() => {
-    if (!actx) return
     const t = c.currentTime
     // kick
     const ko = c.createOscillator(), kg = c.createGain()
@@ -300,7 +307,6 @@ function onMatchStart(msg) {
   phoneShakeUntil = 0; alarmUntil = 0; speedMultiplier = 1
   for (const k in abilityCooldowns) abilityCooldowns[k] = 0
   lastPnjNet = null; lastPnjYaw = Math.PI; lastPnjAnim = 'idle'
-  oppAvatar = null
   setScoped(false)
 
   // Seed partagé (même serverTime chez les deux) → décor + foule IDENTIQUES.
@@ -338,7 +344,10 @@ function onMatchStart(msg) {
 // Décor d'une manche, tiré du seed partagé (le même chez les deux joueurs) : arène, foule, laser, et avatar du
 // contre-tueur (le sien chez lui, celui de l'adversaire chez le sniper). onMatchStart l'appelle ; la route ?memtest=1
 // de main.js aussi, pour monter des arènes hors réseau. Sans écran, caméra ni pointeur : setupSniper et setupPnj.
+// Un décor encore monté (départ de manche reçu sans fin de manche) est d'abord retiré et libéré : jamais remplacé
+// en place, ce qui laisserait foule, avatars et laser dans la scène, hors de portée de toute libération.
 export function buildRoundScene(seed, role) {
+  releaseRoundScene()
   arena = withSeed(seed, () => buildPvpArena())
   withSeed(seed ^ SEED_CROWD, () => spawnCrowd())
 
@@ -358,14 +367,24 @@ export function buildRoundScene(seed, role) {
   return arena
 }
 
-// Retire le décor de la manche (fin de manche, route ?memtest=1). Retiré de la scène seulement : la libération des
-// ressources GPU vient au lot 1, tâche L3.
+// Retire le décor de la manche et libère ses ressources GPU (fin de manche, QUITTER, nouveau décor, route ?memtest=1) :
+// foule (NPC.dispose), avatars et pistolet (enfant de l'avatar du contre-tueur), laser, arène. Rien des modèles GLB,
+// marqués partagés au chargement (characters.js). Idempotente : sans décor monté, ne fait rien.
 export function releaseRoundScene() {
   clearCrowd()
-  if (avatar) { scene.remove(avatar.group); avatar = null }
-  if (oppAvatar) { scene.remove(oppAvatar.group); oppAvatar = null }
-  if (laserCore) { scene.remove(laserCore); scene.remove(laserGlow); laserCore = null; laserGlow = null }
+  clingerNpc = null
+  releaseAvatar(avatar); avatar = null
+  releaseAvatar(oppAvatar); oppAvatar = null
+  pistolMesh = null
+  if (laserCore) { disposeObject(laserCore); disposeObject(laserGlow); laserCore = null; laserGlow = null }
   clearPvpMap()
+}
+
+// Avatar (makeCivilianAvatar) : animation arrêtée, mixer qui oublie le clone, groupe libéré avec ce qu'il porte.
+function releaseAvatar(av) {
+  if (!av) return
+  if (av.mixer) { av.mixer.stopAllAction(); av.mixer.uncacheRoot(av.model) }
+  disposeObject(av.group)
 }
 
 // Pendant l'intro, la boucle de jeu normale ne tourne pas encore — on garde
@@ -400,7 +419,7 @@ function spawnCrowd() {
 }
 
 function clearCrowd() {
-  for (const n of crowd) scene.remove(n.mesh)
+  for (const n of crowd) n.dispose()
   crowd = []
 }
 
@@ -1008,7 +1027,7 @@ function quitToMenu() {
   myRole = null; roundActive = false
   if (rafHandle) cancelAnimationFrame(rafHandle)
   hideAllMpScreens()
-  clearPvpMap()
+  releaseRoundScene()        // d'ordinaire déjà fait par endRound ; rien ne reste si une manche est encore montée
   const instr = el('instruction'); if (instr) instr.style.display = ''   // restaure l'aide du mode histoire
   MAP_BUILDERS[0]()          // reconstruit le décor vivant derrière le menu
   setCampaignPaused(false)   // la boucle du mode histoire reprend la main

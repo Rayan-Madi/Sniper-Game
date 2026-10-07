@@ -209,13 +209,28 @@ export function startMissionAmbience() {
   ambTimer = setInterval(playBar, 4800)
 }
 
+// Fondu de sortie (s), puis le gain est débranché du maître : sans cela, chaque mission laissait un nœud branché.
+const AMB_FADE = 1.2
 export function stopMissionAmbience() {
   if (ambTimer) { clearInterval(ambTimer); ambTimer = null }
   if (ambGain) {
-    const c = getCtx()
-    ambGain.gain.setValueAtTime(ambGain.gain.value, c.currentTime)
-    ambGain.gain.linearRampToValueAtTime(0.0001, c.currentTime + 1.2)
+    const c = getCtx(), g = ambGain
+    ambGain = null   // une relance crée sa propre nappe ; un second arrêt ne touche plus à celle-ci
+    const end = c.currentTime + AMB_FADE
+    g.gain.setValueAtTime(g.gain.value, c.currentTime)
+    g.gain.linearRampToValueAtTime(0.0001, end)
+    disconnectAt(c, g, end)
   }
+}
+
+// Débranche node quand l'horloge audio a passé end (fin d'un fondu). Le minuteur peut tomber avant l'horloge audio, en
+// retard sur l'horloge de la page : on attend alors encore. Contexte arrêté (suspendu, fermé) : rien ne joue, on
+// débranche tout de suite.
+function disconnectAt(c, node, end) {
+  setTimeout(() => {
+    if (c.state === 'running' && c.currentTime < end) return disconnectAt(c, node, end)
+    node.disconnect()
+  }, Math.max(0, end - c.currentTime) * 1000 + 50)
 }
 
 // Contexte et nœud maître partagés : les cinématiques s'y branchent pour suivre le volume du jeu.

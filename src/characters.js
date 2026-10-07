@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { markShared } from './gfx/dispose.js'
 
 // ─── Chargement de personnages 3D (.glb) ────────────────────────────
 // Chaque type de PNJ peut avoir un modèle (url) OU plusieurs (urls: [...])
@@ -79,7 +80,7 @@ export async function preloadCharacters() {
       try {
         const gltf = await loader.loadAsync(vcfg.url)
         console.log('[characters] chargé:', type, vcfg.url)
-        return { scene: gltf.scene, animations: gltf.animations, cfg: vcfg }
+        return { scene: prepareModel(gltf.scene), animations: gltf.animations, cfg: vcfg }
       } catch (e) {
         console.warn('[characters] échec', vcfg.url, e)
         return null
@@ -88,6 +89,46 @@ export async function preloadCharacters() {
     const pool = loaded.filter(Boolean)
     if (pool.length) cache[type] = pool
   }))
+}
+
+// Modèle chargé, une fois pour toutes. Certains .glb (ex : gangster_man_02) exportent le matériau du CORPS en
+// « transparent » alors qu'il est 100 % opaque : il rendrait en alpha-blending et le cou, le torse paraîtraient
+// fantomatiques. On force l'opacité de tout matériau marqué transparent dont l'opacité vaut 1 (les cheveux, eux, sont
+// à opacity 0, réellement transparents : on n'y touche pas). Puis tout est marqué partagé (spec du lot 1 §4.2) :
+// géométries, matériaux et textures servent à toutes les instances (SkeletonUtils.clone les reprend par référence) et
+// ne sont jamais libérés avec un PNJ.
+function prepareModel(root) {
+  root.traverse(o => {
+    if (!o.isMesh) return
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (m && m.transparent && m.opacity >= 0.99) {
+        m.transparent = false; m.depthWrite = true; m.needsUpdate = true
+      }
+    }
+  })
+  return markShared(root)
+}
+
+// Personnages écartés hors champ (spec du lot 1 §4.3). three calcule la sphère englobante d'un maillage animé une
+// seule fois, sur sa première pose : un bras ou une jambe qui en sort faisait disparaître le personnage en bord
+// d'écran, d'où frustumCulled = false jusqu'ici (tous dessinés, même derrière la caméra). Chaque instance reçoit une
+// sphère généreuse, calculée une fois : centre à mi-hauteur (au-dessus du centre de la boîte de repos), rayon de 1,25
+// fois la hauteur d'ajustement. Elle est posée dans le repère du parent du modèle (pieds à y = 0), puis ramenée dans
+// celui de chaque maillage animé : elle suit ensuite le PNJ, qui ne déplace que son groupe.
+// Pourquoi 1,25 et non 0,75 (spec) : mesuré sommet par sommet sur les sept modèles, 25 images par clip joué, la marche
+// tient dans 0,75, mais Dance (la foule de M6 et du PvP) en sort de 43 cm, Death (le corps reste 8 s) de 78 cm et Look
+// de quelques millimètres. À 1,25, tous les clips joués tiennent avec au moins 11 cm de marge.
+const CULL_RADIUS = 1.25
+function setCullSpheres(model, height, cx, cz) {
+  model.updateMatrixWorld(true)   // le modèle n'a pas encore de parent : matrixWorld mène au repère de son futur parent
+  const center = new THREE.Vector3(cx, height / 2, cz)
+  model.traverse(o => {
+    if (!o.isSkinnedMesh) return
+    const toLocal = o.matrixWorld.clone().invert()
+    o.boundingSphere = new THREE.Sphere(center.clone().applyMatrix4(toLocal),
+      height * CULL_RADIUS / o.matrixWorld.getMaxScaleOnAxis())
+    o.frustumCulled = true
+  })
 }
 
 // Instance clonée (variante au hasard, ou précise via opts.match) + mixer.
@@ -108,6 +149,7 @@ export function spawnCharacter(type, opts = {}) {
   const fit = (cfg.fitHeight || 0) * (1 + (cfg.heightVar ? (Math.random() - 0.5) * cfg.heightVar : 0))
 
   // Auto-fit : redimensionne à fitHeight et pose les pieds au sol (y=0)
+  let culled = false
   if (fit) {
     model.updateMatrixWorld(true)
     const box = new THREE.Box3().setFromObject(model)
@@ -118,27 +160,28 @@ export function spawnCharacter(type, opts = {}) {
     model.updateMatrixWorld(true)
     const box2 = new THREE.Box3().setFromObject(model)
     model.position.y -= box2.min.y                     // pieds au sol
+    const c = box2.getCenter(new THREE.Vector3())
+    setCullSpheres(model, fit, c.x, c.z)
+    culled = true
   } else if (cfg.scale) {
     model.scale.setScalar(cfg.scale)
   }
 
-  // Teinte de vêtements aléatoire (variété de la foule à partir d'un seul modèle)
+  // Teinte de vêtements aléatoire (variété de la foule à partir d'un seul modèle). La teinte blanche laisse la texture
+  // telle quelle : l'instance garde alors les matériaux du modèle (partagés). Une autre teinte copie le matériau, qui
+  // est à l'instance et sera libéré avec elle (NPC.dispose) ; la copie garde les textures du modèle (Material.copy les
+  // reprend par référence), mais pas la marque « partagé » que Material.clone recopie avec userData.
   let tint = null
   if (cfg.tints && cfg.tints.length) tint = cfg.tints[Math.floor(Math.random() * cfg.tints.length)]
+  const recolor = tint != null && tint !== 0xffffff
   model.traverse(o => {
     if (o.isMesh) {
-      o.castShadow = true; o.frustumCulled = false
-      if (tint != null) { o.material = o.material.clone(); o.material.color = new THREE.Color(tint) }
-      // Certains .glb (ex: gangster_man_02) exportent le matériau du CORPS en
-      // "transparent" alors qu'il est 100% opaque → il rend en alpha-blending et
-      // le cou/le torse paraissent fantomatiques. On force l'opacité pour tout
-      // matériau marqué transparent mais dont l'opacité vaut 1 (les cheveux, eux,
-      // sont à opacity 0 → réellement transparents, on n'y touche pas).
-      const mats = Array.isArray(o.material) ? o.material : [o.material]
-      for (const m of mats) {
-        if (m && m.transparent && m.opacity >= 0.99) {
-          m.transparent = false; m.depthWrite = true; m.needsUpdate = true
-        }
+      o.castShadow = true
+      if (!culled) o.frustumCulled = false   // sans sphère d'instance (modèle sans fitHeight) : toujours dessiné
+      if (recolor) {
+        o.material = o.material.clone()
+        delete o.material.userData.shared
+        o.material.color = new THREE.Color(tint)
       }
     }
   })

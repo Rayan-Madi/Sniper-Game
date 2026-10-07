@@ -400,10 +400,11 @@ function clearEntities() {
 }
 
 // Démontage de la scène d'une mission (PNJ, convoi, cadenas, impacts, effets) : relance, mission suivante, retour au
-// menu, et la route ?memtest=1. Jeeps, cadenas et effets libèrent leurs ressources GPU ; les trous d'impact partagent
-// les leurs (effects.js). Les PNJ sont seulement retirés de la scène : leur libération vient au lot 1, tâche L3.
+// menu, et la route ?memtest=1. PNJ, jeeps, cadenas et effets libèrent leurs ressources GPU ; les trous d'impact et
+// les modèles GLB partagent les leurs (effects.js, characters.js). Un PNJ abattu déjà retiré au bout de 8 s ne
+// libère rien de plus (NPC.dispose est idempotent).
 function unmountLevel() {
-  for (const npc of npcs) scene.remove(npc.mesh)
+  for (const npc of npcs) npc.dispose()
   clearConvoy()
   removeMoralLock()   // sinon le cadenas du port restait sous le menu, posé dans la rue
   npcs = []; targets = []; guards = []; civilians = []

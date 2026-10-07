@@ -2,6 +2,10 @@ import * as THREE from 'three'
 import { scene } from './scene.js'
 import { spawnCharacter, animateRig } from './characters.js'
 import { getObstacles } from './maps.js'
+import { disposeObject } from './gfx/dispose.js'
+
+// Durée (s de jeu) pendant laquelle le corps d'un PNJ abattu reste à terre.
+const BODY_TIME = 8
 
 // Collision XZ contre les obstacles de la map (rayon PNJ ~0.35)
 function blocked(x, z, r = 0.35) {
@@ -229,6 +233,12 @@ export class NPC {
     if (!this.alive) {
       // laisse l'animation de mort se jouer jusqu'au bout
       if (this.mixer && this.deathTimer > 0) { this.deathTimer -= dt; this.mixer.update(dt) }
+      // Corps retiré et libéré au bout de BODY_TIME secondes de jeu. Une durée et non un minuteur : la pause n'avance
+      // pas, le ralenti de la kill-cam ralentit, et rien ne tombe sur une mission déjà démontée.
+      if (this.removeIn > 0) {
+        this.removeIn -= dt
+        if (this.removeIn <= 0) this.dispose()
+      }
       return
     }
     this.stateTimer += dt
@@ -536,6 +546,21 @@ export class NPC {
     return angle < (this.levelData?.guardFOV || 70) / 2
   }
 
+  // Retire le PNJ de la scène et libère ce qu'il possède (spec du lot 1 §4.2) : son clone (un squelette par maillage
+  // animé, donc une texture d'os chacun), ses matériaux teintés, ses marqueurs, le téléphone du commanditaire, ou tout
+  // le modèle procédural. Rien du modèle GLB : géométries, textures et matériaux non teintés sont marqués partagés au
+  // chargement (characters.js). Le mixer est arrêté et oublie le clone. Idempotent ; un PNJ libéré ne revient jamais
+  // dans la scène (gfx/dispose.js).
+  dispose() {
+    if (this.disposed) return
+    this.disposed = true
+    if (this.mixer) {
+      this.mixer.stopAllAction()
+      this.mixer.uncacheRoot(this.character.model)
+    }
+    disposeObject(this.mesh)
+  }
+
   die() {
     this.alive = false
     // Modèle .glb : joue l'animation de mort (bien plus stylé qu'une bascule)
@@ -554,6 +579,6 @@ export class NPC {
     }
     if (this.mesh.userData.marker) this.mesh.userData.marker.visible = false
     if (this.mesh.userData.ring)   this.mesh.userData.ring.visible = false
-    setTimeout(() => scene.remove(this.mesh), 8000)
+    this.removeIn = BODY_TIME   // le corps part au bout de 8 s de jeu (update), libéré
   }
 }
