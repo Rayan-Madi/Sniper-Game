@@ -59,8 +59,9 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   // ── habillage injecté ──
   const st = $('st'), scene = $('scene')
   if (!st || !scene) throw new Error('la scène doit contenir #st et #scene')
-  st.classList.add('k-preload')
-  raf(() => raf(() => st.classList.remove('k-preload')))
+  // préchargement : transitions coupées le temps de poser l'état de départ, rétablies deux images plus tard
+  const preload = () => { st.classList.add('k-preload'); raf(() => raf(() => st.classList.remove('k-preload'))) }
+  preload()
   st.insertAdjacentHTML('afterbegin', '<div class="crt" id="k-crt"></div>')
   st.insertAdjacentHTML('beforeend', OVERLAYS)
   root.insertAdjacentHTML('beforeend', GLITCH_FILTER + '<div class="kctrl" hidden><button id="k-replay"></button><span id="k-lbl"></span></div>')
@@ -72,6 +73,12 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   // ── glitch : déchirure horizontale + séparation RVB + rafale de parasites ──
   const gT = $('k-glt'), gD = $('k-gld'), gO1 = $('k-glo1'), gO2 = $('k-glo2'), bf = $('k-bf')
   let glitchUntil = 0, glitchPow = 0, glitchIv = 0
+  // fin d'un glitch, ou glitch coupé par « rejouer » : filtre, déchirure et rafale retirés
+  const calm = () => {
+    if (glitchIv) { stopEvery(glitchIv); glitchIv = 0 }
+    glitchUntil = 0; glitchPow = 0
+    scene.style.filter = ''; scene.style.transform = ''; st.classList.remove('gl'); bf.classList.remove('on'); gD.setAttribute('scale', 0)
+  }
   K.glitch = (ms, pow) => {
     if (freeze !== null || destroyed) return
     S.glitch(ms, pow)
@@ -79,10 +86,7 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
     if (glitchIv) return
     scene.style.filter = 'url(#k-glf)'; st.classList.add('gl')
     glitchIv = every(45, () => {
-      if (performance.now() > glitchUntil) {
-        stopEvery(glitchIv); glitchIv = 0; glitchPow = 0
-        scene.style.filter = ''; scene.style.transform = ''; st.classList.remove('gl'); bf.classList.remove('on'); gD.setAttribute('scale', 0); return
-      }
+      if (performance.now() > glitchUntil) { calm(); return }
       const p = glitchPow
       gT.setAttribute('seed', Math.floor(Math.random() * 999))
       gT.setAttribute('baseFrequency', `0.00001 ${(0.03 + Math.random() * 0.12).toFixed(3)}`)
@@ -146,6 +150,10 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   let runId = 0, cfg = null, resolveDone
   K.finished = new Promise(r => { resolveDone = r })
   function reset() {
+    // Le passage précédent s'arrête net : frappes, repères, attentes, compteurs, ondes (minuteurs suivis). L'habillage
+    // du kit, suivi dans le même registre, repart aussitôt : glitch soldé, préchargement, parasites au repos.
+    clearAll(); calm(); preload()
+    if (freeze === null) idleGlitch()
     K.frozen = false; st.classList.remove('k-frozen'); counters.clear()
     S.stopVoice(); S.music(null); K.wave(false)
     const cls = [...STATE_CLASSES, ...((cfg && cfg.stateClasses) || [])]

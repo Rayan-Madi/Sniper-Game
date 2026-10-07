@@ -171,6 +171,81 @@ describe('kit des cinématiques', () => {
     })
   })
 
+  // « Rejouer » (bouton k-replay, ou K.run rappelé) remet la scène à zéro : ce qui tournait du passage précédent
+  // s'arrête, sinon un compteur ou une frappe continuent d'écrire dans la scène remise à zéro.
+  describe('rejouer', () => {
+    it('un compteur lancé avant « rejouer » s\'arrête : il ne réécrit plus la scène remise à zéro', async () => {
+      const root = mountScene('<b id="n" data-reset>0</b>')
+      const n = root.querySelector('#n')
+      const K = createKit({ root })
+      K.run({ beats: [{ min: 3000, cues: [[1000, K => K.counter('n', 0, 12, 1000)]] }] })
+      await vi.advanceTimersByTimeAsync(1500); await flush()
+      expect(Math.abs(+n.textContent - 6)).toBeLessThanOrEqual(1)   // à mi-course
+      root.querySelector('#k-replay').click()                       // la même séquence repart de zéro
+      expect(n.textContent).toBe('')
+      await vi.advanceTimersByTimeAsync(800); await flush()          // le nouveau compteur ne part qu'à 1 000 ms
+      expect(n.textContent).toBe('')
+      await vi.advanceTimersByTimeAsync(700); await flush()          // 1 500 ms après « rejouer » : il est à mi-course
+      expect(Math.abs(+n.textContent - 6)).toBeLessThanOrEqual(1)
+    })
+
+    it('une écoute en cours de frappe avant « rejouer » s\'arrête : ses lettres ne s\'ajoutent plus', async () => {
+      const root = mountScene('<div id="trans"></div><div id="wave"></div>')
+      const K = createKit({ root })
+      K.run({ beats: [{ who: 'PHONE', say: 'Une écoute assez longue pour être coupée en route' }] })
+      await vi.advanceTimersByTimeAsync(300); await flush()
+      expect(root.querySelector('#trans').textContent.length).toBeGreaterThan(0)
+      K.run({ beats: [{ min: 5000 }] })                              // rejouer une séquence muette
+      await vi.advanceTimersByTimeAsync(5000); await flush()
+      expect(root.querySelector('#trans').textContent).toBe('')
+    })
+
+    // Garde-fous : « rejouer » arrête le passage précédent, pas l'habillage du kit, dont les minuteurs vivent dans
+    // le même registre (préchargement, parasites au repos, glitch en cours).
+    it('le préchargement se lève quelques images après le lancement (transitions de nouveau actives)', async () => {
+      const root = mountScene()
+      const K = createKit({ root })
+      K.run({ beats: [{ min: 5000 }] })
+      await vi.advanceTimersByTimeAsync(100); await flush()
+      expect(root.querySelector('#st').classList.contains('k-preload')).toBe(false)
+      root.querySelector('#k-replay').click()
+      await vi.advanceTimersByTimeAsync(100); await flush()
+      expect(root.querySelector('#st').classList.contains('k-preload')).toBe(false)
+    })
+
+    it('les parasites au repos continuent après le lancement et après « rejouer »', async () => {
+      const K = createKit({ root: mountScene() })
+      const glitch = vi.spyOn(K.snd, 'glitch')
+      K.run({ beats: [{ min: 20000 }] })
+      await vi.advanceTimersByTimeAsync(4000); await flush()         // un parasite toutes les 1,1 à 3,7 s
+      expect(glitch).toHaveBeenCalled()
+      glitch.mockClear()
+      K.run({ beats: [{ min: 20000 }] })
+      await vi.advanceTimersByTimeAsync(4000); await flush()
+      expect(glitch).toHaveBeenCalled()
+    })
+
+    it('un glitch en cours au moment de « rejouer » ne reste pas figé, et les suivants s\'animent encore', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.99)                // parasites au repos tardifs : 3,7 s
+      try {
+        const root = mountScene()
+        const scene = root.querySelector('#scene')
+        const K = createKit({ root })
+        K.run({ beats: [{ min: 20000 }] })
+        K.glitch(2000, 1)
+        await vi.advanceTimersByTimeAsync(100); await flush()
+        expect(scene.style.filter).toContain('k-glf')
+        K.run({ beats: [{ min: 20000 }] })                            // rejouer en plein glitch
+        await vi.advanceTimersByTimeAsync(2500); await flush()
+        expect(scene.style.filter).toBe('')
+        K.glitch(100, 1)                                              // un glitch du nouveau passage
+        expect(scene.style.filter).toContain('k-glf')
+        await vi.advanceTimersByTimeAsync(200); await flush()
+        expect(scene.style.filter).toBe('')
+      } finally { Math.random.mockRestore() }
+    })
+  })
+
   it('reste muet et sans erreur quand aucun contexte audio n\'est fourni', () => {
     const K = createKit({ root: mountScene() })
     expect(() => { K.snd.boom(); K.snd.stamp(); K.music('tense'); K.music(null) }).not.toThrow()
