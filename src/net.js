@@ -52,15 +52,18 @@ export function isConnected() { return !!ws && ws.readyState === WebSocket.OPEN 
 
 export function connect(onOpen, onError) {
   if (ws) { try { ws.close() } catch (e) {} }
-  ws = new WebSocket(RELAY_URL)
-  ws.onopen = () => onOpen && onOpen()
-  ws.onerror = (e) => onError && onError(e)
-  ws.onmessage = (ev) => {
+  const sock = ws = new WebSocket(RELAY_URL)
+  sock.onopen = () => onOpen && onOpen()
+  sock.onerror = (e) => onError && onError(e)
+  sock.onmessage = (ev) => {
     let msg
     try { msg = JSON.parse(ev.data) } catch (e) { return }
     emit(msg.t, msg)
   }
-  ws.onclose = () => emit('disconnected', {})
+  // Seule la socket courante annonce la perte du relais : une socket
+  // remplacée par connect() ou abandonnée par disconnect() (qui remet ws à
+  // null) peut signaler sa fermeture après coup, sans couper la nouvelle manche.
+  sock.onclose = () => { if (ws === sock) emit('disconnected', {}) }
 }
 
 export function disconnect() {

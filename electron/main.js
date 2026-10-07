@@ -1,7 +1,14 @@
 const { app, BrowserWindow } = require('electron')
 const path = require('path')
 
+// « npm run electron:dev » lance « electron . --dev » : un argument plutôt
+// qu'une variable d'environnement, que cmd.exe (Windows) ne sait pas poser
+// en tête de commande.
+const isDev = process.argv.includes('--dev')
+
 function createWindow() {
+  // Pas de propriété icon : Electron garde son icône par défaut tant que le
+  // jeu n'en a pas.
   const win = new BrowserWindow({
     width: 1280,
     height: 720,
@@ -13,12 +20,10 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
-    icon: path.join(__dirname, '../public/icon.png'),
   })
 
   win.setMenuBarVisibility(false)
 
-  const isDev = process.env.NODE_ENV === 'development'
   if (isDev) {
     win.loadURL('http://localhost:5173')
     win.webContents.openDevTools()

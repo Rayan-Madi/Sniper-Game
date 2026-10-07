@@ -35,16 +35,18 @@ articulées). Tu peux les remplacer par de vrais modèles Mixamo.
 7) Ouvre  src/characters.js  et renseigne MODELS, par exemple :
 
       export const MODELS = {
-        civilian: { url: '/models/civilian.glb', scale: 1.0,
+        civilian: { url: MODEL_DIR + 'civilian.glb', scale: 1.0,
                     anims: { idle: 'Idle', walk: 'Walking' } },
-        target:   { url: '/models/target.glb',   scale: 1.0,
+        target:   { url: MODEL_DIR + 'target.glb',   scale: 1.0,
                     anims: { idle: 'Idle', walk: 'Walking' } },
-        guard:    { url: '/models/guard.glb',     scale: 1.0,
+        guard:    { url: MODEL_DIR + 'guard.glb',     scale: 1.0,
                     anims: { idle: 'Idle', walk: 'Walking' } },
       }
 
    - "scale" ajuste la taille (vise ~1.8 m de haut).
    - "anims" mappe idle/walk aux NOMS EXACTS des clips dans le .glb.
+   - Toujours MODEL_DIR + 'fichier.glb', jamais un chemin qui commence
+     par /models/ : il casse le jeu ouvert en file:// (Electron).
 
 8) Recharge le jeu. Les types configurés utilisent le modèle 3D ;
    les autres restent procéduraux. Tout fonctionne sans fichier.

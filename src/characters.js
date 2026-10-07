@@ -12,26 +12,32 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 // Pour ajouter les tiens : dépose le .glb dans public/models/ puis édite ici.
 // (Voir public/models/README.txt)
 // Modèles 3D réalistes AVEC animations Idle/Walk intégrées (s'animent tout seuls).
-// Cibles = criminels mafia (hommes + femmes + boss), gardes = homme de main.
+// Cibles = criminels mafia (hommes + femmes), gardes = homme de main.
 // IMPORTANT : aucun modèle n'est partagé entre les rôles.
-// (mafia_boss.glb n'est utilisé NULLE PART : le commanditaire final reste invisible.)
+// Le commanditaire final n'a pas de modèle : il n'est jamais montré.
+
+// Chemin RELATIF à la page (BASE_URL vaut '/' en dev, './' dans le build) :
+// un chemin absolu, commençant par /models/, devient file:///C:/models/... sous Electron.
+const MODEL_DIR = import.meta.env.BASE_URL + 'models/'
+
 export const MODELS = {
   // CIBLES (criminels importants) — modèles réservés (H + F)
-  // (mafia_boss sert de mafieux costard générique : le VRAI boss n'est jamais montré)
+  // mafia_boss.glb, malgré son nom, est un soldat en tenue « vanguard » : c'est
+  // une des trois variantes tirées au hasard pour toutes les cibles, pas le boss.
   // tints = variations de teinte subtiles (multiplie la texture) + heightVar = tailles
   // variées → plus jamais deux ennemis strictement identiques côte à côte
   target: {
     fitHeight: 1.85, rotY: 0, heightVar: 0.07, anims: { idle: 'Idle', walk: 'Walk' },
     tints: [0xffffff, 0xe6ecff, 0xffe9df, 0xe2f2e2, 0xf2e2ee],
     variants: [
-      { url: '/models/gangster_man_01.glb' },
-      { url: '/models/mafia_boss.glb' },
-      { url: '/models/mafia_woman_01.glb' },
+      { url: MODEL_DIR + 'gangster_man_01.glb' },
+      { url: MODEL_DIR + 'mafia_boss.glb' },
+      { url: MODEL_DIR + 'mafia_woman_01.glb' },
     ],
   },
   // GARDES — modèle réservé (teintes d'uniforme légèrement différentes)
   guard: {
-    url: '/models/mafia_henchman.glb', fitHeight: 1.85, rotY: 0, heightVar: 0.06,
+    url: MODEL_DIR + 'mafia_henchman.glb', fitHeight: 1.85, rotY: 0, heightVar: 0.06,
     tints: [0xffffff, 0xdde6f5, 0xf0e4d6, 0xd9ead9],
     anims: { idle: 'Idle', walk: 'Walk' },
   },
@@ -40,9 +46,9 @@ export const MODELS = {
     fitHeight: 1.8, rotY: 0, heightVar: 0.12, anims: { idle: 'Idle', walk: 'Walk' },
     tints: [0xffffff, 0xccbbaa, 0xaabbcc, 0xbbaacc, 0xccaa99],
     variants: [
-      { url: '/models/gangster_man_02.glb' },
-      { url: '/models/mafia_woman_02.glb' },
-      { url: '/models/mafia_woman_03.glb' },
+      { url: MODEL_DIR + 'gangster_man_02.glb' },
+      { url: MODEL_DIR + 'mafia_woman_02.glb' },
+      { url: MODEL_DIR + 'mafia_woman_03.glb' },
     ],
   },
 }
@@ -51,6 +57,9 @@ const loader = new GLTFLoader()
 const cache = {}   // type -> [ {scene, animations, cfg} ]
 
 export function hasModel(type) { return !!cache[type] }
+
+// URL des modèles chargés pour un type, dans l'ordre du pool (relecture, tests).
+export function poolUrls(type) { return (cache[type] || []).map(p => p.cfg.url) }
 
 // Liste des variantes d'un type, chacune avec sa config (héritée du type)
 function variantsFor(type, cfg) {
@@ -63,14 +72,20 @@ export async function preloadCharacters() {
   const entries = Object.entries(MODELS)
   if (entries.length === 0) return
   await Promise.all(entries.map(async ([type, cfg]) => {
-    const pool = []
-    await Promise.all(variantsFor(type, cfg).map(async (vcfg) => {
+    // Promise.all garde l'ordre des variantes, pas celui d'arrivée des fichiers :
+    // en PvP, les deux machines tirent leurs modèles avec la même graine et
+    // doivent donc avoir des pools rangés pareil.
+    const loaded = await Promise.all(variantsFor(type, cfg).map(async (vcfg) => {
       try {
         const gltf = await loader.loadAsync(vcfg.url)
-        pool.push({ scene: gltf.scene, animations: gltf.animations, cfg: vcfg })
         console.log('[characters] chargé:', type, vcfg.url)
-      } catch (e) { console.warn('[characters] échec', vcfg.url, e) }
+        return { scene: gltf.scene, animations: gltf.animations, cfg: vcfg }
+      } catch (e) {
+        console.warn('[characters] échec', vcfg.url, e)
+        return null
+      }
     }))
+    const pool = loaded.filter(Boolean)
     if (pool.length) cache[type] = pool
   }))
 }
