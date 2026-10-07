@@ -278,6 +278,19 @@ export function groundRight(yaw)     // THREE.Vector3(-cos yaw, 0, sin yaw) = fo
 
 ---
 
+### Tâche Z0 : retouches transverses (remarques mineures des relectures)
+
+Après fusion de P1 à P3. Chaque point avec un test rouge puis vert quand c'est un comportement.
+
+- [ ] **Aide des commandes** (`#instruction`) : opacité initiale à 0 dans `index.html` (elle est visible sous le menu au chargement) ; `triggerGameOver`, `triggerFleeGameOver`, `triggerConvoyEscaped` et `triggerLevelClear` la masquent aussi (sinon elle reste pâle sous l'écran de fin jusqu'à son minuteur de 5 s).
+- [ ] **Commentaires périmés** : la forme de `convoyCar` (`main.js`, commentaire `{ mesh, x, dir, speed }`) ; le titre et le commentaire du test d'A2 qui parlent d'une « mort pendant la kill-cam » (devenue impossible depuis `canFail`).
+- [ ] **Raccourci de mission** : `overlayOpen()` ne doit plus appeler `getComputedStyle` à chaque touche en production ; ne l'évaluer que si `import.meta.env.DEV` et si `e.code` est un chiffre de 1 à 6.
+- [ ] **Tests trop lâches d'A4** : un cas où le point d'impact tombe entre 1 et `groundY + 1` (le seuil `point.y < groundY + 1` doit être prouvé) ; un convoi dont `z` vaut autre chose que -4 (pour prouver que `stepConvoy` lit `convoy.z`).
+- [ ] **Relais PvP** (`src/net.js`) : seule la socket courante émet `disconnected` et livre ses messages (garde `ws === sock` sur `onclose` et `onmessage`) ; si le relais tombe sur l'écran d'attente (CRÉER, « En attente d'un adversaire… ») ou sur l'écran de fin de manche, un message clair remplace l'attente figée (« Relais perdu. ») et le bouton d'annulation ou de retour reste utilisable.
+- [ ] **Kit des cinématiques** (`src/briefing/kit.js`) : `reset()` annule les minuteurs et les boucles en cours (`clearAll()` en tête, comme la maquette), sinon un compteur lancé avant un « rejouer » continue d'écrire.
+- [ ] **Enquête** : pendant les 600 ms de garde du téléphone, l'invite « ÉCOUTER LE MESSAGE » n'apparaît pas encore (elle s'affiche à la fin de la garde), pour qu'aucune touche ne paraisse perdue ; resserrer le test du double-clic pour borner la garde des deux côtés (rouge sous 500 ms et au-delà de 700 ms).
+- [ ] Commit(s) : `fix(jeu): retouches transverses après le lot 0` (ou un commit par périmètre : `fix(pvp)`, `fix(cinematiques)`, `fix(enquete)`).
+
 ### Tâche Z1 : textes visibles sans tiret cadratin
 
 Après fusion de P1 à P3 dans `lot0-corrections`.
