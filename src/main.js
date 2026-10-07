@@ -11,6 +11,7 @@ import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, in
 import { preloadCharacters } from './characters.js'
 import { initMultiplayerMenu } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
+import { fovFor, aimAngles } from './aim.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -424,17 +425,12 @@ function startLevel(n) {
 
   // Calculer yaw/pitch initial depuis cameraTarget si défini
   if (currentMapInfo.cameraTarget) {
-    const [tx, ty, tz] = currentMapInfo.cameraTarget
-    const dir = new THREE.Vector3(tx - cx, ty - cy, tz - cz).normalize()
-    yaw   = Math.atan2(dir.x, -dir.z)
-    pitch = Math.asin(Math.max(-1, Math.min(1, dir.y)))
+    ({ yaw, pitch } = aimAngles(currentMapInfo.cameraPos, currentMapInfo.cameraTarget))
   } else {
     yaw = 0; pitch = 0
   }
 
-  camera.fov = 60
-  camera.updateProjectionMatrix()
-  setZoom(4)
+  setZoom(4)   // le champ de vision suit dans loop() (syncFov)
 
   stress = 0; alertActive = false; alertTimer = 0; bulletInFlight = false
   document.getElementById('game-over-reason').textContent = 'Vous avez été repéré'
@@ -713,6 +709,7 @@ function shoot() {
   const aimX =  (t.x / innerWidth)  * 2.0
   const aimY = -(t.y / innerHeight) * 2.0
   const ray = new THREE.Raycaster()
+  syncFov()   // lunette ouverte et tir dans la même image : le rayon suit déjà le zoom
   ray.setFromCamera(new THREE.Vector2(aimX, aimY), camera)
   pendingShotRay = ray
 }
@@ -1032,9 +1029,7 @@ document.addEventListener('wheel', e => {
   const stats = getStats()
   const cur = getZoom()
   const next = Math.max(3, Math.min(stats.maxZoom, cur + (e.deltaY > 0 ? -0.5 : 0.5)))
-  setZoom(next)
-  camera.fov = 60 / next
-  camera.updateProjectionMatrix()
+  setZoom(next)   // le champ de vision suit dans loop() (syncFov)
 }, { passive: true })
 
 document.getElementById('canvas').addEventListener('click', () => {
@@ -1113,6 +1108,12 @@ function renderUpgradeUI() {
 // du mode histoire entreraient en conflit avec le rendu du PvP.
 export let campaignPaused = false
 export function setCampaignPaused(v) { campaignPaused = v; if (v) clock.getDelta() }
+
+// Champ de vision de la mission : 60 / zoom lunette ouverte, 60 lunette fermée.
+function syncFov() {
+  const f = fovFor(getZoom(), isVisible())
+  if (camera.fov !== f) { camera.fov = f; camera.updateProjectionMatrix() }
+}
 
 function loop() {
   requestAnimationFrame(loop)
@@ -1222,7 +1223,8 @@ function loop() {
     // Effets (traceurs, impacts, poussière)
     updateEffects(dt)
 
-    // Caméra sniper (position fixe, rotation libre)
+    // Caméra sniper (position fixe, rotation libre, zoom de la lunette)
+    syncFov()
     const [baseX, baseY, baseZ] = currentMapInfo ? currentMapInfo.cameraPos : [0, 8, 30]
     const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ')
     const dir = new THREE.Vector3(0, 0, -1).applyEuler(euler)
@@ -1240,6 +1242,8 @@ function loop() {
       camera.lookAt(0, 4, 0)
       camera.fov = 55
       camera.updateProjectionMatrix()
+    } else {
+      syncFov()   // pause, échec, réussite : lunette fermée, la vue revient à 60° sous l'écran affiché
     }
   }
 
@@ -1263,6 +1267,8 @@ if (import.meta.env.DEV) {
       appels: i.render.calls, triangles: i.render.triangles, objets,
       tasJSMo: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null }
   }
+  // Visée (relectures du zoom) : __aim() dans la console
+  window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), scoped: isVisible() })
   if (q.has('cine')) {
     menuEl.style.display = 'none'
     gamePhase = 'briefing'

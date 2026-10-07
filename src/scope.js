@@ -1,14 +1,14 @@
 import { getStats } from './upgrades.js'
+import { stepTremble } from './aim.js'
 
 const canvas = document.getElementById('scope-canvas')
 const ctx = canvas.getContext('2d')
 
 let visible = false
 let zoom = 4
-let tremble = { x: 0, y: 0, vx: 0, vy: 0 }
+let tremble = { x: 0, y: 0, vx: 0, vy: 0, phase: 0 }   // phase : oscillation de respiration
 let stress = 0
 let steady = 1        // 1 = normal, <1 = apnée (visée stabilisée)
-let breathPhase = 0   // phase de l'oscillation de respiration
 
 export function showScope() { visible = true; canvas.style.display = 'block' }
 export function hideScope() { visible = false; canvas.style.display = 'none' }
@@ -25,25 +25,10 @@ export function updateTremble(dt) {
   const baseBreath = 14 * stats.trembleScale                       // balancement constant net
   const stressKick = stress * stress * 220 * stats.trembleScale    // quadratique : explose à haut stress
   const intensity  = (baseBreath + stressKick) * steady
-
-  // Secousses aléatoires (à-coups)
-  tremble.vx += (Math.random() - 0.5) * intensity
-  tremble.vy += (Math.random() - 0.5) * intensity
-
-  // Oscillation lente de respiration (sinusoïde) — dérive en huit
-  breathPhase += dt * (1.2 + stress * 1.5)
+  // Amplitude de la dérive en huit (respiration)
   const sway = (8 + stress * 30) * stats.trembleScale * steady
-  tremble.vx += Math.cos(breathPhase) * sway * dt
-  tremble.vy += Math.sin(breathPhase * 0.7) * sway * dt
-
-  const damp = 0.91
-  tremble.vx *= damp
-  tremble.vy *= damp
-  tremble.x += tremble.vx * dt
-  tremble.y += tremble.vy * dt
-  // Rappel doux vers le centre (moins fort = dérive plus ample)
-  tremble.x *= 0.97
-  tremble.y *= 0.97
+  // Physique dans src/aim.js : même dispersion quel que soit le nombre d'images par seconde
+  stepTremble(tremble, { intensity, sway, breathRate: 1.2 + stress * 1.5 }, dt, Math.random)
 }
 
 export function getTrembleOffset() {
