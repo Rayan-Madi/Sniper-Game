@@ -32,7 +32,7 @@ export function createAmbience(audio) {
   // cœur : un battement, puis le suivant d'autant plus tôt qu'on est près (1,15 s → 0,65 s)
   const heartLoop = () => { if (dead) return; S.heart(); at(1150 - 500 * proximity, heartLoop) }
 
-  return {
+  const api = {
     start() {
       if (dead || started) return
       started = true
@@ -44,10 +44,15 @@ export function createAmbience(audio) {
     step() { S.noise(0.07, 0.1, 420, 'lowpass'); S.tone(68, 'sine', 0.09, 0.12) },
     tinnitus() { S.tone(6900, 'sine', 4.6, 0.035); S.tone(7350, 'sine', 4, 0.018, 0.3) },
     glitch(ms = 200, p = 0.7) { S.glitch(ms, p) },
-    speak(text) {   // une nouvelle réplique annule la fin prévue de la précédente (sinon celle-ci couperait la nouvelle)
+    speak(text) {   // une nouvelle réplique fait d'abord taire la précédente (et annule sa fin prévue, qui couperait la nouvelle)
       const ms = estimate(text)
-      if (!dead) { S.voice('inner', true); if (voiceEnd) { clearTimeout(voiceEnd); timers.delete(voiceEnd) } voiceEnd = at(ms, () => { voiceEnd = 0; S.stopVoice() }) }
+      if (!dead) { api.hush(); S.voice('inner', true); voiceEnd = at(ms, () => { voiceEnd = 0; S.stopVoice() }) }
       return ms
+    },
+    // coupe la voix en cours et annule son arrêt programmé (fiche refermée avant la fin de la réplique)
+    hush() {
+      if (voiceEnd) { clearTimeout(voiceEnd); timers.delete(voiceEnd); voiceEnd = 0 }
+      if (!dead) S.stopVoice()
     },
     stop() {
       if (dead) return
@@ -60,4 +65,5 @@ export function createAmbience(audio) {
       }
     },
   }
+  return api
 }

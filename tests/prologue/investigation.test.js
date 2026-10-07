@@ -300,6 +300,25 @@ describe('l\'enquête — finitions', () => {
     h.stop()
   })
 
+  it('fermer une fiche avant la fin de la réplique fait taire la voix intérieure', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)                     // babil déterministe : une syllabe tous les 125 ms
+    try {
+      const renderer = fakeRenderer(), camera = new THREE.PerspectiveCamera(), audio = fakeAudio()
+      const probe = startInvestigation({ renderer, camera, onDone: vi.fn() })
+      const cam = lookAt(probe.debug.apartment, 'mot'); probe.stop()
+      const h = startInvestigation({ renderer, camera, audio, onDone: vi.fn(), options: { cam } })
+      // syllabes de la voix : oscillateurs en dents de scie (le cœur et les pas sont des sinus)
+      const syllables = () => audio.ctx.createOscillator.mock.results.filter(r => r.value.type === 'sawtooth').length
+      h.update(0.016); keyE()                                           // « Ils voulaient que je sache. »
+      await vi.advanceTimersByTimeAsync(300)
+      const before = syllables()
+      keyE()                                                            // refermée avant la fin estimée
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(syllables()).toBe(before)
+      h.stop()
+    } finally { vi.restoreAllMocks() }
+  })
+
   it('empilement : la fiche sous le noir, la carte et la pause au-dessus', () => {
     const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn() })
     const order = [...$('#enq-root').children].map(e => e.id)

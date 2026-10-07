@@ -247,6 +247,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     const fiche = $('#enq-fiche')
     cancel(lineTimer); lineTimer = 0
     fiche.querySelectorAll('.enq-line .tx').forEach(untype)
+    amb.hush()                              // la réplique s'arrête avec sa fiche (sinon ses bips continuaient)
     fiche.classList.remove('on')
     state.close()
     controller.setFrozen(false)

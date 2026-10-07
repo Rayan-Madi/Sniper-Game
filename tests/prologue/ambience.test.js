@@ -65,6 +65,33 @@ describe('le son de l\'enquête', () => {
     a.stop()
   })
 
+  it('hush() coupe la voix en cours et annule son arrêt programmé ; sans voix ou après l\'arrêt, sans effet', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const audio = fakeAudio(); const a = createAmbience(audio)
+    a.speak('Elles étaient là. Ma femme. Ma fille.')
+    await vi.advanceTimersByTimeAsync(400)
+    const n = audio.ctx.createOscillator.mock.calls.length
+    expect(n).toBeGreaterThan(0)
+    a.hush()
+    expect(vi.getTimerCount()).toBe(0)                               // ni babil, ni arrêt programmé
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(audio.ctx.createOscillator.mock.calls.length).toBe(n)
+    expect(() => { a.hush(); a.stop(); a.hush() }).not.toThrow()
+    expect(() => createAmbience(null).hush()).not.toThrow()
+  })
+
+  it('une nouvelle réplique fait d\'abord taire la précédente : un seul babil, un seul arrêt programmé', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const audio = fakeAudio(); const a = createAmbience(audio)
+    const hush = vi.spyOn(a, 'hush')
+    a.speak('Ce jour-là, j\'avais oublié mon téléphone.')
+    await vi.advanceTimersByTimeAsync(300)
+    a.speak('Elle ne dormait jamais sans lui.')
+    expect(hush).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(2)
+    a.stop()
+  })
+
   it('stop() coupe tout : nœuds débranchés après le fondu, aucun minuteur restant, idempotent', async () => {
     const audio = fakeAudio(); const a = createAmbience(audio)
     a.start(); a.speak('Elle ne dormait jamais sans lui.')
