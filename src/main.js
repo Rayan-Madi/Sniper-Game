@@ -13,7 +13,8 @@ import { initMultiplayerMenu } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
 import { fovFor, aimAngles } from './aim.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
-import { canClear } from './campaign/phase.js'
+import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
+import { rankFor, precisionOf, isHit } from './campaign/rank.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -41,6 +42,12 @@ let statShots = 0, statHits = 0, statStart = 0, statAlerts = 0
 // Kill-cam (ralenti sur la dernière cible)
 let timeScale = 1
 let killcamActive = false
+
+// Civil abattu : l'échec tombe 600 ms plus tard. D'ici là, ni pause, ni tir, ni briefing revu.
+let failPending = false
+
+// Ce que les gardes de phase (campaign/phase.js) doivent savoir de la mission en cours
+const missionPhase = () => ({ phase: gamePhase, killcam: killcamActive, failPending })
 
 // Jeton de mission : incrémenté à chaque lancement, il neutralise les minuteurs de fin d'une mission abandonnée
 let missionToken = 0
@@ -199,10 +206,7 @@ document.getElementById('btn-restart').onclick = () => {
   pauseEl.style.display = 'none'
   launchLevel(upgradeState.currentLevel)
 }
-document.getElementById('btn-rebrief-pause').onclick = () => {
-  pauseEl.style.display = 'none'
-  launchLevel(upgradeState.currentLevel, { forceBriefing: true })
-}
+document.getElementById('btn-rebrief-pause').onclick = () => rebriefFromPause()
 document.getElementById('btn-pause-menu').onclick = () => { pauseEl.style.display = 'none'; showMenu() }
 
 // ── Paramètres ──
@@ -361,7 +365,7 @@ function launchLevel(n, { forceBriefing = false } = {}) {
 
   const idx = (n - 1) % 6
   if (!forceBriefing && upgradeState.briefingSeen[idx]) { startLevel(n); return }
-  stopMissionAmbience()   // REVOIR depuis la pause : la nappe de la mission en cours ne doit pas couvrir le briefing
+  stopMissionAmbience()   // jamais la nappe d'une mission sous un briefing
   gamePhase = 'briefing'
   clock.getDelta()
   cinematic('m' + (idx + 1), {
@@ -391,7 +395,8 @@ function startLevel(n) {
   clearEntities()
   breathMeter = 1; isHolding = false; holdBreathKey = false
   statShots = 0; statHits = 0; statStart = performance.now(); statAlerts = 0
-  timeScale = 1; killcamActive = false; lastTargetKillAt = -99999
+  timeScale = 1; killcamActive = false; failPending = false; lastTargetKillAt = -99999
+  const token = missionToken   // minuteurs de cette mission : sans effet si elle est relancée ou abandonnée
   if (moralLockMesh) { scene.remove(moralLockMesh); moralLockMesh = null; moralLockBox = null; moralLockLight = null }
 
   currentLevelData = getLevel(n)
@@ -421,7 +426,7 @@ function startLevel(n) {
       new THREE.Vector3(lx, ly + 0.1, lz), new THREE.Vector3(0.9, 1.0, 0.7))
     // indice au bout de quelques secondes
     setTimeout(() => {
-      if (gamePhase === 'playing' && moralLockMesh) {
+      if (token === missionToken && gamePhase === 'playing' && moralLockMesh) {
         addKillFeed('👂 Des coups sourds... le conteneur rouge, à gauche.')
       }
     }, 5000)
@@ -569,7 +574,7 @@ function startLevel(n) {
   clock.getDelta()
 
   instruction.style.opacity = '1'
-  setTimeout(() => { instruction.style.opacity = '0' }, 5000)
+  setTimeout(() => { if (token === missionToken) instruction.style.opacity = '0' }, 5000)
 }
 
 function showMenu() {
@@ -592,7 +597,7 @@ function showMenu() {
 }
 
 function pauseGame() {
-  if (gamePhase !== 'playing') return
+  if (!canPause(missionPhase())) return   // ralenti de la dernière cible, civil abattu : la fin de mission arrive
   gamePhase = 'paused'
   hideScope()
   releaseMouse()
@@ -605,6 +610,36 @@ function resumeGame() {
   settingsEl.style.display = 'none'
   gamePhase = 'playing'
   clock.getDelta()   // évite un grand dt après la pause
+}
+
+// Un écran de fin ne s'ouvre jamais sous la pause, ni sous les paramètres ouverts depuis elle.
+function hidePause() {
+  pauseEl.style.display = 'none'
+  settingsEl.style.display = 'none'
+}
+
+// REVOIR LE BRIEFING depuis la pause : la cinématique se joue par-dessus la mission figée (la boucle ne met rien à
+// jour en phase 'briefing'), puis on revient à la pause sans rien perdre : cibles, score, chrono du rapport.
+// Sur l'écran d'échec, le même bouton (btn-rebrief) relance la mission avec son briefing.
+function rebriefFromPause() {
+  if (!canRebrief(missionPhase())) return
+  const t0 = performance.now()
+  const token = missionToken
+  hidePause()
+  stopMissionAmbience()
+  gamePhase = 'briefing'
+  clock.getDelta()
+  cinematic('m' + (((upgradeState.currentLevel - 1) % 6) + 1), {
+    audio: cinematicAudio(),   // appelé dans le clic : l'AudioContext reprend sur ce geste
+    onDone: () => {
+      if (token !== missionToken) return   // mission quittée entre-temps : rien à rétablir
+      statStart += performance.now() - t0   // le temps passé dans le briefing ne compte pas dans le rapport
+      gamePhase = 'paused'
+      pauseEl.style.display = 'flex'
+      startMissionAmbience()
+      clock.getDelta()
+    },
+  })
 }
 
 function showUpgradeScreen() {
@@ -633,19 +668,21 @@ function releaseMouse() {
   if (document.pointerLockElement) document.exitPointerLock()
 }
 
-function triggerGameOver() {
-  if (gamePhase === 'dead') return
+function triggerGameOver(reason) {
+  if (!canFail(missionPhase())) return   // une seule fin de mission : pas pendant la kill-cam, pas après la réussite
   gamePhase = 'dead'
+  if (reason) document.getElementById('game-over-reason').textContent = reason
   stopMissionAmbience()
   hideScope()
   releaseMouse()
+  hidePause()
   hudEl.style.display = 'none'
   playGameOver()
   gameOverEl.style.display = 'flex'
 }
 
 function triggerLevelClear() {
-  if (!canClear({ phase: gamePhase })) return   // mort pendant la kill-cam : rien n'est crédité, la mission n'avance pas
+  if (!canClear(missionPhase())) return   // mort pendant la kill-cam : rien n'est crédité, la mission n'avance pas
   gamePhase = 'cleared'
   stopMissionAmbience()
   hideScope()
@@ -661,11 +698,8 @@ function triggerLevelClear() {
   saveProgress()
   // Rapport de mission : rang + temps, tirs, précision
   const elapsed = Math.max(1, Math.round((performance.now() - statStart) / 1000))
-  const precision = statShots > 0 ? Math.round((statHits / statShots) * 100) : 100
-  const [rank, rankCol] =
-    (precision === 100 && statAlerts === 0) ? ['★ FANTÔME ★', '#9fe8ff'] :
-    (precision >= 60 && statAlerts <= 1)    ? ['PROFESSIONNEL', '#4eff4e'] :
-                                              ['BRUTAL', '#ff8844']
+  const precision = precisionOf({ shots: statShots, hits: statHits })
+  const { label: rank, color: rankCol } = rankFor({ shots: statShots, hits: statHits, alerts: statAlerts })
   document.getElementById('lc-score').innerHTML =
     `<div style="font-size:24px;letter-spacing:0.35em;color:${rankCol};margin-bottom:8px;text-shadow:0 0 18px ${rankCol}55;">${rank}</div>` +
     `Score : ${score} pts  —  +${reward} point${reward > 1 ? 's' : ''} d'amélioration<br>` +
@@ -680,11 +714,12 @@ function triggerLevelClear() {
 }
 
 function triggerFleeGameOver() {
-  if (gamePhase === 'dead') return
+  if (!canFail(missionPhase())) return
   gamePhase = 'dead'
   stopMissionAmbience()
   hideScope()
   releaseMouse()
+  hidePause()
   hudEl.style.display = 'none'
   document.getElementById('game-over-reason').textContent = 'Une cible a fui votre champ de vision'
   gameOverEl.style.display = 'flex'
@@ -693,11 +728,12 @@ function triggerFleeGameOver() {
 // Le convoi a traversé toute la zone sans que le colonel soit abattu : il file
 // vers la frontière. Une seule fenêtre de tir — mission ratée (pas de 2e passage).
 function triggerConvoyEscaped() {
-  if (gamePhase === 'dead') return
+  if (!canFail(missionPhase())) return
   gamePhase = 'dead'
   stopMissionAmbience()
   hideScope()
   releaseMouse()
+  hidePause()
   hudEl.style.display = 'none'
   document.getElementById('game-over-reason').textContent = 'Le convoi a filé — le colonel a rejoint la frontière'
   gameOverEl.style.display = 'flex'
@@ -705,7 +741,7 @@ function triggerConvoyEscaped() {
 
 // ─── Tir ───────────────────────────────────────────────────────────
 function shoot() {
-  if (!isVisible() || bulletInFlight || gamePhase !== 'playing') return
+  if (!isVisible() || bulletInFlight || !canShoot(missionPhase())) return   // ni pendant le ralenti, ni après un civil abattu
   const stats = getStats()
   bulletInFlight = true
   bulletDelay = stats.bulletDelay
@@ -741,7 +777,6 @@ function resolveBullet() {
   if (!raycaster) return
 
   const stats = getStats()
-  let hit = false
 
   // Trouver le NPC le plus proche intersecté
   let closestNpc  = null
@@ -764,6 +799,12 @@ function resolveBullet() {
     }
   }
 
+  // Ce que la balle touche : le PNJ le plus proche, sinon le cadenas du port, sinon rien
+  const kind = closestNpc
+    ? (closestNpc.isTarget ? 'target' : closestNpc.isCivilian ? 'civilian' : 'guard')
+    : (moralLockBox && raycaster.ray.intersectsBox(moralLockBox)) ? 'lock' : 'miss'
+  if (isHit(kind)) statHits++   // précision du rapport de fin : le cadenas compte, libérer n'interdit pas FANTÔME
+
   // Traceur de balle (part légèrement sous la ligne de visée pour être visible)
   const muzzlePos = camera.position.clone()
     .add(new THREE.Vector3(0, -0.5, 0))
@@ -781,12 +822,10 @@ function resolveBullet() {
     } else if (closestNpc.isGuard) {
       hitGuard(closestNpc, stats)
     }
-    hit = true
   }
 
   // CHOIX MORAL : tir sur le cadenas du conteneur → les victimes s'échappent
-  if (!hit && moralLockBox && raycaster.ray.intersectsBox(moralLockBox)) {
-    hit = true
+  if (kind === 'lock') {
     spawnTracer(muzzlePos, moralLockMesh.position)
     spawnImpact(moralLockMesh.position.clone(), 0xc9a227, 10)
     scene.remove(moralLockMesh)
@@ -808,7 +847,7 @@ function resolveBullet() {
   }
 
   // Tir raté
-  if (!hit) {
+  if (kind === 'miss') {
     // Point d'impact au sol (ou loin devant)
     const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
     const shotPos = new THREE.Vector3()
@@ -844,19 +883,17 @@ function killCivilian(npc) {
   fleeNearby(npc.mesh.position, 25)
   playCivilKill()
   addKillFeed('⚠ CIVIL ABATTU — MISSION ÉCHOUÉE', true)
+  failPending = true   // d'ici l'échec : ni pause, ni tir, ni briefing revu
   const token = missionToken
   setTimeout(() => {
     if (token !== missionToken) return   // mission relancée entre-temps
-    document.getElementById('game-over-reason').textContent = 'Vous avez éliminé un civil innocent'
-    playGameOver()
-    triggerGameOver()
+    triggerGameOver('Vous avez éliminé un civil innocent')   // le son d'échec une seule fois, dans triggerGameOver
   }, 600)
 }
 
 function killTarget(npc, headshot = false) {
   npc.die()
   playKill()
-  statHits++
   // Cible en mouvement (véhicule) = tir difficile = plus de points, headshot = ×2
   let bonus = npc.onVehicle ? 400 : (npc.isStill() ? 250 : 120)
   if (headshot) bonus *= 2
@@ -985,6 +1022,8 @@ function startKillcam() {
       font-family:'Courier New',monospace;font-size:30px;letter-spacing:0.45em;
       color:#ff5544;text-shadow:0 0 24px rgba(255,40,20,0.7);">CIBLE NEUTRALISÉE</div>`
   document.body.appendChild(ov)
+  // Pendant le ralenti, ni pause, ni tir, ni échec (gardes de phase) : la fin du minuteur trouve la mission en jeu.
+  // Le ralenti et le calque s'arrêtent dans tous les cas, la réussite seulement pour la mission qui l'a lancé.
   const token = missionToken
   setTimeout(() => {
     timeScale = 1
@@ -1280,6 +1319,10 @@ if (import.meta.env.DEV) {
   }
   // Visée (relectures du zoom) : __aim() dans la console
   window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), scoped: isVisible() })
+  // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console
+  window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,
+    pnj: npcs.map(n => n.mesh.position.toArray().map(v => +v.toFixed(3))),
+    chronoMs: Math.round(performance.now() - statStart), tirs: statShots, touches: statHits, alertes: statAlerts, score })
   if (q.has('cine')) {
     menuEl.style.display = 'none'
     gamePhase = 'briefing'
