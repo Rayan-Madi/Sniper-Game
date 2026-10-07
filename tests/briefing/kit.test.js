@@ -113,6 +113,45 @@ describe('kit des cinématiques', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  // Une capture gelée ne doit pas mentir : un compteur en cours au gel affiche sa valeur à cet instant,
+  // pas sa valeur finale (« 12 / 24 » alors que 9 silhouettes seulement étaient allumées en M5).
+  describe('compteur démarré à t = 0', () => {
+    const lancer = (freeze, to = 12) => {
+      const root = mountScene('<b id="n">0</b>')
+      const K = createKit({ root, freeze })
+      K.run({ beats: [{ min: 3000, cues: [[0, K => K.counter('n', 0, to, 1000)]] }] })
+      return root.querySelector('#n')
+    }
+
+    it('de 0 à 12 sur 1 000 ms, gelé à 500 ms : il affiche 6, et rien ne bouge ensuite', async () => {
+      const n = lancer(500)
+      await vi.advanceTimersByTimeAsync(500); await flush()
+      expect(n.textContent).toBe('6')
+      await vi.advanceTimersByTimeAsync(2000); await flush()
+      expect(n.textContent).toBe('6')
+    })
+
+    it('de 0 à 12 sur 1 000 ms, gelé à 1 500 ms : il affiche sa valeur finale', async () => {
+      const n = lancer(1500)
+      await vi.advanceTimersByTimeAsync(1500); await flush()
+      expect(n.textContent).toBe('12')
+    })
+
+    it('gelé entre deux images, il affiche la valeur de l\'instant du gel, pas celle de la dernière image', async () => {
+      const n = lancer(505, 1000)   // de 0 à 1 000 sur 1 000 ms ; dernière image à 496 ms
+      await vi.advanceTimersByTimeAsync(505); await flush()
+      expect(n.textContent).toBe('505')
+    })
+
+    it('sans gel, il avance pendant sa durée puis s\'arrête sur sa valeur finale', async () => {
+      const n = lancer(null)
+      await vi.advanceTimersByTimeAsync(500); await flush()
+      expect(Math.abs(+n.textContent - 6)).toBeLessThanOrEqual(1)
+      await vi.advanceTimersByTimeAsync(600); await flush()
+      expect(n.textContent).toBe('12')
+    })
+  })
+
   it('reste muet et sans erreur quand aucun contexte audio n\'est fourni', () => {
     const K = createKit({ root: mountScene() })
     expect(() => { K.snd.boom(); K.snd.stamp(); K.music('tense'); K.music(null) }).not.toThrow()

@@ -103,17 +103,23 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   K.lost = (ms = 400) => { S.lost(); K.glitch(ms + 250, 1); K.on('k-lost'); at(ms, () => K.off('k-lost')) }
   K.title = () => { K.on('title'); S.boom(); K.glitch(200, 0.7) }
   K.black = () => K.on('k-black')
+  // Compteurs en cours : au gel, chacun affiche sa valeur à l'instant du gel (une capture gelée ne ment pas).
+  const counters = new Set()
   K.counter = (x, from, to, dur, suffix = '', tickEvery = 0) => {
     const e = el(x); if (!e) return fail('élément introuvable : ' + x)
-    if (freeze !== null) { e.textContent = to + suffix; return }
     const s = performance.now(); let last = null
-    const f = () => {
-      if (K.frozen || destroyed) return
+    const show = () => {
       const k = Math.min(1, (performance.now() - s) / dur), v = Math.round(from + (to - from) * k)
       e.textContent = v + suffix
-      if (tickEvery && Math.floor(v / tickEvery) !== last) { last = Math.floor(v / tickEvery); S.count() }
-      if (k < 1) raf(f)
+      return [k, v]
     }
+    const f = () => {
+      if (K.frozen || destroyed) return
+      const [k, v] = show()
+      if (tickEvery && freeze === null && Math.floor(v / tickEvery) !== last) { last = Math.floor(v / tickEvery); S.count() }
+      if (k < 1) raf(f); else counters.delete(show)
+    }
+    counters.add(show)
     f()
   }
   let waveOn = false
@@ -140,7 +146,7 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   let runId = 0, cfg = null, resolveDone
   K.finished = new Promise(r => { resolveDone = r })
   function reset() {
-    K.frozen = false; st.classList.remove('k-frozen')
+    K.frozen = false; st.classList.remove('k-frozen'); counters.clear()
     S.stopVoice(); S.music(null); K.wave(false)
     const cls = [...STATE_CLASSES, ...((cfg && cfg.stateClasses) || [])]
     ;[st, ...st.querySelectorAll('*')].forEach(e => { if (e.classList) cls.forEach(c => e.classList.remove(c)) })
@@ -167,7 +173,7 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   async function start() {
     const id = ++runId
     reset()
-    if (freeze !== null) at(freeze, () => { K.frozen = true; st.classList.add('k-frozen'); clearAll(); S.stopVoice(); runId++ })
+    if (freeze !== null) at(freeze, () => { counters.forEach(show => show()); counters.clear(); K.frozen = true; st.classList.add('k-frozen'); clearAll(); S.stopVoice(); runId++ })
     if (cfg.music) S.music(cfg.music)
     for (const b of cfg.beats) {
       if (id !== runId) return

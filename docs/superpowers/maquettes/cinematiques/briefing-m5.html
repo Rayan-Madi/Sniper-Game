@@ -472,8 +472,9 @@
           [0, K => K.glitch(420, 1)], [150, K => K.on('scn', 'off')], [450, K => { K.on('dossier'); K.snd.paper() }],
           [800, K => { K.on('ghost', 'dev'); K.snd.beep(520); K.snd.beep(420, .1) }],
           ...[...document.querySelectorAll('.fl[data-k]')].slice(0, 4).map((f, i) => [1100 + i * 380, K => typeField(K, f)]),
-          [2700, K => { K.on('brig'); K.counter('soldn', 0, SOLD.length, SOLD.length * 130) }],
-          ...SOLD.map((n, i) => [2750 + i * 130, K => { men.children[n].classList.add('sold'); K.snd.count() }]),
+          [2700, K => K.on('brig')],
+          // le compteur avance d'un cran à chaque silhouette allumée : juste à tout instant, capture gelée comprise
+          ...SOLD.map((n, i) => [2750 + i * 130, K => { men.children[n].classList.add('sold'); $('soldn').textContent = i + 1; K.snd.count() }]),
         ] },
       { say: LINES.a2,
         cues: [
