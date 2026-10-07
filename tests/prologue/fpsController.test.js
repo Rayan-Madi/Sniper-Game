@@ -127,6 +127,41 @@ describe('contrôleur', () => {
     c.dispose()
   })
 
+  it("le balancement de la tête retombe en douceur au relâchement (plus de saut de 2,5 cm), et existe toujours en marchant", () => {
+    const { c, camera } = make()
+    key('keydown', 'KeyW')
+    let top = 0
+    for (let i = 0; i < 15; i++) { c.update(0.016); top = Math.max(top, camera.position.y - 1.65) }   // ≈ 0,38 m : crête du pas
+    const y0 = camera.position.y
+    expect(y0 - 1.65).toBeGreaterThan(0.015)
+    key('keyup', 'KeyW'); c.update(0.016)
+    expect(Math.abs(camera.position.y - y0)).toBeLessThan(0.006)
+    for (let i = 0; i < 60; i++) c.update(0.016)
+    expect(Math.abs(camera.position.y - 1.65)).toBeLessThan(0.001)                               // revenue à hauteur des yeux
+    key('keydown', 'KeyW'); top = 0
+    for (let i = 0; i < 120; i++) { c.update(0.016); top = Math.max(top, camera.position.y - 1.65) }
+    expect(top).toBeGreaterThan(0.02)
+    c.dispose()
+  })
+
+  it("onStep est appelé caméra déjà posée", () => {
+    const seen = []
+    const { c, camera } = make({ onStep: () => seen.push({ cam: camera.position.z, pos: c.position.z }) })
+    key('keydown', 'KeyW'); for (let i = 0; i < 60; i++) c.update(0.016)
+    expect(seen.length).toBeGreaterThan(0)
+    for (const s of seen) expect(s.cam).toBeCloseTo(s.pos, 9)
+    c.dispose()
+  })
+
+  it("une exception dans onStep n'empêche pas la pose de la caméra", () => {
+    const { c, camera } = make({ onStep: () => { throw new Error('son indisponible') } })
+    key('keydown', 'KeyW')
+    expect(() => c.update(1)).toThrow('son indisponible')
+    expect(c.position.z).toBeCloseTo(-1.6, 5)
+    expect(camera.position.z).toBeCloseTo(-1.6, 5)
+    c.dispose()
+  })
+
   it('après dispose, plus aucun écouteur ne réagit', () => {
     const onUnlock = vi.fn()
     const { c } = make({ onUnlock })

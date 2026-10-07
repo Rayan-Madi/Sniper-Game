@@ -6,6 +6,8 @@ import { settings, sensMultiplier, invertY } from '../settings.js'
 const LOOK = 0.0022            // radians par pixel de souris à sensibilité 100
 const PITCH_MAX = 1.4
 const STEP_EVERY = 0.75        // mètres entre deux bruits de pas
+const BOB = 0.025              // amplitude du balancement de la tête (m), sur une foulée de 1,5 m
+const BOB_EASE = 8             // vitesse (1/s) à laquelle le balancement s'installe ou retombe
 
 export const forwardOf = yaw => ({ x: -Math.sin(yaw), z: -Math.cos(yaw) })
 export const rightOf = yaw => ({ x: Math.cos(yaw), z: -Math.sin(yaw) })
@@ -35,7 +37,7 @@ export function moveCircle(pos, dx, dz, r, boxes) {
 export function createFpsController({ camera, colliders = [], start = { x: 0, z: 0, yaw: 0 }, eye = 1.65, speed = 1.6, radius = 0.28,
   onStep = () => {}, onUnlock = () => {}, target = document } = {}) {
   const pos = { x: start.x, z: start.z }
-  let yaw = start.yaw || 0, pitch = start.pitch || 0, y = eye, frozen = false, enabled = false, walked = 0, sinceStep = 0
+  let yaw = start.yaw || 0, pitch = start.pitch || 0, y = eye, frozen = false, enabled = false, walked = 0, sinceStep = 0, bobAmp = 0
   const held = new Set()
   camera.rotation.order = 'YXZ'
 
@@ -88,15 +90,19 @@ export function createFpsController({ camera, colliders = [], start = { x: 0, z:
         const len = Math.hypot(mx, mz)
         if (len > 0) { mx = mx / len * speed * dt; mz = mz / len * speed * dt }
       }
+      let steps = 0
       if (mx || mz) {
         const n = moveCircle(pos, mx, mz, radius, colliders)
         const d = Math.hypot(n.x - pos.x, n.z - pos.z)
         pos.x = n.x; pos.z = n.z; walked += d; sinceStep += d
-        while (sinceStep >= STEP_EVERY) { sinceStep -= STEP_EVERY; onStep() }
+        while (sinceStep >= STEP_EVERY) { sinceStep -= STEP_EVERY; steps++ }
       }
-      const bob = held.size && !frozen ? Math.sin(walked * Math.PI * 2 / 1.5) * 0.025 : 0
-      camera.position.set(pos.x, y + bob, pos.z)
+      // le balancement s'installe et retombe en douceur (au relâchement, il sautait de 2,5 cm à 0 d'une image à l'autre)
+      bobAmp += ((held.size && !frozen ? 1 : 0) - bobAmp) * Math.min(1, (dt || 0) * BOB_EASE)
+      camera.position.set(pos.x, y + Math.sin(walked * Math.PI * 2 / 1.5) * BOB * bobAmp, pos.z)
       camera.rotation.set(pitch, yaw, 0, 'YXZ')
+      // les pas après la pose : la caméra est à jour pour eux, et une erreur de son ne la laisse pas en arrière
+      for (let i = 0; i < steps; i++) onStep()
     },
     dispose() { api.disable() },
   }
