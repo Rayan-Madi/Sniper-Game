@@ -152,6 +152,25 @@ describe('kit des cinématiques', () => {
     })
   })
 
+  // Une capture gelée est muette : un compteur avec tickEvery ne tique pas en mode gel.
+  describe('tics sonores d\'un compteur de 0 à 12 par paliers de 3', () => {
+    const tics = async freeze => {
+      const K = createKit({ root: mountScene('<b id="n">0</b>'), freeze })
+      const count = vi.spyOn(K.snd, 'count')
+      K.run({ beats: [{ min: 3000, cues: [[0, K => K.counter('n', 0, 12, 1000, '', 3)]] }] })
+      await vi.advanceTimersByTimeAsync(1500); await flush()
+      return count.mock.calls.length
+    }
+
+    it('sans gel, un tic par palier franchi : 0, 3, 6, 9 et 12 (témoin de l\'espion)', async () => {
+      expect(await tics(null)).toBe(5)
+    })
+
+    it('en mode gel, aucun tic pendant toute sa course, même terminée avant l\'instant du gel', async () => {
+      expect(await tics(2000)).toBe(0)
+    })
+  })
+
   it('reste muet et sans erreur quand aucun contexte audio n\'est fourni', () => {
     const K = createKit({ root: mountScene() })
     expect(() => { K.snd.boom(); K.snd.stamp(); K.music('tense'); K.music(null) }).not.toThrow()
