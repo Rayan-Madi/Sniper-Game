@@ -90,4 +90,38 @@ describe('tremblement de la lunette', () => {
       for (const k of ['x', 'y', 'vx', 'vy', 'phase']) expect(Math.abs(a[k] - b[k])).toBeLessThan(1e-9)
     }
   })
+
+  it('sans à-coups, respiration et dérive suivent le temps, pas les images (60 et 144 i/s)', () => {
+    // rand() = 0,5 annule les à-coups : il ne reste que la partie déterministe (phase et force de dérive),
+    // que le test de dispersion ne voit pas (les à-coups y dominent l'écart quadratique).
+    // On relève la position aux instants communs aux deux fréquences (tous les 1/12 s) pendant 3 s.
+    function trajectoire(fps) {
+      const t = { x: 0, y: 0, vx: 0, vy: 0, phase: 0 }
+      const points = []
+      for (let i = 1; i <= 3 * fps; i++) {
+        stepTremble(t, p, 1 / fps, () => 0.5)
+        if (i % (fps / 12) === 0) points.push([t.x, t.y])
+      }
+      return { points, phase: t.phase }
+    }
+    const a = trajectoire(60), b = trajectoire(144)
+
+    expect(Math.abs(a.phase - p.breathRate * 3)).toBeLessThan(1e-9)
+    expect(Math.abs(b.phase - p.breathRate * 3)).toBeLessThan(1e-9)
+
+    // Écart ramené à l'amplitude, pas à la valeur finale : x repasse par zéro vers 3 s.
+    // Mesuré à 4 % environ (erreur de discrétisation) ; une respiration ou une dérive comptée par image dépasse 100 %.
+    let amplX = 0, amplY = 0, ecartX = 0, ecartY = 0
+    for (let i = 0; i < a.points.length; i++) {
+      amplX = Math.max(amplX, Math.abs(a.points[i][0]))
+      amplY = Math.max(amplY, Math.abs(a.points[i][1]))
+      ecartX = Math.max(ecartX, Math.abs(a.points[i][0] - b.points[i][0]))
+      ecartY = Math.max(ecartY, Math.abs(a.points[i][1] - b.points[i][1]))
+    }
+    expect(a.points.length).toBe(36)
+    expect(amplX).toBeGreaterThan(0.5)
+    expect(amplY).toBeGreaterThan(0.5)
+    expect(ecartX / amplX, `écart en x : ${(ecartX / amplX * 100).toFixed(1)} %`).toBeLessThan(0.1)
+    expect(ecartY / amplY, `écart en y : ${(ecartY / amplY * 100).toFixed(1)} %`).toBeLessThan(0.1)
+  })
 })
