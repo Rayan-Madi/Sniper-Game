@@ -633,6 +633,13 @@ function hidePause() {
   settingsEl.style.display = 'none'
 }
 
+// Écran de fin (échec, réussite) : seul à l'écran, sans la pause et sans l'aide des commandes, qui restait pâle
+// dessous jusqu'à son minuteur de 5 s quand la mission finissait plus tôt.
+function clearForEndScreen() {
+  hidePause()
+  instruction.style.opacity = '0'
+}
+
 // REVOIR LE BRIEFING depuis la pause : la cinématique se joue par-dessus la mission figée (la boucle ne met rien à
 // jour en phase 'briefing'), puis on revient à la pause sans rien perdre : cibles, score, chrono du rapport.
 // Sur l'écran d'échec, le même bouton (btn-rebrief) relance la mission avec son briefing.
@@ -690,7 +697,7 @@ function triggerGameOver(reason) {
   stopMissionAmbience()
   hideScope()
   releaseMouse()
-  hidePause()
+  clearForEndScreen()
   hudEl.style.display = 'none'
   playGameOver()
   gameOverEl.style.display = 'flex'
@@ -704,6 +711,7 @@ function triggerLevelClear() {
   stopMissionAmbience()
   hideScope()
   releaseMouse()
+  clearForEndScreen()
   playLevelClear()
   hudEl.style.display = 'none'
   // Réussite enregistrée en une fois : points, score ET mission suivante, avant la sauvegarde.
@@ -736,7 +744,7 @@ function triggerFleeGameOver() {
   stopMissionAmbience()
   hideScope()
   releaseMouse()
-  hidePause()
+  clearForEndScreen()
   hudEl.style.display = 'none'
   document.getElementById('game-over-reason').textContent = 'Une cible a fui votre champ de vision'
   gameOverEl.style.display = 'flex'
@@ -750,7 +758,7 @@ function triggerConvoyEscaped() {
   stopMissionAmbience()
   hideScope()
   releaseMouse()
-  hidePause()
+  clearForEndScreen()
   hudEl.style.display = 'none'
   document.getElementById('game-over-reason').textContent = 'Le convoi a filé — le colonel a rejoint la frontière'
   gameOverEl.style.display = 'flex'

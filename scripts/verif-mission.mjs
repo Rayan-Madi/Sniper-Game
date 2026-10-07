@@ -232,6 +232,49 @@ const SCENARIOS = {
     } finally { await c.close() }
   },
 
+  // Page chargée, avant toute mission : l'aide ne transparaît pas sous le menu (opacité 0 dans la feuille de style).
+  async 'aide-chargement'() {
+    const c = await openChrome(saveAt(1))
+    try {
+      await sleep(600)
+      const op = await js(c, `getComputedStyle(document.getElementById('instruction')).opacity`)
+      await capture(c, 'aide-chargement')
+      check((await mission(c)).phase === 'menu' && op === '0', 'aide invisible sous le menu au chargement', op)
+    } finally { await c.close() }
+  },
+
+  // Échec avant le minuteur de 5 s : l'aide s'éteint avec l'écran d'échec au lieu de rester pâle dessous.
+  // triggerFleeGameOver et triggerConvoyEscaped passent par la même fonction que triggerGameOver (clearForEndScreen).
+  async 'aide-echec'() {
+    const c = await play(1)
+    try {
+      await shootCivilian(c)
+      await until(c, `__mission().phase === 'dead'`)
+      check(Date.now() - c.t0 < 5000, 'échec tombé avant le minuteur de l\'aide', Date.now() - c.t0)
+      check(await helpOpacity(c) === '0', 'aide masquée sous l\'écran d\'échec', await helpOpacity(c))
+      await sleep(600)   // fondu de l'aide (0,5 s)
+      await capture(c, 'aide-echec')
+    } finally { await c.close() }
+  },
+
+  // Réussite avant le minuteur de 5 s (M1 : une seule cible, ralenti de 1,5 s) : l'aide s'éteint avec l'écran de
+  // réussite.
+  async 'aide-reussite'() {
+    const c = await play(1)
+    try {
+      for (let i = 0; i < 3 && (await mission(c)).cibles > 0 && (await mission(c)).phase === 'playing'; i++) {
+        await aimAndShoot(c, 'cible')
+      }
+      await until(c, `__mission().phase !== 'playing'`, 3000)
+      const m = await mission(c)
+      if (m.phase !== 'cleared') throw new Error(`cible manquée ou civil sur la ligne de tir : scénario non concluant (${m.phase})`)
+      check(Date.now() - c.t0 < 5000, 'réussite tombée avant le minuteur de l\'aide', Date.now() - c.t0)
+      check(await helpOpacity(c) === '0', 'aide masquée sous l\'écran de réussite', await helpOpacity(c))
+      await sleep(600)
+      await capture(c, 'aide-reussite')
+    } finally { await c.close() }
+  },
+
   // Port : le cadenas libère les victimes et compte comme une touche (le rang FANTÔME reste possible).
   async cadenas() {
     const c = await play(3)
