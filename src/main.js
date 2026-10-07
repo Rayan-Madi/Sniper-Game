@@ -94,19 +94,20 @@ refreshMenuButtons()
 const resetBtn = document.getElementById('btn-reset-save')
 if (resetBtn) resetBtn.onclick = () => { resetProgress(); refreshMenuButtons() }
 
-// Prologue, une fois par campagne : A (l'offre, le 14 mars) → [plan suivant : l'enquête] → B (le rappel, le
-// tableau de chasse) → mission 1, avec son briefing s'il n'a pas été vu. Chaque pièce se passe à part.
+// Prologue, une fois par campagne : A (l'offre, le 14 mars) → l'enquête dans l'appartement → B (le message, le
+// rappel, le tableau de chasse) → mission 1, avec son briefing s'il n'a pas été vu. Chaque pièce se passe à part.
 function playPrologue() {
   menuEl.style.display = 'none'
   hudEl.style.display = 'none'
+  instruction.style.opacity = '0' // l'aide des missions (CLIC DROIT — Viser…) ne s'affiche pas sur l'appartement
   gamePhase = 'briefing'          // cinématique en motion design : pas de rendu WebGL
   clock.getDelta()
   cinematic('prologue-a', {
     audio: cinematicAudio(),      // appelé dans le clic : l'AudioContext reprend sur ce geste
-    onDone: () => cinematic('prologue-b', {
+    onDone: () => investigate(() => cinematic('prologue-b', {
       audio: cinematicAudio(),
       onDone: () => { markPrologueSeen(); saveProgress(); launchLevel(upgradeState.currentLevel) },
-    }),
+    })),
   })
 }
 
@@ -292,8 +293,48 @@ function cinematicAudio() {
   return { ctx, dest: masterNode() }
 }
 
+// ── Enquête du prologue (module chargé à la demande) ──
+// Elle ne doit jamais bloquer la partie : erreur de chargement, de démarrage ou en cours d'image → on enchaîne.
+let enquete = null   // { handle, next, ended }
+function investigate(onNext, options = {}) {
+  const run = { handle: null, ended: false, next: null }
+  run.next = () => {
+    if (run.ended) return
+    run.ended = true
+    if (enquete === run) enquete = null
+    if (run.handle) { try { run.handle.stop() } catch (e) { console.error('[enquête]', e) } }
+    releaseMouse()
+    gamePhase = 'briefing'          // la suite est une cinématique : plus de rendu WebGL
+    clock.getDelta()
+    onNext()
+  }
+  enquete = run
+  // le canvas garde la dernière image rendue (le décor du menu) : noir pendant le chargement du module, sinon elle
+  // apparaît entre la fin de A (#briefing-root masqué) et le noir de l'enquête. setClearColor d'abord : clear() seul
+  // reprendrait la couleur de fond du dernier rendu (le ciel du menu)
+  try { renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 1); renderer.clear() } catch (e) { /* sans effet */ }
+  import('./prologue/investigation.js')
+    .then(m => {
+      if (run.ended) return
+      const h = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options })
+      if (run.ended) { try { h.stop() } catch (e) { /* déjà démontée */ } return }
+      run.handle = h
+      gamePhase = 'investigation'
+      clock.getDelta()
+    })
+    .catch(err => { console.error('[enquête]', err); run.next() })
+}
+// Quitter sans enchaîner (retour au menu, mission lancée par un raccourci de test).
+function abortInvestigation() {
+  const run = enquete
+  if (!run) return
+  enquete = null; run.ended = true
+  if (run.handle) { try { run.handle.stop() } catch (e) { console.error('[enquête]', e) } }
+}
+
 // Briefing de la mission au premier essai seulement (ou sur demande), puis le niveau.
 function launchLevel(n, { forceBriefing = false } = {}) {
+  abortInvestigation()
   missionToken++
   menuEl.style.display = 'none'
   upgradeEl.style.display = 'none'
@@ -527,6 +568,7 @@ function startLevel(n) {
 }
 
 function showMenu() {
+  abortInvestigation()
   missionToken++   // la mission est abandonnée : ses minuteurs de fin (kill-cam, civil abattu) ne doivent plus tomber sur le menu
   for (const npc of npcs) scene.remove(npc.mesh)
   clearConvoy()
@@ -1016,7 +1058,7 @@ document.addEventListener('keydown', e => {
   // Raccourci de test : touches 1-6 depuis le menu/écrans pour sauter à un niveau
   // (pas pendant une saisie : les codes PvP contiennent des chiffres)
   if (e.target.closest && e.target.closest('input, textarea')) return
-  if (gamePhase !== 'playing' && gamePhase !== 'paused' && gamePhase !== 'briefing' && e.key >= '1' && e.key <= '6') {
+  if (gamePhase !== 'playing' && gamePhase !== 'paused' && gamePhase !== 'briefing' && gamePhase !== 'investigation' && e.key >= '1' && e.key <= '6') {
     upgradeState.currentLevel = parseInt(e.key)
     launchLevel(upgradeState.currentLevel)
   }
@@ -1076,6 +1118,14 @@ function loop() {
   if (campaignPaused) return
   // timeScale < 1 pendant la kill-cam (ralenti)
   const dt = Math.min(clock.getDelta(), 0.05) * timeScale
+  if (gamePhase === 'investigation') {   // l'enquête du prologue : sa propre scène, la caméra du jeu
+    const run = enquete
+    if (run && run.handle) {
+      try { run.handle.update(dt); renderer.render(run.handle.scene, camera) }
+      catch (e) { console.error('[enquête]', e); run.next() }
+    }
+    return
+  }
   if (gamePhase === 'briefing') return   // cinématique en motion design : pas de rendu WebGL
 
   if (gamePhase === 'playing') {
@@ -1221,6 +1271,20 @@ if (import.meta.env.DEV) {
       freeze: q.has('freeze') ? +q.get('freeze') : null,
       params,
       onDone: () => showMenu(),
+    })
+  }
+  // ?enquete=1&indices=4&cam=9.5,1.65,4.3,0.4,-0.6&ouvrir=mot&stats=1 : l'enquête directement (captures, réglages)
+  if (q.has('enquete')) {
+    menuEl.style.display = 'none'
+    hudEl.style.display = 'none'
+    instruction.style.opacity = '0'
+    gamePhase = 'briefing'
+    const cam = q.get('cam') ? q.get('cam').split(',').map(Number) : null
+    investigate(() => showMenu(), {
+      indices: +q.get('indices') || 0,
+      cam: cam && cam.length === 5 ? { x: cam[0], y: cam[1], z: cam[2], yaw: cam[3], pitch: cam[4] } : null,
+      ouvrir: q.get('ouvrir') || null,
+      stats: q.has('stats'),
     })
   }
 }
