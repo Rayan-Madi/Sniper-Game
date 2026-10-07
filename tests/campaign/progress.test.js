@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { MAX_LEVEL, recordClear } from '../../src/campaign/progress.js'
+import { MAX_LEVEL, recordClear, jumpToLevel } from '../../src/campaign/progress.js'
 
 let U
 beforeEach(async () => { localStorage.clear(); vi.resetModules(); U = await import('../../src/upgrades.js') })
@@ -61,5 +61,25 @@ describe('réussite d\'une mission', () => {
     U.state.campaignDone = true
     U.resetCampaignFlags()
     expect(U.state.campaignDone).toBe(false)
+  })
+})
+
+describe('saut direct à une mission (raccourci de développement)', () => {
+  it('sur une campagne finie, sauter en M3 puis la réussir reprend en M4, sans proposer la fin', () => {
+    const s = { points: 0, totalScore: 0, currentLevel: 6, campaignDone: true }
+    jumpToLevel(s, 3)
+    expect(s.currentLevel).toBe(3)
+    expect(s.campaignDone).toBe(false)
+    recordClear(s, { level: 3, reward: 2, score: 900 })
+    expect(s.currentLevel).toBe(4)
+    expect(s.campaignDone).toBe(false)
+  })
+
+  it('sauter en M6 puis la réussir finit de nouveau la campagne', () => {
+    const s = { points: 0, totalScore: 0, currentLevel: 6, campaignDone: true }
+    jumpToLevel(s, 6)
+    recordClear(s, { level: 6, reward: 3, score: 5000 })
+    expect(s.currentLevel).toBe(6)
+    expect(s.campaignDone).toBe(true)
   })
 })

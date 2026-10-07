@@ -25,11 +25,13 @@ describe('progression de la campagne', () => {
     expect(M.state.briefingSeen).toEqual([false, false, true, false, false, false])
   })
 
-  it('une ancienne sauvegarde sans le champ ne compte pas la campagne comme finie', async () => {
+  it('une ancienne sauvegarde sans le champ ne compte pas la campagne comme finie', () => {
+    // L'état en mémoire dit « finie » : seule la lecture de la sauvegarde peut le remettre à faux.
+    U.state.campaignDone = true
     localStorage.setItem('sniper-save', JSON.stringify({ currentLevel: 6 }))
-    const M = await reload()
-    expect(M.state.currentLevel).toBe(6)
-    expect(M.state.campaignDone).toBe(false)
+    expect(U.loadProgress()).toBe(true)
+    expect(U.state.currentLevel).toBe(6)
+    expect(U.state.campaignDone).toBe(false)
   })
 
   it('reprend le champ « freed » des anciennes sauvegardes', async () => {

@@ -12,7 +12,8 @@ import { preloadCharacters } from './characters.js'
 import { initMultiplayerMenu } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
 import { fovFor, aimAngles } from './aim.js'
-import { MAX_LEVEL, recordClear } from './campaign/progress.js'
+import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
+import { canClear } from './campaign/phase.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -644,6 +645,7 @@ function triggerGameOver() {
 }
 
 function triggerLevelClear() {
+  if (!canClear({ phase: gamePhase })) return   // mort pendant la kill-cam : rien n'est crédité, la mission n'avance pas
   gamePhase = 'cleared'
   stopMissionAmbience()
   hideScope()
@@ -1064,7 +1066,7 @@ document.addEventListener('keydown', e => {
   // (pas pendant une saisie : les codes PvP contiennent des chiffres)
   if (e.target.closest && e.target.closest('input, textarea')) return
   if (gamePhase !== 'playing' && gamePhase !== 'paused' && gamePhase !== 'briefing' && gamePhase !== 'investigation' && e.key >= '1' && e.key <= '6') {
-    upgradeState.currentLevel = parseInt(e.key)
+    jumpToLevel(upgradeState, parseInt(e.key))   // la campagne reprend à cette mission : elle n'est plus finie
     launchLevel(upgradeState.currentLevel)
   }
 })

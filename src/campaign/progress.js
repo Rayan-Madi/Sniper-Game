@@ -13,3 +13,10 @@ export function recordClear(state, { level, reward, score }) {
   else state.currentLevel = level + 1
   return { cleared: level, last }
 }
+
+// Saut direct à une mission (raccourci de développement) : la campagne reprend à cette mission, elle n'est plus
+// finie. Sinon, rejouer M3 sur une campagne finie puis la réussir laisserait le menu sur VOIR LA FIN.
+export function jumpToLevel(state, level) {
+  state.currentLevel = level
+  state.campaignDone = false
+}
