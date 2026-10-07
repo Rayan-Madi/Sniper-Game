@@ -172,7 +172,9 @@ function addMarker(group) {
 }
 
 export class NPC {
-  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, levelData, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, modelType = null, partyMode = false, onPhone = false }) {
+  // groundY : hauteur du sol de la carte (dalle du port, tarmac, route du convoi), 0 par défaut (menu, PvP).
+  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, levelData, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, modelType = null, partyMode = false, onPhone = false }) {
+    this.groundY    = groundY
     this.isTarget   = isTarget
     this.isGuard    = isGuard
     this.isCivilian = isCivilian
@@ -202,7 +204,7 @@ export class NPC {
     } else {
       this.mesh = makePerson(color, isTarget, isGuard, { hideMarker, hat, female })
     }
-    this.mesh.position.set(x, 0, z)
+    this.mesh.position.set(x, groundY, z)   // les pieds sur le sol de la carte, pas sous la dalle
     scene.add(this.mesh)
 
     this.state        = lockState || STATES.WALK
@@ -548,7 +550,7 @@ export class NPC {
       this.deathTimer = 3.5   // temps laissé au clip pour se jouer (update le gère)
     } else {
       this.mesh.rotation.x = Math.PI / 2
-      this.mesh.position.y = 0.2
+      this.mesh.position.y = this.groundY + 0.2   // couché sur le sol de la carte
     }
     if (this.mesh.userData.marker) this.mesh.userData.marker.visible = false
     if (this.mesh.userData.ring)   this.mesh.userData.ring.visible = false

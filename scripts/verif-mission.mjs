@@ -113,11 +113,13 @@ const mission = c => js(c, '__mission()')
 const helpOpacity = c => js(c, `document.getElementById('instruction').style.opacity`)
 const shown = (c, id) => js(c, `document.getElementById(${JSON.stringify(id)}).style.display === 'flex'`)
 
+// Sauvegarde en mission n, prologue et briefings déjà vus.
+const saveAt = n => ({ levels: {}, points: 0, totalScore: 0, currentLevel: n, freedVictims: false,
+  briefingSeen: [true, true, true, true, true, true], prologueSeen: true, campaignDone: false })
+
 // Mission n, briefing déjà vu : COMMENCER mène droit au jeu.
 async function play(n) {
-  const save = { levels: {}, points: 0, totalScore: 0, currentLevel: n, freedVictims: false,
-    briefingSeen: [true, true, true, true, true, true], prologueSeen: true, campaignDone: false }
-  const c = await openChrome(save)
+  const c = await openChrome(saveAt(n))
   try {
     await sleep(1500)   // modèles des personnages
     await click(c, 'btn-start')
@@ -142,6 +144,24 @@ async function aimAndShoot(c, what, n = 0) {
   await frames(c, 2)    // la caméra prend la visée (appliquée par la boucle)
   const tirs = (await mission(c)).tirs
   await mouse(c, 'mousedown', 0)
+  await until(c, `__mission().tirs === ${tirs + 1}`, 3000)
+  await until(c, `!__mission().balle`)
+  return true
+}
+
+// Tir sur une cible du convoi (M5), visée `avance` secondes devant elle. La visée est posée entre deux images, la
+// boucle du jeu la prend à l'image suivante, et le tir part aussitôt après dans la même image : avance = délai de
+// la balle + une image. Faux si la visée n'a rien trouvé.
+async function shootAhead(c, what, avance) {
+  await mouse(c, 'mousedown', 2)
+  await key(c, 'keydown', 'Shift', 'ShiftLeft')
+  await frames(c, 10)
+  const tirs = (await mission(c)).tirs
+  const ok = await js(c, `new Promise(r => {
+    if (!__aimAt(${JSON.stringify(what)}, 0, ${avance})) return r(false)
+    requestAnimationFrame(() => { document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); r(true) })
+  })`)
+  if (!ok) return false
   await until(c, `__mission().tirs === ${tirs + 1}`, 3000)
   await until(c, `!__mission().balle`)
   return true
@@ -238,6 +258,91 @@ const SCENARIOS = {
       check(await shown(c, 'game-over') && !await shown(c, 'pause-menu'), 'écran d\'échec seul, sans pause par-dessus',
         { echec: await shown(c, 'game-over'), pause: await shown(c, 'pause-menu') })
       await capture(c, 'civil-echap')
+    } finally { await c.close() }
+  },
+
+  // Raccourci de développement lu sur e.code : la touche 3 d'un clavier AZERTY (e.key '"', e.code Digit3) lance la
+  // mission 3 depuis le menu, mais rien sous les paramètres ni sous le menu multijoueur.
+  async raccourci() {
+    const c = await openChrome(saveAt(1))
+    try {
+      await sleep(1500)   // modèles des personnages
+      const digit3 = () => key(c, 'keydown', '"', 'Digit3')
+      await click(c, 'btn-settings-menu')
+      await digit3()
+      await sleep(300)
+      check((await mission(c)).phase === 'menu', 'paramètres ouverts : la touche 3 ne lance rien', (await mission(c)).phase)
+      await click(c, 'btn-settings-back')
+      await click(c, 'btn-multiplayer')
+      check(await shown(c, 'mp-menu'), 'menu multijoueur affiché', null)
+      await digit3()
+      await sleep(300)
+      check((await mission(c)).phase === 'menu', 'menu multijoueur ouvert : la touche 3 ne lance rien', (await mission(c)).phase)
+      await click(c, 'btn-mp-back')
+      await digit3()
+      await until(c, `__mission().phase === 'playing'`, 5000)
+      const hud = await js(c, `document.getElementById('hud-level').textContent`)
+      check(hud.includes('3/6'), 'menu principal : la touche 3 AZERTY lance la mission 3', hud)
+    } finally { await c.close() }
+  },
+
+  // Apnée sur e.code (Maj gauche et droite), relâchée quand la fenêtre perd le focus : après un Alt-Tab, le keyup de
+  // Maj n'arrive jamais et le souffle restait retenu.
+  async apnee() {
+    const c = await play(1)
+    try {
+      await mouse(c, 'mousedown', 2)
+      await key(c, 'keydown', 'Shift', 'ShiftRight')
+      check((await mission(c)).souffle === true, 'Maj droite retient le souffle', (await mission(c)).souffle)
+      await key(c, 'keyup', 'Shift', 'ShiftRight')
+      check((await mission(c)).souffle === false, 'Maj droite relâchée', (await mission(c)).souffle)
+      await key(c, 'keydown', 'Shift', 'ShiftLeft')
+      check((await mission(c)).souffle === true, 'Maj gauche retient le souffle', (await mission(c)).souffle)
+      await js(c, `window.dispatchEvent(new Event('blur'))`)
+      check((await mission(c)).souffle === false, 'fenêtre quittée (Alt-Tab) : le souffle est relâché', (await mission(c)).souffle)
+    } finally { await c.close() }
+  },
+
+  // PNJ posés sur le sol de la carte : dalle du port (0,345 m), tarmac de la base (0,2 m). Capture dans la lunette.
+  async sol() {
+    for (const [n, sol, who] of [[3, 0.345, 'civil'], [4, 0.2, 'garde']]) {
+      const c = await play(n)
+      try {
+        await mouse(c, 'mousedown', 2)
+        await key(c, 'keydown', 'Shift', 'ShiftLeft')
+        await frames(c, 10)
+        check(await js(c, `__aimAt(${JSON.stringify(who)})`), `mission ${n} : un ${who} à viser`, null)
+        await frames(c, 3)
+        await capture(c, `sol-m${n}`)
+        const m = await mission(c)
+        check(m.sol === sol, `mission ${n} : sol de la carte à ${sol} m`, m.sol)
+        const ys = m.pnj.map(p => p[1])
+        check(ys.length > 0 && ys.every(y => Math.abs(y - sol) < 1e-3), `mission ${n} : tous les PNJ ont les pieds sur le sol`, ys)
+      } finally { await c.close() }
+    }
+  },
+
+  // Convoi (M5) : jeeps et occupants sur la route (0,2 m). Le colonel abattu suit sa jeep, qui roule encore à 15 %
+  // pendant le ralenti, au lieu de rester suspendu en l'air.
+  async convoi() {
+    const c = await play(5)
+    try {
+      // Le colonel est le premier PNJ (les cibles sont créées d'abord), sur la banquette arrière de la jeep du milieu.
+      const seated = m => Math.abs(m.pnj[0][0] - (m.jeeps[1][0] - 1.4)) < 1e-3 && Math.abs(m.pnj[0][1] - (0.2 + 0.82)) < 1e-3
+      let m = await mission(c)
+      check(m.sol === 0.2, 'route à 0,2 m', m.sol)
+      check(m.jeeps.every(j => Math.abs(j[1] - 0.2) < 1e-3), 'jeeps posées sur la route', m.jeeps)
+      check(seated(m), 'colonel assis sur la banquette, au-dessus de la route', { colonel: m.pnj[0], jeep: m.jeeps[1] })
+      await until(c, `__mission().jeeps[1][0] > -12`, 15000)   // la jeep du colonel arrive devant le poste
+      for (let i = 0; i < 6 && (await mission(c)).cibles > 0; i++) await shootAhead(c, 'cible', 0.45 + 1 / 60)
+      m = await mission(c)
+      check(m.cibles === 0, 'colonel abattu', { cibles: m.cibles, tirs: m.tirs })
+      await frames(c, 30)   // ralenti de 1,5 s
+      const k = await mission(c)
+      await capture(c, 'convoi-ralenti')
+      check(k.killcam, 'toujours dans le ralenti', k.phase)
+      check(k.jeeps[1][0] > m.jeeps[1][0], 'la jeep roule encore', { avant: m.jeeps[1], après: k.jeeps[1] })
+      check(seated(k), 'le corps du colonel suit sa jeep', { colonel: k.pnj[0], jeep: k.jeeps[1] })
     } finally { await c.close() }
   },
 }

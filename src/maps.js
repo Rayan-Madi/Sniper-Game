@@ -285,7 +285,8 @@ export function buildMapStreet() {
     cylinder(0.28, 0.32, 0.75, 0x445544, -4 + i * 6, 0.37, 14)
   }
 
-  return { spawnBounds: { minX: -10, maxX: 10, minZ: -12, maxZ: 12 }, cameraPos: [0, 8, 30], indoors: false }
+  // groundY : hauteur du dessus du sol dans la zone d'apparition (pieds des PNJ, impacts des tirs manqués)
+  return { spawnBounds: { minX: -10, maxX: 10, minZ: -12, maxZ: 12 }, groundY: 0, cameraPos: [0, 8, 30], indoors: false }
 }
 
 // ─── MAP 2 : Plaza de nuit — toit d'immeuble, vue plongeante ─────────
@@ -376,6 +377,7 @@ export function buildMapWarehouse() {
   return {
     // Zone de spawn = TOUTE LA PLACE AU SOL, bien visible depuis y=22
     spawnBounds: { minX: -14, maxX: 14, minZ: -14, maxZ: 14 },
+    groundY:     0,                    // la place dallée
     cameraPos:   [0, 22.5, 22],        // sur le toit de l'immeuble nord
     cameraTarget: [0, 0, 0],           // regarde le centre de la place en bas
     indoors: false
@@ -520,6 +522,7 @@ export function buildMapDocks() {
   return {
     // Zone de spawn : dalle plate, aucun obstacle, x=[-13,13] z=[-11,10]
     spawnBounds: { minX: -13, maxX: 13, minZ: -11, maxZ: 10 },
+    groundY:      0.345,         // dessus de la dalle du quai (0,17 + 0,35 / 2)
     cameraPos:    [0, 10, 28],
     cameraTarget: [0, 1, -2],    // vise le quai en contrebas
     indoors: false,
@@ -631,6 +634,7 @@ export function buildMapMilitary() {
   return {
     // Cour centrale dégagée : x=[-15,15], z=[-18,6] — aucun obstacle
     spawnBounds: { minX: -15, maxX: 15, minZ: -18, maxZ: 6 },
+    groundY:      0.2,             // dessus du tarmac (0,1 + 0,2 / 2)
     cameraPos:    [0, 14.5, 21],   // bord AVANT de la tour, rien devant
     cameraTarget: [0, 1, -6],      // plonge vers la cour
     indoors: false
@@ -736,6 +740,7 @@ export function buildMapConvoy() {
   return {
     // Pas de spawn à pied au centre ; les gardes apparaissent sur les bords
     spawnBounds: { minX: -30, maxX: 30, minZ: -7, maxZ: -1 },
+    groundY:      0.2,             // dessus de la route (0,1 + 0,2 / 2) : PNJ, jeeps et occupants
     cameraPos:    [0, 7, 24],
     cameraTarget: [0, 1, -4],     // vise la route
     indoors: false,
@@ -915,6 +920,7 @@ export function buildMapParty() {
   return {
     // Spawn DANS l'appartement visible + quelques-uns dans la rue
     spawnBounds: { minX: -10, maxX: 10, minZ: -24, maxZ: -17 },
+    groundY:     0,                   // surface du parquet
     cameraPos:   [0, 9, 5],           // fenêtre de l'immeuble d'en face
     cameraTarget: [0, 3, -20],        // vise l'appartement
     indoors: true,

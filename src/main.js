@@ -15,6 +15,9 @@ import { fovFor, aimAngles } from './aim.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
 import { rankFor, precisionOf, isHit } from './campaign/rank.js'
+import { levelShortcut } from './campaign/shortcuts.js'
+import { stepConvoy } from './campaign/convoy.js'
+import { missImpact } from './campaign/impact.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -26,6 +29,9 @@ let alertTimer = 0
 let currentLevelData = null
 let currentMapInfo = null
 let clock = new THREE.Clock()
+
+// Hauteur du sol de la carte en cours (dalle du port, tarmac, route du convoi) : pieds des PNJ, tirs manqués
+const mapGround = () => (currentMapInfo && currentMapInfo.groundY) || 0
 
 // Caméra
 let yaw = 0, pitch = 0
@@ -456,6 +462,7 @@ function startLevel(n) {
   startMissionAmbience()   // nappe sonore de tension pendant la mission
 
   const b = currentMapInfo.spawnBounds
+  const groundY = mapGround()   // les pieds des PNJ sur la dalle du port, le tarmac, la route du convoi
   const sideFlee = !!currentMapInfo.sideExit
 
   // Spawner cibles
@@ -467,6 +474,7 @@ function startLevel(n) {
       color: 0xcc4422,
       x: useHidden ? hidden.spawn[0] : b.minX + Math.random() * (b.maxX - b.minX),
       z: useHidden ? hidden.spawn[1] : b.minZ + Math.random() * (b.maxZ - b.minZ),
+      groundY,
       levelData: currentLevelData,
       bounds: b,
       fleeSideways: sideFlee,
@@ -499,6 +507,7 @@ function startLevel(n) {
       color: 0x334433,
       x: b.minX + Math.random() * (b.maxX - b.minX),
       z: b.minZ + Math.random() * (b.maxZ - b.minZ),
+      groundY,
       levelData: currentLevelData,
       bounds: b,
       fleeSideways: sideFlee,
@@ -517,6 +526,7 @@ function startLevel(n) {
       color: civilColors[i % civilColors.length],
       x: b.minX + Math.random() * (b.maxX - b.minX),
       z: b.minZ + Math.random() * (b.maxZ - b.minZ),
+      groundY,
       levelData: currentLevelData,
       bounds: b,
       fleeSideways: sideFlee,
@@ -567,7 +577,8 @@ function startLevel(n) {
       { npc: g[3], ...PASS },
     ]})
 
-    convoyCar = { baseX: -55, dir: 1, speed: 8.5, vehicles }
+    // Route le long de X à z = -4, chaussée à groundY : jeeps et occupants sont posés dessus (campaign/convoy.js)
+    convoyCar = { baseX: -55, z: -4, groundY, dir: 1, speed: 8.5, vehicles }
   }
 
   updateHUD()
@@ -844,7 +855,7 @@ function resolveBullet() {
     for (let i = 0; i < 3; i++) {
       const freed = new NPC({
         isCivilian: true, color: 0x8a7a5a,
-        x: lockPos.x + 0.5 + i * 0.4, z: lockPos.z + 1 + i * 0.6,
+        x: lockPos.x + 0.5 + i * 0.4, z: lockPos.z + 1 + i * 0.6, groundY: mapGround(),
         levelData: currentLevelData, bounds: currentMapInfo.spawnBounds,
       })
       freed.flee(lockPos)
@@ -854,20 +865,16 @@ function resolveBullet() {
 
   // Tir raté
   if (kind === 'miss') {
-    // Point d'impact au sol (ou loin devant)
-    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-    const shotPos = new THREE.Vector3()
-    if (!raycaster.ray.intersectPlane(ground, shotPos)) {
-      raycaster.ray.at(40, shotPos)
-    }
+    // Point d'impact sur le sol de la carte (ou loin devant)
+    const { point: shotPos, hole: holePos } = missImpact(raycaster.ray, mapGround())
     spawnTracer(muzzlePos, shotPos)
     spawnDust(shotPos)
     // trou d'impact persistant dans le sol (témoin de tes tirs ratés)
-    if (shotPos.y < 1) {
+    if (holePos) {
       const hole = new THREE.Mesh(new THREE.CircleGeometry(0.09, 8),
         new THREE.MeshBasicMaterial({ color: 0x17130f }))
       hole.rotation.x = -Math.PI / 2
-      hole.position.set(shotPos.x, 0.035, shotPos.z)
+      hole.position.copy(holePos)
       scene.add(hole); bulletHoles.push(hole)
       if (bulletHoles.length > 24) scene.remove(bulletHoles.shift())
     }
@@ -1092,13 +1099,23 @@ document.getElementById('canvas').addEventListener('click', () => {
   if (gamePhase === 'playing') document.getElementById('canvas').requestPointerLock()
 })
 
-// Apnée : maintenir Shift pour stabiliser la visée
+// Clavier du mode histoire : toujours les touches physiques (e.code), le clavier de Rayan est en AZERTY.
+const isShift = code => code === 'ShiftLeft' || code === 'ShiftRight'
+
+// Écrans où l'on tape (code de partie, touche à remapper) : le raccourci de mission s'y tait.
+const TYPING_SCREENS = ['mp-menu', 'mp-create', 'mp-join', 'mp-result', 'settings-screen']
+const overlayOpen = () => TYPING_SCREENS.some(id => {
+  const el = document.getElementById(id)
+  return !!el && getComputedStyle(el).display !== 'none'
+})
+
+// Apnée : maintenir Maj pour stabiliser la visée
 document.addEventListener('keydown', e => {
   if (campaignPaused) return   // mode PvP actif : le mode histoire ne réagit pas
-  if (e.key === 'Shift') holdBreathKey = true
+  if (isShift(e.code)) holdBreathKey = true
 
   // Échap : pause / reprise
-  if (e.key === 'Escape' && !e.repeat) {
+  if (e.code === 'Escape' && !e.repeat) {
     if (gamePhase === 'playing') pauseGame()
     else if (gamePhase === 'paused') {
       // Si on est dans les paramètres, on les ferme d'abord
@@ -1107,17 +1124,21 @@ document.addEventListener('keydown', e => {
     }
   }
 
-  // Raccourci de test : touches 1-6 depuis le menu/écrans pour sauter à un niveau
-  // (pas pendant une saisie : les codes PvP contiennent des chiffres)
+  // Raccourci de développement : 1 à 6 (rangée du haut ou pavé numérique) depuis le menu ou un écran de fin pour
+  // sauter à une mission (campaign/shortcuts.js). Jamais en production, ni pendant une saisie : les codes PvP
+  // contiennent des chiffres.
   if (e.target.closest && e.target.closest('input, textarea')) return
-  if (gamePhase !== 'playing' && gamePhase !== 'paused' && gamePhase !== 'briefing' && gamePhase !== 'investigation' && e.key >= '1' && e.key <= '6') {
-    jumpToLevel(upgradeState, parseInt(e.key))   // la campagne reprend à cette mission : elle n'est plus finie
+  const n = levelShortcut(e.code, { dev: import.meta.env.DEV, phase: gamePhase, overlayOpen: overlayOpen() })
+  if (n !== null) {
+    jumpToLevel(upgradeState, n)   // la campagne reprend à cette mission : elle n'est plus finie
     launchLevel(upgradeState.currentLevel)
   }
 })
 document.addEventListener('keyup', e => {
-  if (e.key === 'Shift') holdBreathKey = false
+  if (isShift(e.code)) holdBreathKey = false
 })
+// Alt-Tab avec Maj enfoncée : le keyup n'arrive jamais à la page, l'apnée resterait bloquée.
+window.addEventListener('blur', () => { holdBreathKey = false })
 
 // ─── Upgrade UI ────────────────────────────────────────────────────
 function renderUpgradeUI() {
@@ -1192,26 +1213,10 @@ function loop() {
     if (moralLockLight) moralLockLight.intensity = 1.5 + Math.sin(performance.now() / 170) * 0.9
     for (const npc of npcs) npc.update(dt)
 
-    // ── Déplacement du convoi (plusieurs jeeps + occupants) ──
-    if (convoyCar) {
-      convoyCar.baseX += convoyCar.dir * convoyCar.speed * dt
-      // Convoi sorti par la droite : s'il reste un colonel VIVANT à bord, il a
-      // filé → mission ratée. Sinon (déjà abattu) le convoi s'immobilise
-      // hors-champ — plus de boucle infinie qui offrait des essais gratuits.
-      if (convoyCar.baseX > 60) {
-        if (convoyTarget && convoyTarget.alive) { triggerConvoyEscaped(); return }
-        convoyCar.baseX = 60
-      }
-      for (const v of convoyCar.vehicles) {
-        const vx = convoyCar.baseX + v.offsetX
-        v.mesh.position.set(vx, 0, -4)
-        for (const r of v.riders) {
-          if (!r.npc || !r.npc.alive) continue
-          r.npc.mesh.position.set(vx + r.dx, r.dy, -4 + r.dz)
-          r.npc.mesh.rotation.y = Math.PI / 2   // face au sens de la marche (+X)
-        }
-      }
-    }
+    // ── Déplacement du convoi (plusieurs jeeps + occupants, abattus compris) ──
+    // Convoi sorti par la droite : s'il reste un colonel VIVANT à bord, il a filé → mission ratée. Sinon (déjà
+    // abattu) le convoi s'immobilise hors champ : pas de boucle infinie qui offrirait des essais gratuits.
+    if (convoyCar && stepConvoy(convoyCar, dt, convoyTarget)) { triggerConvoyEscaped(); return }
 
     // Vérifier si une cible a fui (sauf cible en véhicule)
     checkFledTargets()
@@ -1329,15 +1334,18 @@ if (import.meta.env.DEV) {
   window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,
     pnj: npcs.map(n => n.mesh.position.toArray().map(v => +v.toFixed(3))),
     chronoMs: Math.round(performance.now() - statStart), tirs: statShots, touches: statHits, alertes: statAlerts, score,
-    balle: bulletInFlight })
+    balle: bulletInFlight, sol: mapGround(), souffle: holdBreathKey,
+    jeeps: convoyCar ? convoyCar.vehicles.map(v => v.mesh.position.toArray().map(c => +c.toFixed(3))) : null })
   // Visée scriptée (scripts/verif-mission.mjs) : __aimAt('cadenas') vise le cadenas du port, __aimAt('civil', 2) le
   // troisième civil vivant ('cible', 'garde', 'civil'). Faux si rien ne correspond. Le tir reste celui du joueur.
-  window.__aimAt = (what, n = 0) => {
+  // avance (s) : vise devant une cible du convoi, qui roule pendant le vol de la balle (M5).
+  window.__aimAt = (what, n = 0, avance = 0) => {
     const role = npc => npc.isTarget ? 'cible' : npc.isCivilian ? 'civil' : 'garde'
     const p = what === 'cadenas'
       ? moralLockBox && moralLockBox.getCenter(new THREE.Vector3())
       : npcs.filter(npc => npc.alive && role(npc) === what)[n]?.getBounds().center
     if (!p) return false
+    if (avance && convoyCar && what !== 'cadenas') p.x += convoyCar.dir * convoyCar.speed * avance
     ;({ yaw, pitch } = aimAngles(camera.position.toArray(), p.toArray()))
     return true
   }
