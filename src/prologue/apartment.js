@@ -1029,6 +1029,9 @@ export function buildApartment() {
       flat(tl, 0.6, (trailFrom.x + trailTo.x) / 2, 0.0032, (trailFrom.z + trailTo.z) / 2, tAng + Math.PI, [0.5, 1, 0, 1]).translate(0, 0.0005, 0),
     ])
     const bm = new THREE.Mesh(bg, blood); bm.receiveShadow = true; bm.renderOrder = 1; tg.t.add(bm)
+    // volume de visée (et cadre de la photo) sur les taches et la flaque : sans lui, la boîte de ce qui se voit compte
+    // tout le quad du sang (2,6 × 2,4 m, jusque sous les pieds de Viktor) et la photo cadrait la fenêtre plutôt qu'elles
+    proxy(tg, 10.8, 0.15, 4.8, 1.0, 0.3, 1.0)
     tg.done()
   }
 

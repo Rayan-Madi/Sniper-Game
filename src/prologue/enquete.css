@@ -60,9 +60,12 @@
 .enq .enq-fiche.on { opacity: 1; transform: translate(-50%,-50%); }
 .enq .enq-tab { position: absolute; top: -3.4vh; left: -1px; font-size: clamp(11px, 1.05vw, 15px); letter-spacing: .25em; padding: .6vh 1.2vw; background: #e04848; color: #0b0c10; font-weight: bold; text-shadow: none; }
 .enq .enq-photo { position: relative; flex: none; align-self: flex-start; width: 40%; aspect-ratio: 4 / 3; overflow: hidden; background: #0e1320; border: .5vw solid #d9d6cc; box-shadow: 0 1vh 2.4vh rgba(0,0,0,.6); transform: rotate(-1.6deg); }
-.enq .enq-photo img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; filter: grayscale(.8) contrast(1.05) sepia(.18); }
+.enq .enq-photo img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; filter: grayscale(.5) contrast(1.05) sepia(.18); }   /* assez de couleur pour que le sang reste rouge */
 .enq .enq-fiche.on .enq-photo img { animation: enq-dev 1s ease-out forwards; }
-@keyframes enq-dev { 0% { opacity: 1; filter: grayscale(1) brightness(3.2) blur(5px) } 100% { opacity: 1; filter: grayscale(.8) contrast(1.05) sepia(.18) blur(0) } }
+/* le tirage se révèle (voilé, puis contrasté) ; chaque image reste lisible : quand une image tarde (rendu logiciel, salon
+   chargé), le navigateur peut rester une seconde sur la première. Mêmes fonctions dans le même ordre aux deux bouts : sinon
+   le filtre ne s'interpole pas et saute à mi-course (avant : flou et blanc brûlé pendant 0,5 s, ou plus) */
+@keyframes enq-dev { 0% { opacity: 1; filter: grayscale(1) contrast(.82) sepia(0) brightness(1.3) } 100% { opacity: 1; filter: grayscale(.5) contrast(1.05) sepia(.18) brightness(1) } }
 .enq .enq-photo .lieu { position: absolute; left: .6vw; bottom: .5vh; font-size: clamp(9px, .8vw, 12px); letter-spacing: .2em; color: #e8efe0; text-shadow: 0 0 2px #000, 0 0 6px #000; }
 /* date incrustée par l'appareil, et marqueur jaune numéroté des scènes de crime */
 .enq .enq-photo .stamp { position: absolute; right: .6vw; bottom: .5vh; font-size: clamp(9px, .8vw, 12px); letter-spacing: .12em; color: #ff9a3c; text-shadow: 0 0 4px rgba(255,120,30,.8); }

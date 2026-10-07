@@ -3,6 +3,11 @@ import * as THREE from 'three'
 import { startInvestigation, develop, photoFrame } from '../../src/prologue/investigation.js'
 import { CLUES, PHONE } from '../../src/prologue/clues.js'
 import { settings } from '../../src/settings.js'
+import { buildApartment } from '../../src/prologue/apartment.js'
+import { readFileSync } from 'node:fs'
+
+// la feuille de style telle qu'écrite (sous Vitest, un import ?raw de CSS revient vide)
+const css = readFileSync('src/prologue/enquete.css', 'utf8')   // chemin depuis la racine (celle de Vitest)
 
 const FAKE = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] }
 let lockEl = null
@@ -323,6 +328,42 @@ describe('l\'enquête — la photo de la fiche', () => {
     const f = photoFrame(big, camera, 1600, 900)
     expect(f.h).toBeCloseTo(666, 5); expect(f.w).toBeCloseTo(888, 5)
     expect(f.x).toBeCloseTo(0, 5); expect(f.y).toBeCloseTo(0, 5)       // poussé dans le coin haut gauche, vers l'objet
+  })
+})
+
+// ── finition : la photo des corps (floue et surexposée aux captures, cadrée sur la fenêtre plutôt que sur le drap) ──
+describe('l\'enquête — la photo des corps', () => {
+  // les vues d'où l'on examine le drap : par l'arche, et le contrôle de capture (&cam=9.4,1.65,5.8,-1.1,-0.5)
+  const VUES = { controle: [9.4, 5.8, -1.1, -0.5], arche: [9.2, 4.8, -1.57, -0.6] }
+  for (const [nom, [x, z, yaw, pitch]] of Object.entries(VUES)) {
+    it(`cadrée sur le drap, ses taches et le sang qui déborde, pas sur la fenêtre (vue ${nom})`, () => {
+      const W = 1258, H = 622
+      const camera = new THREE.PerspectiveCamera(72, W / H, 0.05, 40)
+      camera.position.set(x, 1.65, z); camera.rotation.set(pitch, yaw, 0, 'YXZ'); camera.updateMatrixWorld()
+      const apt = buildApartment(); apt.group.updateMatrixWorld(true)
+      const f = photoFrame(apt.targets.find(t => t.userData.clueId === 'corps'), camera, W, H)
+      const seen = (px, py, pz) => {
+        const v = new THREE.Vector3(px, py, pz).project(camera), sx = (v.x + 1) / 2 * W, sy = (1 - v.y) / 2 * H
+        return sx > f.x && sx < f.x + f.w && sy > f.y && sy < f.y + f.h
+      }
+      for (const p of [[11.02, 0.25, 4.6], [10.83, 0.2, 5.21], [10.7, 0.2, 4.28]]) expect(seen(...p), `tache ${p}`).toBe(true)
+      expect(seen(10.7, 0, 5.62), 'le sang au sol').toBe(true)
+      expect(seen(12.4, 0.9, 4.5), 'le bas de la fenêtre').toBe(false)
+      expect(f.h).toBeLessThan(0.74 * H - 1)          // plus serré que le cadre le plus large, comme les autres fiches
+      apt.dispose()
+    })
+  }
+
+  it('chaque image du développement reste lisible : ni flou, ni blanc brûlé (une image lente s\'y attarde)', () => {
+    const kf = css.match(/@keyframes enq-dev\s*\{([\s\S]*?)\}\s*\}/)
+    expect(kf).not.toBeNull()
+    expect(kf[1]).not.toMatch(/blur\(\s*[1-9]/)
+    for (const m of kf[1].matchAll(/brightness\(([\d.]+)\)/g)) expect(+m[1]).toBeLessThanOrEqual(1.5)
+    // mêmes fonctions dans le même ordre aux deux bouts, sinon le navigateur ne les interpole pas : il garde la
+    // première image jusqu'à mi-course
+    const fns = s => [...s.matchAll(/([a-z-]+)\(/g)].map(m => m[1])
+    const [from, to] = [...kf[1].matchAll(/filter:\s*([^;}]+)/g)].map(m => fns(m[1]))
+    expect(from).toEqual(to)
   })
 })
 
