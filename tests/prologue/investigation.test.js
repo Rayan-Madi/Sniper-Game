@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as THREE from 'three'
-import { startInvestigation } from '../../src/prologue/investigation.js'
+import { startInvestigation, develop, photoFrame } from '../../src/prologue/investigation.js'
 import { CLUES, PHONE } from '../../src/prologue/clues.js'
 import { settings } from '../../src/settings.js'
 
@@ -250,5 +250,93 @@ describe('l\'enquête — finitions', () => {
     expect(order.indexOf('enq-black')).toBeLessThan(order.indexOf('enq-card'))
     expect(order.indexOf('enq-black')).toBeLessThan(order.indexOf('enq-pause'))
     h.stop()
+  })
+})
+
+// ── la photo de la fiche : développée sans brûler les petits sujets clairs, cadrée sur l'indice (relecture de la tâche 6) ──
+describe('l\'enquête — la photo de la fiche', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  // une nuit 640×480 (luminance 10 à 40) et, au milieu, un petit sujet clair de 30×30 px (0,3 % de l'image) en deux tons
+  function night(subject = true) {
+    const w = 640, h = 480, data = new Uint8ClampedArray(w * h * 4)
+    for (let i = 0; i < w * h; i++) { const v = 10 + (i % 31); data.set([v, v, v, 255], i * 4) }
+    if (subject) for (let y = 0; y < 30; y++) for (let x = 0; x < 30; x++) { const v = x < 15 ? 190 : 222; data.set([v, v, v, 255], ((200 + y) * w + 300 + x) * 4) }
+    const g = { getImageData: () => ({ data }), putImageData() {}, createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} }
+    return { g, w, h, data, at: (x, y) => data[((200 + y) * w + 300 + x) * 4] }
+  }
+
+  it('un petit sujet clair garde ses tons : ni blanc plat, ni deux tons confondus', () => {
+    const p = night()
+    develop(p.g, p.w, p.h)
+    const a = p.at(2, 5), b = p.at(25, 5)
+    expect(b).toBeLessThan(250)
+    expect(b - a).toBeGreaterThan(12)
+  })
+
+  it('une nuit sans sujet clair est quand même éclaircie', () => {
+    const p = night(false)
+    develop(p.g, p.w, p.h)
+    expect(p.data[30 * 4]).toBeGreaterThan(150)        // luminance 40 (le haut de la nuit) → nettement claire
+  })
+
+  it('la photo est cadrée sur l\'indice, même loin du centre de l\'image', () => {
+    const renderer = fakeRenderer(); renderer.domElement.width = 1600; renderer.domElement.height = 900
+    const camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 200)
+    const probe = startInvestigation({ renderer, camera, onDone: vi.fn() })
+    const aim = lookAt(probe.debug.apartment, 'mot'); probe.stop()
+    const cam = { ...aim, yaw: aim.yaw + 1.15 }       // le mot loin à droite, hors du cadre central
+    const draws = [], getContext = HTMLCanvasElement.prototype.getContext
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (type) {
+      const g = getContext.call(this, type)
+      if (g && this.width === 640) g.drawImage = (...a) => draws.push(a)
+      return g
+    })
+    const h = startInvestigation({ renderer, camera, onDone: vi.fn(), options: { cam, ouvrir: 'mot' } })
+    expect(draws).toHaveLength(1)
+    const [, sx, sy, sw, sh] = draws[0]
+    camera.updateMatrixWorld()
+    const c = new THREE.Box3().setFromObject(h.debug.apartment.targets.find(t => t.userData.clueId === 'mot')).getCenter(new THREE.Vector3()).project(camera)
+    const px = (c.x + 1) / 2 * 1600, py = (1 - c.y) / 2 * 900
+    expect(px).toBeGreaterThan(1244)                    // hors du 4:3 central à 74 % (356 → 1244)
+    expect(px).toBeGreaterThan(sx); expect(px).toBeLessThan(sx + sw)
+    expect(py).toBeGreaterThan(sy); expect(py).toBeLessThan(sy + sh)
+    expect(sw / sh).toBeCloseTo(4 / 3, 5)
+    expect(sh).toBeGreaterThanOrEqual(0.35 * 900 - 0.01); expect(sh).toBeLessThan(0.5 * 900)   // rapproché, pas un timbre-poste
+    expect(sx).toBeGreaterThanOrEqual(0); expect(sx + sw).toBeLessThanOrEqual(1600)
+    expect(sy).toBeGreaterThanOrEqual(0); expect(sy + sh).toBeLessThanOrEqual(900)
+    h.stop()
+  })
+
+  it('un indice derrière l\'objectif, ou pas d\'indice : le 4:3 central à 74 %', () => {
+    const camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.05, 40); camera.updateMatrixWorld()
+    const behind = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2)); behind.position.set(0, 0, 3); behind.updateMatrixWorld()
+    const central = { x: 356, y: 117, w: 888, h: 666 }
+    for (const f of [photoFrame(behind, camera, 1600, 900), photoFrame(null, camera, 1600, 900)]) {
+      for (const k of ['x', 'y', 'w', 'h']) expect(f[k]).toBeCloseTo(central[k], 5)
+    }
+  })
+
+  it('un gros indice tout proche : le cadre ne dépasse pas le 4:3 à 74 % et reste dans l\'image', () => {
+    const camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.05, 40); camera.updateMatrixWorld()
+    const big = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 0.1)); big.position.set(-1.2, 0.4, -1.5); big.updateMatrixWorld()
+    const f = photoFrame(big, camera, 1600, 900)
+    expect(f.h).toBeCloseTo(666, 5); expect(f.w).toBeCloseTo(888, 5)
+    expect(f.x).toBeCloseTo(0, 5); expect(f.y).toBeCloseTo(0, 5)       // poussé dans le coin haut gauche, vers l'objet
+  })
+})
+
+describe('l\'enquête — le cadre suit le volume de visée', () => {
+  it('le volume de visée invisible de l\'indice prime sur ce qui est semé autour', () => {
+    const camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.05, 40); camera.updateMatrixWorld()
+    const clue = new THREE.Group()
+    const debris = new THREE.Mesh(new THREE.BoxGeometry(3, 0.05, 0.05)); debris.position.set(-0.6, 0, -4); clue.add(debris)   // éclats, large
+    const aimBox = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3)); aimBox.position.set(0.9, -0.2, -4); aimBox.visible = false; clue.add(aimBox)
+    clue.updateMatrixWorld(true)
+    const f = photoFrame(clue, camera, 1600, 900)
+    const c = new THREE.Vector3(0.9, -0.2, -4).project(camera)
+    expect(Math.abs(f.x + f.w / 2 - (c.x + 1) / 2 * 1600)).toBeLessThan(6)   // à la perspective près
+    expect(Math.abs(f.y + f.h / 2 - (1 - c.y) / 2 * 900)).toBeLessThan(6)
+    expect(f.h).toBeCloseTo(0.35 * 900, 5)                           // petit volume : le cadre le plus serré
   })
 })

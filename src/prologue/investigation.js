@@ -17,21 +17,30 @@ const END_MS = 700          // noir de fin, puis démontage et onDone
 const GLITCH_MS = 250
 const SUB_HOLD_MS = 2200    // un sous-titre reste lisible ce temps-là après sa réplique
 const PHOTO_W = 640         // largeur de l'instantané (4:3)
-const PHOTO_CROP = 0.74     // part du cadre 4:3 central gardée : l'objet visé, un peu rapproché
+const PHOTO_CROP = 0.74     // cadre le plus large : 74 % du 4:3 central (aussi celui d'un indice introuvable à l'image)
+const PHOTO_MIN = 0.35      // cadre le plus serré : 35 % de la hauteur de l'image (plus serré, l'agrandissement se verrait)
+const PHOTO_MARGIN = 1.8    // l'indice et son entourage : sa boîte à l'écran × 1,8
 const pad = n => String(n).padStart(2, '0')
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
 // Développe l'instantané comme une photo au flash : la nuit rendue est trop sombre pour une photo lisible, on étire
-// donc ses niveaux (du 2ᵉ au 99,6ᵉ centile de la luminance), puis un éclat au centre et un vignetage aux bords.
-function develop(g, w, h) {
+// donc ses niveaux, puis un éclat au centre et un vignetage aux bords. Le blanc est calé haut (99,9ᵉ centile, et au moins
+// 90 % du plus clair) et les hautes lumières passent par une épaule douce : un petit sujet clair (le tirage, le papier
+// du mot, le doudou) garde ses tons au lieu de sortir en blanc plat. Exporté pour les tests.
+export function develop(g, w, h) {
   const img = g.getImageData(0, 0, w, h), d = img.data, hist = new Uint32Array(256), n = d.length / 4
   for (let i = 0; i < d.length; i += 4) hist[(d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8]++
-  let lo = 0, hi = 255, acc = 0
+  let lo = 0, top = 0, acc = 0
   for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > n * 0.02) { lo = v; break } }
-  acc = 0
-  for (let v = 255; v > 0; v--) { acc += hist[v]; if (acc > n * 0.004) { hi = v; break } }
+  for (let v = 255; v > 0; v--) if (hist[v]) { top = v; break }
+  let hi = top; acc = 0
+  for (let v = 255; v > 0; v--) { acc += hist[v]; if (acc > n * 0.001) { hi = v; break } }
+  hi = Math.max(hi, 0.9 * top)
   const span = Math.max(40, hi - lo), lut = new Uint8ClampedArray(256)
-  for (let v = 0; v < 256; v++) lut[v] = 255 * Math.pow(Math.min(1, Math.max(0, (v - lo) / span)), 0.9)
+  for (let v = 0; v < 256; v++) {
+    const x = Math.pow(Math.max(0, (v - lo) / span), 0.9)
+    lut[v] = 255 * (x < 0.8 ? x : 0.8 + 0.2 * (1 - Math.exp(-(x - 0.8) / 0.2)))
+  }
   for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]] }
   g.putImageData(img, 0, 0)
   const r = Math.hypot(w, h) / 2
@@ -41,6 +50,41 @@ function develop(g, w, h) {
   const vig = g.createRadialGradient(w / 2, h / 2, r * 0.45, w / 2, h / 2, r)
   vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,.6)')
   g.globalCompositeOperation = 'source-over'; g.fillStyle = vig; g.fillRect(0, 0, w, h)
+}
+
+// Cadre de la photo dans l'image rendue (w × h pixels) : un 4:3 centré sur l'indice — sa boîte à l'écran × 1,8, entre
+// 35 % de la hauteur et le 4:3 central à 74 % —, poussé dans l'image s'il déborde. Sans indice, ou s'il passe derrière
+// l'objectif, le 4:3 central à 74 %. La boîte : le volume de visée invisible que l'appartement taille autour des petits
+// indices (le tirage plutôt que les éclats de verre semés autour, la serrure plutôt que les copeaux au sol), sinon ce qui
+// se voit (le drap). Exporté pour les tests.
+const _box = new THREE.Box3(), _part = new THREE.Box3(), _v = new THREE.Vector3()
+function boxOf(target, visible) {
+  _box.makeEmpty()
+  target.traverse(o => {
+    if (!o.geometry || o.visible !== visible) return
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox()
+    _box.union(_part.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld))
+  })
+  return _box
+}
+export function photoFrame(target, camera, w, h) {
+  const fw = Math.min(w, h * 4 / 3) * PHOTO_CROP, fh = fw * 3 / 4
+  const central = { x: (w - fw) / 2, y: (h - fh) / 2, w: fw, h: fh }
+  if (!target || !camera) return central
+  target.updateWorldMatrix(true, true); camera.updateMatrixWorld()
+  if (boxOf(target, false).isEmpty() && boxOf(target, true).isEmpty()) _box.setFromObject(target)
+  if (_box.isEmpty()) return central
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (let i = 0; i < 8; i++) {
+    _v.set(i & 1 ? _box.max.x : _box.min.x, i & 2 ? _box.max.y : _box.min.y, i & 4 ? _box.max.z : _box.min.z).applyMatrix4(camera.matrixWorldInverse)
+    if (_v.z > -camera.near) return central
+    _v.applyMatrix4(camera.projectionMatrix)
+    const px = (_v.x + 1) / 2 * w, py = (1 - _v.y) / 2 * h
+    x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py)
+  }
+  const ch = Math.min(fh, Math.max(h * PHOTO_MIN, (y1 - y0) * PHOTO_MARGIN, (x1 - x0) * PHOTO_MARGIN * 3 / 4)), cw = ch * 4 / 3
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v))
+  return { x: clamp((x0 + x1 - cw) / 2, 0, w - cw), y: clamp((y0 + y1 - ch) / 2, 0, h - ch), w: cw, h: ch }
 }
 
 // libellé d'une touche sans la carte du clavier : KeyW → W, Digit1 → 1, ArrowUp → ↑
@@ -149,29 +193,31 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     $('#enq-prompt').classList.toggle('on', on)
   }
 
-  // Instantané de ce que regarde Viktor : rendu de l'image, recadré en 4:3 au centre (l'objet visé) dans une petite
+  // Instantané de ce que regarde Viktor : rendu de l'image, recadré en 4:3 sur l'indice (photoFrame) dans une petite
   // toile 2D, développé, encodé en JPEG. Sans image (pas de WebGL, toile refusée), la photo reste noire.
-  function snapshot() {
+  function snapshot(target) {
     try {
       renderer.render(scene, camera)
       const src = renderer.domElement, w = src.width, h = src.height
       const c = document.createElement('canvas'); c.width = PHOTO_W; c.height = PHOTO_W * 3 / 4
       const g = w && h ? c.getContext('2d') : null
       if (!g) return src.toDataURL('image/jpeg', 0.85)
-      const cw = Math.min(w, h * 4 / 3) * PHOTO_CROP, ch = cw * 3 / 4
-      g.drawImage(src, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, c.width, c.height)
+      let f
+      try { f = photoFrame(target, camera, w, h) } catch (e) { f = photoFrame(null, camera, w, h) }
+      g.drawImage(src, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height)
       try { develop(g, c.width, c.height) } catch (e) { /* photo brute */ }
       return c.toDataURL('image/jpeg', 0.85)
     } catch (e) { return null }
   }
 
   // ── la fiche ──
-  function openFiche({ tab, mark, lieu, titre, quote = null, calls = null, lines, act, go = false }) {
+  function openFiche({ id, tab, mark, lieu, titre, quote = null, calls = null, lines, act, go = false }) {
     const fiche = $('#enq-fiche')
     interact.clear(); aim(false)           // la photo montre l'objet sans sa surbrillance
     hush()
     controller.setFrozen(true)
-    const img = fiche.querySelector('img'), src = snapshot()
+    const target = apartment.targets.find(t => t.userData.clueId === id) || null
+    const img = fiche.querySelector('img'), src = snapshot(target)
     if (src) img.src = src; else img.removeAttribute('src')
     fiche.querySelector('.enq-tab').textContent = tab
     const mk = fiche.querySelector('.mk'); mk.textContent = mark || ''; mk.hidden = !mark
@@ -209,11 +255,11 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     if (r.type === 'phone-locked') { say(r.line); return }
     if (r.type === 'phone') {
       const p = r.phone, n = p.appels.length
-      openFiche({ tab: p.titre, lieu: p.lieu, titre: `${n} APPEL${n > 1 ? 'S' : ''} MANQUÉ${n > 1 ? 'S' : ''}`, calls: p.appels, lines: p.viktor, act: p.action, go: true })
+      openFiche({ id, tab: p.titre, lieu: p.lieu, titre: `${n} APPEL${n > 1 ? 'S' : ''} MANQUÉ${n > 1 ? 'S' : ''}`, calls: p.appels, lines: p.viktor, act: p.action, go: true })
       return
     }
     const c = r.clue
-    openFiche({ tab: `INDICE ${pad(c.n)} / ${pad(r.total)}`, mark: String(c.n), lieu: c.lieu, titre: c.titre, quote: c.citation || null, lines: [c.viktor], act: 'FERMER' })
+    openFiche({ id, tab: `INDICE ${pad(c.n)} / ${pad(r.total)}`, mark: String(c.n), lieu: c.lieu, titre: c.titre, quote: c.citation || null, lines: [c.viktor], act: 'FERMER' })
     if (c.acouphene) amb.tinnitus()
     setCount(r.count, r.first)
   }
