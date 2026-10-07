@@ -474,6 +474,23 @@ describe('l\'enquête — lisibilité', () => {
     expect(keyframes('enq-live')).not.toMatch(/pointer-events:\s*none/)
   })
 
+  it('les légendes de la photo (lieu, tampon) ne peuvent pas se chevaucher : même barre flex qui passe à la ligne, lieu tronqué si besoin', () => {
+    const renderer = fakeRenderer()
+    const h = startInvestigation({ renderer, camera: new THREE.PerspectiveCamera(), onDone: vi.fn() })
+    const cap = $('.enq-photo .cap')
+    expect(cap).not.toBeNull()
+    expect([...cap.children].map(c => c.className)).toEqual(['lieu', 'stamp'])   // la même barre, pas deux positions absolues
+    h.stop()
+    const bar = rule('.enq .enq-photo .cap')
+    expect(bar).toMatch(/display:\s*flex/)
+    expect(bar).toMatch(/flex-wrap:\s*wrap/)                           // le tampon passe sur sa propre ligne quand il n'y a pas la place
+    for (const sel of ['.enq .enq-photo .lieu', '.enq .enq-photo .stamp']) expect(rule(sel), sel).not.toMatch(/position:\s*absolute/)
+    const lieu = rule('.enq .enq-photo .lieu')
+    expect(lieu).toMatch(/text-overflow:\s*ellipsis/); expect(lieu).toMatch(/overflow:\s*hidden/); expect(lieu).toMatch(/white-space:\s*nowrap/)   // seul sur sa ligne, trop long : tronqué
+    expect(lieu).toMatch(/max-width:\s*100%/)
+    expect(rule('.enq .enq-photo .stamp')).toMatch(/margin-left:\s*auto/)   // reste à droite, y compris seul sur sa ligne
+  })
+
   it('les légendes de la photo (lieu, tampon « 14 03 · 21:47 ») sur un fond sombre semi-transparent', () => {
     for (const sel of ['.enq .enq-photo .stamp', '.enq .enq-photo .lieu']) {
       const bg = rule(sel).match(/background:\s*rgba\(0,\s*0,\s*0,\s*([\d.]+)\)/)

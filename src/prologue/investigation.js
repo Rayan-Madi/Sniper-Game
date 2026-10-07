@@ -101,7 +101,7 @@ const HTML = `
   <div class="enq-sub" id="enq-sub"><span class="spk">VIKTOR</span><span class="tx"></span></div>
   <div class="enq-fiche" id="enq-fiche">
     <div class="enq-tab"></div>
-    <div class="enq-photo"><img alt=""><span class="mk"></span><span class="lieu"></span><span class="stamp">14 03 · 21:47</span></div>
+    <div class="enq-photo"><img alt=""><span class="mk"></span><span class="cap"><span class="lieu"></span><span class="stamp">14 03 · 21:47</span></span></div>
     <div class="enq-body">
       <h3></h3>
       <div class="enq-quote" hidden></div>
