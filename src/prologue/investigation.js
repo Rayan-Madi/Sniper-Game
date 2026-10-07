@@ -138,7 +138,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
   let apartment = null, scene = null, state = null, controller = null, interact = null, amb = null
   let saved = null, savedAuto = null, style = null, ui = null, $ = () => null
   let ready = false, started = false, ending = false, stopped = false, reported = false
-  let glitchTimer = 0, subTimer = 0, lineTimer = 0, retryTimer = 0
+  let glitchTimer = 0, subTimer = 0, lineTimer = 0, retryTimer = 0, actTimer = 0
   let phoneOpenedAt = 0  // horodatage (performance.now) de l'ouverture de la fiche du téléphone
   const listening = []   // [cible, type, fonction] à retirer au démontage
 
@@ -232,6 +232,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     const list = fiche.querySelector('.enq-calls'); list.hidden = !calls
     list.innerHTML = calls ? calls.map(a => `<div><b>${esc(a.de)} · ${esc(a.heure)}</b><small>${esc(a.note)}</small></div>`).join('') : ''
     const actEl = fiche.querySelector('.enq-act'); actEl.innerHTML = `<b>E</b> — ${esc(act)}`; actEl.classList.toggle('go', !!go)
+    cancel(actTimer); actTimer = 0; actEl.style.visibility = ''
     // phrases de Viktor : la première tout de suite, la suivante après la fin estimée de la précédente + 400 ms
     const rows = [...fiche.querySelectorAll('.enq-line')]
     rows.forEach(r => { untype(r.querySelector('.tx')); r.querySelector('.tx').textContent = ''; r.hidden = true })
@@ -248,6 +249,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
   function closeFiche() {
     const fiche = $('#enq-fiche')
     cancel(lineTimer); lineTimer = 0
+    cancel(actTimer); actTimer = 0; fiche.querySelector('.enq-act').style.visibility = ''
     fiche.querySelectorAll('.enq-line .tx').forEach(untype)
     amb.hush()                              // la réplique s'arrête avec sa fiche (sinon ses bips continuaient)
     fiche.classList.remove('on')
@@ -263,6 +265,11 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
       const p = r.phone, n = p.appels.length
       openFiche({ id, tab: p.titre, lieu: p.lieu, titre: `${n} APPEL${n > 1 ? 'S' : ''} MANQUÉ${n > 1 ? 'S' : ''}`, calls: p.appels, lines: p.viktor, act: p.action, go: true })
       phoneOpenedAt = performance.now()
+      // l'invite ÉCOUTER n'apparaît qu'à la fin de la garde : tant qu'elle est absente, E et le clic sont ignorés,
+      // dès qu'elle est là, ils répondent (aucune touche ne paraît perdue)
+      const actEl = $('#enq-fiche').querySelector('.enq-act')
+      actEl.style.visibility = 'hidden'
+      actTimer = at(LISTEN_GUARD_MS, () => { actTimer = 0; actEl.style.visibility = '' })
       return
     }
     const c = r.clue

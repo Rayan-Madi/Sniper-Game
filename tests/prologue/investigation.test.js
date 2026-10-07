@@ -67,6 +67,7 @@ describe('l\'enquête', () => {
     expect($('#enq-prompt').classList.contains('on')).toBe(true)
     keyE()
     expect($('#enq-fiche').classList.contains('on')).toBe(true)
+    expect(getComputedStyle($('#enq-fiche .enq-act')).visibility).toBe('visible')   // « E : FERMER » tout de suite
     expect($('#enq-fiche').textContent).toMatch(/INDICE 05 \/ 06/)
     expect($('#enq-fiche').textContent).toContain('Tu aurais dû dire oui.')
     expect($('#enq-count').textContent).toMatch(/1\s*\/\s*6/)
@@ -115,13 +116,34 @@ describe('l\'enquête', () => {
     click()                                               // le second clic du double-clic
     await vi.advanceTimersByTimeAsync(400)
     click()                                               // 550 ms après l'ouverture : encore dans la garde de 600 ms
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(150)                // 700 ms après l'ouverture
     expect(onDone).not.toHaveBeenCalled()
-    expect(h.debug.state.mode).toBe('examining')
+    expect(h.debug.state.mode).toBe('examining')          // aucun des trois clics n'a lancé l'écoute
     expect($('#enq-fiche').classList.contains('on')).toBe(true)
-    click()                                               // un clic voulu, plus tard : on écoute
+    click()                                               // 700 ms : la garde est passée, ce clic écoute
+    expect(h.debug.state.mode).toBe('done')
     await vi.advanceTimersByTimeAsync(800)
     expect(onDone).toHaveBeenCalledWith({ result: 'listened' })
+  })
+
+  // Pendant la garde, E et le clic sont ignorés : l'invite n'apparaît qu'à sa fin, pour qu'aucune touche ne paraisse
+  // perdue (une invite affichée répond toujours).
+  it('fiche du téléphone : l\'invite « ÉCOUTER LE MESSAGE » n\'apparaît qu\'à la fin de la garde, et répond aussitôt', async () => {
+    const renderer = fakeRenderer(), camera = new THREE.PerspectiveCamera()
+    const probe = startInvestigation({ renderer, camera, onDone: vi.fn() })
+    const cam = lookAt(probe.debug.apartment, 'telephone'); probe.stop()
+    const h = startInvestigation({ renderer, camera, onDone: vi.fn(), options: { cam, indices: 4 } })
+    h.update(0.016); keyE()
+    const act = $('#enq-fiche .enq-act')
+    expect(act.textContent).toContain('ÉCOUTER LE MESSAGE')
+    expect(getComputedStyle(act).visibility).toBe('hidden')
+    await vi.advanceTimersByTimeAsync(599)
+    expect(getComputedStyle(act).visibility).toBe('hidden')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(getComputedStyle(act).visibility).toBe('visible')
+    keyE()
+    expect(h.debug.state.mode).toBe('done')
+    h.stop()
   })
 
   it('perdre le pointeur ouvre la pause ; « PASSER L\'ENQUÊTE » termine en « skipped »', async () => {
