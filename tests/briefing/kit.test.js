@@ -308,6 +308,50 @@ describe('kit des cinématiques', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
 
+    // Une musique coupée (fin de séquence, changement d'ambiance) s'éteint en fondu, puis son gain est débranché
+    // 2 s plus tard. « Rejouer » et le gel vident le registre des minuteurs du kit : ce débranchement ne doit pas
+    // y vivre, sinon chaque coupure suivie de près d'un « rejouer » laisse un gain branché au maître.
+    const fondues = audio => audio.ctx.createGain.mock.results.map(r => r.value)
+      .filter(g => g.gain.setTargetAtTime.mock.calls.some(([v, , tau]) => v === 0.0001 && tau === 0.4))
+
+    it('une musique coupée moins de 2 s avant « rejouer » est quand même débranchée après son fondu', async () => {
+      const audio = fakeAudio('running')
+      const root = mountScene()
+      createKit({ root, audio }).run({ music: 'tense', beats: [{ min: 1000 }] })
+      await vi.advanceTimersByTimeAsync(1000); await flush()          // fin de séquence : la musique part en fondu
+      const coupees = fondues(audio)
+      expect(coupees).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(500); await flush()
+      expect(coupees[0].disconnect).not.toHaveBeenCalled()            // fondu en cours
+      root.querySelector('#k-replay').click()                         // rejouer 500 ms après la coupure
+      await vi.advanceTimersByTimeAsync(1600); await flush()          // 2,1 s après la coupure
+      expect(coupees[0].disconnect).toHaveBeenCalled()
+    })
+
+    it('une musique coupée peu avant l\'instant du gel est quand même débranchée après son fondu', async () => {
+      const audio = fakeAudio('running')
+      createKit({ root: mountScene(), audio, freeze: 1500 }).run({ music: 'tense', beats: [{ min: 1000 }] })
+      await vi.advanceTimersByTimeAsync(1000); await flush()          // coupure à 1 000 ms, gel à 1 500 ms
+      const coupees = fondues(audio)
+      expect(coupees).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(600); await flush()
+      expect(coupees[0].disconnect).not.toHaveBeenCalled()            // gelé, fondu en cours
+      await vi.advanceTimersByTimeAsync(1500); await flush()          // 2,1 s après la coupure
+      expect(coupees[0].disconnect).toHaveBeenCalled()
+    })
+
+    it('destroy() débranche aussi la musique en fondu, avec le maître, sans laisser de minuteur', async () => {
+      const audio = fakeAudio('running')
+      const K = createKit({ root: mountScene(), audio })
+      K.music('tense')
+      K.destroy()
+      const coupees = fondues(audio)
+      expect(coupees).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(300)
+      expect(coupees[0].disconnect).toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
     // garde-fou (le drapeau `dead` existait déjà) : le fondu de 300 ms ne laisse pas repartir de son
     it('après destroy(), plus aucun nœud sonore n\'est créé, pendant ni après le fondu', async () => {
       const audio = fakeAudio('running')

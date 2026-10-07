@@ -9,7 +9,7 @@ export function createAmbience(audio) {
   const at = (ms, fn) => { const h = setTimeout(() => { timers.delete(h); if (!dead) fn() }, ms); timers.add(h); return h }
   const every = (ms, fn) => { const h = setInterval(() => { if (!dead) fn() }, ms); intervals.add(h); return h }
   const stopEvery = h => { clearInterval(h); intervals.delete(h) }
-  const S = createSound(audio, { at, every, stopEvery })
+  const S = createSound(audio, { every, stopEvery })
   const c = audio && audio.ctx ? audio.ctx : null
   const live = () => !dead && !!c && c.state === 'running'
 

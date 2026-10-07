@@ -8,7 +8,7 @@ const PROG = {
   dread:  [[110, 116.54, 164.81], [103.83, 110, 155.56], [98, 103.83, 146.83], [92.5, 98, 138.59]],
 }
 
-export function createSound(audio, { at, every, stopEvery }) {
+export function createSound(audio, { every, stopEvery }) {
   const c = audio && audio.ctx ? audio.ctx : null
   let master = null, noiseBuf = null, dead = false
   if (c) {
@@ -71,10 +71,14 @@ export function createSound(audio, { at, every, stopEvery }) {
 
   // ── musiques : tense / somber (celles du jeu), dread, pulse (tense + tic d'horloge) ──
   let musicG = null, musicIv = 0, pulseIv = 0
+  // Musiques coupées en fondu, débranchées 2 s plus tard par un minuteur natif : celui du kit serait annulé par
+  // « rejouer » ou par le gel, et le gain resterait branché au maître. destroy() les débranche avec le maître.
+  const fades = new Map()   // gain → minuteur
+  const unplug = g => { clearTimeout(fades.get(g)); fades.delete(g); try { g.disconnect() } catch (e) { /* déjà débranché */ } }
   function music(mode) {
     if (musicIv) { stopEvery(musicIv); musicIv = 0 }
     if (pulseIv) { stopEvery(pulseIv); pulseIv = 0 }
-    if (musicG) { const g = musicG; try { g.gain.setTargetAtTime(0.0001, c.currentTime, 0.4) } catch (e) { /* contexte fermé */ } at(2000, () => g.disconnect()); musicG = null }
+    if (musicG) { const g = musicG; try { g.gain.setTargetAtTime(0.0001, c.currentTime, 0.4) } catch (e) { /* contexte fermé */ } fades.set(g, setTimeout(() => unplug(g), 2000)); musicG = null }
     if (!mode || !ok()) return
     musicG = c.createGain(); musicG.gain.value = 0.0001; musicG.connect(master); musicG.gain.linearRampToValueAtTime(0.5, c.currentTime + 2)
     const chords = PROG[mode] || PROG.tense
@@ -97,7 +101,7 @@ export function createSound(audio, { at, every, stopEvery }) {
     // fondu court plutôt que coupure nette ; le débranchement passe par un minuteur natif, car ceux du kit sont détruits
     const m = master
     try { m.gain.setTargetAtTime(0.0001, c.currentTime, 0.06) } catch (e) { /* contexte fermé */ }
-    setTimeout(() => { try { m.disconnect() } catch (e) { /* déjà débranché */ } }, 300)
+    setTimeout(() => { [...fades.keys()].forEach(unplug); try { m.disconnect() } catch (e) { /* déjà débranché */ } }, 300)
   }
 
   return {

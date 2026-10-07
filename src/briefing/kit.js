@@ -45,7 +45,7 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   const raf = cb => at(16, cb)   // ~60 i/s, minuteur suivi : annulé par destroy() et au gel
   K.at = at
 
-  const S = K.snd = createSound(audio, { at, every, stopEvery })
+  const S = K.snd = createSound(audio, { every, stopEvery })
 
   K.on = (x, c = 'on') => { const e = el(x); if (e) e.classList.add(c); else fail('élément introuvable : ' + x) }
   K.off = (x, c = 'on') => { const e = el(x); if (e) e.classList.remove(c) }
@@ -152,6 +152,8 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   function reset() {
     // Le passage précédent s'arrête net : frappes, repères, attentes, compteurs, ondes (minuteurs suivis). L'habillage
     // du kit, suivi dans le même registre, repart aussitôt : glitch soldé, préchargement, parasites au repos.
+    // Son séquenceur reste suspendu sur une attente sans minuteur : plus rien ne le tient, il est ramassé. Le réveiller
+    // serait pire : la suite de K.speak (stopVoice) couperait la voix du nouveau passage.
     clearAll(); calm(); preload()
     if (freeze === null) idleGlitch()
     K.frozen = false; st.classList.remove('k-frozen'); counters.clear()
@@ -207,7 +209,8 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
 
   K.destroy = () => {
     if (destroyed) return
-    // S.destroy() coupe la musique, ce qui programme un minuteur : il faut annuler les minuteurs APRÈS.
+    // S.destroy() coupe voix et musique en fondu ; ses débranchements passent par des minuteurs natifs, hors du
+    // registre que clearAll() vide ensuite.
     runId++; S.destroy(); clearAll(); destroyed = true
   }
   return K
