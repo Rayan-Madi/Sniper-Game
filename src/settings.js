@@ -1,5 +1,6 @@
 // Paramètres du jeu — persistés dans localStorage
 import { setMasterVolume } from './audio.js'
+import { PRESETS } from './gfx/quality.js'
 
 // Touches PvP par défaut — codes PHYSIQUES (indépendants du layout clavier,
 // donc valables aussi bien en AZERTY qu'en QWERTY).
@@ -13,6 +14,18 @@ const DEFAULTS = {
   volume: 70,        // 0-100
   sensitivity: 100,  // 20-300 (100 = ×1.0)
   invertY: false,
+  // Affichage (spec du lot 1 §4.3 et §4.5)
+  graphics: 'auto',        // 'auto' | 'bas' | 'moyen' | 'haut' (gfx/quality.js)
+  showStats: false,        // panneau de performances (gfx/stats.js), comme ?stats=1
+  reducedMotion: 'auto',   // effets atténués : 'auto' (suit le système) | 'oui' | 'non'
+}
+
+// Valeurs admises des champs d'affichage. Une sauvegarde d'avant le lot 1 ne les a pas ; une valeur inconnue ou d'un
+// autre type (sauvegarde abîmée, version future) reprend la valeur par défaut, sans toucher aux autres réglages.
+const VALID = {
+  graphics: v => PRESETS.includes(v),
+  showStats: v => typeof v === 'boolean',
+  reducedMotion: v => ['auto', 'oui', 'non'].includes(v),
 }
 
 export const settings = { ...DEFAULTS, pvpKeys: { ...DEFAULT_PVP_KEYS } }
@@ -34,6 +47,7 @@ export function loadSettings() {
       const savedPvpKeys = saved.pvpKeys
       Object.assign(settings, saved)
       settings.pvpKeys = { ...DEFAULT_PVP_KEYS, ...savedPvpKeys }
+      for (const [k, ok] of Object.entries(VALID)) if (!ok(settings[k])) settings[k] = DEFAULTS[k]
     }
   } catch (e) { /* ignore */ }
   applySettings()

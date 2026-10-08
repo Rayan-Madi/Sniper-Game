@@ -18,9 +18,9 @@ export function initScene() {
     powerPreference: 'high-performance',   // force le GPU dédié si dispo
   })
   renderer.setSize(innerWidth, innerHeight)
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))   // netteté sur écrans HD
+  // Densité de pixels, taille et type de l'ombre : préréglage graphique (applyRenderQuality, appelée par main.js avant
+  // le premier rendu).
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
   // Rendu "cinéma" : tone mapping filmique (couleurs riches, hautes lumières douces)
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.35
@@ -53,6 +53,26 @@ export function initScene() {
     camera.updateProjectionMatrix()
     renderer.setSize(innerWidth, innerHeight)
   })
+}
+
+// Préréglage graphique appliqué au renderer et au soleil (spec du lot 1 §4.3 ; presetFor dans gfx/quality.js) :
+// densité de pixels multipliée par l'échelle de la résolution dynamique (1 hors Auto), taille et type de l'ombre. Un
+// changement de taille libère la carte d'ombre et la remet à null : three la recrée au rendu suivant. Rien n'est refait
+// quand rien ne change (setPixelRatio redimensionne le canevas) : la boucle peut l'appeler à chaque changement
+// d'échelle. target : le renderer et le soleil du jeu, remplacés par des doublures dans les tests.
+// Type d'ombre : three r185 a déprécié PCFSoftShadowMap. Il le remplace au premier rendu par PCFShadowMap (qui filtre
+// déjà sur un disque de Vogel de rayon shadow.radius), avec un avertissement dans la console. Le jeu le demandait
+// jusqu'ici et rendait donc en PCFShadowMap : 'pcf' et 'pcfsoft' donnent tous deux PCFShadowMap, le rendu d'avant.
+export function applyRenderQuality({ pixelRatio, shadowSize }, scale = 1, target = { renderer, sun }) {
+  const { renderer: r, sun: light } = target
+  const pr = pixelRatio * scale
+  if (r.getPixelRatio() !== pr) r.setPixelRatio(pr)
+  if (r.shadowMap.type !== THREE.PCFShadowMap) r.shadowMap.type = THREE.PCFShadowMap
+  const shadow = light.shadow
+  if (shadow.mapSize.x !== shadowSize || shadow.mapSize.y !== shadowSize) {
+    shadow.mapSize.set(shadowSize, shadowSize)
+    if (shadow.map) { shadow.map.dispose(); shadow.map = null }
+  }
 }
 
 // Règle l'éclairage selon l'ambiance de la map (jour / nuit / intérieur)

@@ -3,7 +3,7 @@ import { scene, camera, renderer } from './scene.js'
 import { buildPvpArena, clearPvpMap, getPvpColliders } from './pvpMap.js'
 import { MAP_BUILDERS } from './maps.js'
 import { spawnCharacter } from './characters.js'
-import { NPC, STATES } from './npc.js'
+import { NPC, STATES, npcShadowMode } from './npc.js'
 import { playPvpIntro, isPvpIntroActive, stopPvpIntro } from './pvpIntro.js'
 import * as net from './net.js'
 import { groundForward, groundRight } from './pvpMath.js'
@@ -11,6 +11,7 @@ import { sensMultiplier, invertY, settings } from './settings.js'
 import { setCampaignPaused } from './main.js'
 import { audioContext, masterNode } from './audio.js'
 import { disposeObject } from './gfx/dispose.js'
+import { npcCastsShadow } from './gfx/quality.js'
 
 // ─── Mode PvP : Sniper vs Contre-tueur ───────────────────────────────
 // Réseau : relais WebSocket pur (voir net.js + server/index.js). Chaque
@@ -467,6 +468,9 @@ function makeCivilianAvatar() {
   const ch = spawnCharacter('civilian')
   const group = new THREE.Group()
   if (ch) group.add(ch.model)   // ← sans ça le groupe reste VIDE = avatar invisible
+  // Ombre : règle des civils, comme la foule (préréglage graphique) ; seul à en avoir une, il serait trouvé sans chercher.
+  const shadow = npcCastsShadow(npcShadowMode(), 'civil')
+  group.traverse(o => { if (o.isMesh && o.castShadow) o.castShadow = shadow })
   const av = ch ? { ...ch, group } : { group, mixer: null, actions: {} }
   scene.add(group)
   return av

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
-import { initScene, scene, camera, renderer, ambient, sun, fill } from './scene.js'
+import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQuality } from './scene.js'
 import { showScope, hideScope, isVisible, setZoom, getZoom, setStress, setSteady, updateTremble, getTrembleOffset, drawScope } from './scope.js'
-import { NPC, STATES } from './npc.js'
+import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
 import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject } from './maps.js'
@@ -21,6 +21,7 @@ import { buildMoralLock, releaseMoralLock } from './campaign/lock.js'
 import { missImpact } from './campaign/impact.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
+import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -54,6 +55,12 @@ let killcamActive = false
 
 // Civil abattu : l'échec tombe 600 ms plus tard. D'ici là, ni pause, ni tir, ni briefing revu.
 let failPending = false
+
+// Préréglage graphique en vigueur (applyQuality) ; résolution dynamique d'Auto (contrôleur et échelle de la densité de
+// pixels), qui ne pilote l'échelle qu'en mission : 1 partout ailleurs.
+let quality = null
+let resolution = null
+let resolutionScale = 1
 
 // Ce que les gardes de phase (campaign/phase.js) doivent savoir de la mission en cours
 const missionPhase = () => ({ phase: gamePhase, killcam: killcamActive, failPending })
@@ -97,6 +104,7 @@ const instruction  = document.getElementById('instruction')
 // ─── Init ──────────────────────────────────────────────────────────
 initScene()
 loadSettings()
+applyQuality()       // préréglage graphique avant la première image (densité de pixels, ombres)
 loadProgress()        // reprend l'histoire là où le joueur s'était arrêté
 const charactersLoading = preloadCharacters()   // charge les .glb configurés (rien si aucun), voir characters.js
 MAP_BUILDERS[0]()     // décor vivant derrière le menu principal (caméra qui dérive)
@@ -237,6 +245,7 @@ function syncSettingsUI() {
   document.getElementById('set-volume-val').textContent = settings.volume + '%'
   document.getElementById('set-sens-val').textContent = (settings.sensitivity / 100).toFixed(2)
   syncKeybindUI()
+  syncDisplayUI()
 }
 volSlider.oninput = () => {
   settings.volume = +volSlider.value
@@ -249,6 +258,28 @@ sensSlider.oninput = () => {
   saveSettings()
 }
 invertChk.onchange = () => { settings.invertY = invertChk.checked; saveSettings() }
+
+// ── Affichage (spec du lot 1 §4.3 et §4.5) ──
+// Qualité (appliquée tout de suite, setGraphics), panneau de performances, effets atténués (réglage enregistré ; le
+// flash, les secousses et les glitchs le suivront avec la tâche L6, qui ajoute aussi le plein écran).
+const choiceGroups = document.querySelectorAll('#settings-display [data-setting]')
+const showStatsChk = document.getElementById('set-showstats')
+function syncDisplayUI() {
+  for (const g of choiceGroups) {
+    for (const b of g.querySelectorAll('[data-value]')) b.setAttribute('aria-pressed', String(settings[g.dataset.setting] === b.dataset.value))
+  }
+  showStatsChk.checked = settings.showStats
+}
+for (const g of choiceGroups) {
+  g.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-value]')
+    if (!b) return
+    if (g.dataset.setting === 'graphics') setGraphics(b.dataset.value)
+    else { settings[g.dataset.setting] = b.dataset.value; saveSettings() }
+    syncDisplayUI()
+  })
+}
+showStatsChk.onchange = () => { settings.showStats = showStatsChk.checked; saveSettings() }
 
 // ── Remappage des touches PvP ──
 // Code physique (e.code) → étiquette lisible. 'Key*'/'Digit*' sont les seuls
@@ -342,7 +373,7 @@ function investigate(onNext, options = {}) {
   import('./prologue/investigation.js')
     .then(m => {
       if (run.ended) return
-      const h = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options: { stats: STATS_URL, ...options } })
+      const h = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options: { stats: STATS_URL || settings.showStats, ...options } })
       if (run.ended) { try { h.stop() } catch (e) { /* déjà démontée */ } return }
       run.handle = h
       gamePhase = 'investigation'
@@ -464,6 +495,7 @@ function startLevel(n) {
 // startLevel l'appelle, la route ?memtest=1 aussi. Le hasard est tiré dans le même ordre qu'avant l'extraction.
 function mountLevel(n) {
   removeMoralLock()
+  applyQuality()   // ombre des personnages pour les PNJ qui suivent, résolution dynamique repartie de 1
 
   currentLevelData = getLevel(n)
 
@@ -612,6 +644,7 @@ function showMenu() {
   missionToken++   // la mission est abandonnée : ses minuteurs de fin (kill-cam, civil abattu) ne doivent plus tomber sur le menu
   unmountLevel()   // PNJ, convoi, cadenas, impacts et effets de la mission quittée
   MAP_BUILDERS[0]()   // la carte de la mission est libérée, la rue revient derrière le menu (comme au démarrage)
+  applyQuality()      // hors mission, la résolution dynamique rend la densité pleine
   hideScope()
   releaseMouse()
   hudEl.style.display = 'none'
@@ -1226,14 +1259,45 @@ function driftMenuCamera(tm) {
   camera.updateProjectionMatrix()
 }
 
-// Panneau de performances (?stats=1) : toutes les phases, PvP compris (sa boucle rend, celle-ci mesure), sauf
-// l'enquête, qui affiche son propre compteur au même endroit. Il relève la dernière image rendue.
+// Préréglage graphique (spec du lot 1 §4.3, gfx/quality.js) : densité de pixels et ombre du soleil (scene.js), ombre
+// des personnages selon leur rôle (npc.js : PNJ créés ensuite, et ceux déjà en scène), résolution dynamique d'Auto
+// remise à 1. Au démarrage, au changement de réglage, à chaque montage de mission et au retour au menu.
+function applyQuality() {
+  quality = presetFor(settings.graphics, window.devicePixelRatio)
+  resolution = quality.dynamic ? createResolutionController({ min: 0.7, max: 1 }) : null
+  resolutionScale = 1
+  applyRenderQuality(quality, resolutionScale)
+  setNpcShadows(quality.npcShadows)
+  for (const npc of npcs) npc.applyShadows(quality.npcShadows)
+}
+
+// Qualité choisie dans les Paramètres : enregistrée et appliquée tout de suite (en pause aussi).
+function setGraphics(name) {
+  settings.graphics = name
+  saveSettings()
+  applyQuality()
+}
+
+// Résolution dynamique (Auto) : nourrie de la durée de chaque image en mission seulement ; la densité de pixels n'est
+// réappliquée que quand l'échelle change (au plus une fois par seconde, voir createResolutionController). La durée est
+// l'écart entre deux appels de requestAnimationFrame : sur un écran à 60 Hz, elle ne descend jamais sous 16,7 ms, donc
+// jamais sous le seuil de remontée (14 ms). Une échelle abaissée y reste jusqu'au prochain montage de mission ou au
+// retour au menu (applyQuality la remet à 1) ; elle remonte en cours de mission sur un écran plus rapide.
+function feedResolution(frameMs, t) {
+  if (!resolution || gamePhase !== 'playing') return
+  const s = resolution.push(frameMs, t)
+  if (s !== resolutionScale) {
+    resolutionScale = s
+    applyRenderQuality(quality, resolutionScale)
+  }
+}
+
+// Panneau de performances (?stats=1 ou réglage « Afficher les performances ») : toutes les phases, PvP compris (sa
+// boucle rend, celle-ci mesure), sauf l'enquête, qui affiche son propre compteur au même endroit. Il relève la
+// dernière image rendue.
 let lastFrameAt = performance.now()
-function syncStatsPanel() {
-  const t = performance.now()
-  const frameMs = t - lastFrameAt
-  lastFrameAt = t
-  const wanted = STATS_URL && gamePhase !== 'investigation'
+function syncStatsPanel(frameMs) {
+  const wanted = (STATS_URL || settings.showStats) && gamePhase !== 'investigation'
   if (wanted && !statsPanel.visible) statsPanel.show()
   else if (!wanted && statsPanel.visible) statsPanel.hide()
   statsPanel.update(frameMs)
@@ -1241,7 +1305,11 @@ function syncStatsPanel() {
 
 function loop() {
   requestAnimationFrame(loop)
-  syncStatsPanel()
+  const frameAt = performance.now()
+  const frameMs = frameAt - lastFrameAt
+  lastFrameAt = frameAt
+  syncStatsPanel(frameMs)
+  feedResolution(frameMs, frameAt)
   if (campaignPaused) return
   // timeScale < 1 pendant la kill-cam (ralenti)
   const dt = Math.min(clock.getDelta(), 0.05) * timeScale
@@ -1402,7 +1470,10 @@ if (import.meta.env.DEV) {
       setCampaignPaused(true)   // seuls les rendus de la mesure comptent
       const pre = document.createElement('pre')
       pre.id = 'memtest'
-      pre.dataset.qualite = q.get('qualite') || ''
+      // &qualite=bas : préréglage de la mesure (triangles de M6 en Bas, en Moyen), pas enregistré. Le <pre> porte le
+      // préréglage effectif ('auto' sans paramètre, dans un profil neuf) : scripts/memtest.mjs en tire ses seuils.
+      if (PRESETS.includes(q.get('qualite'))) { settings.graphics = q.get('qualite'); applyQuality() }
+      pre.dataset.qualite = settings.graphics
       pre.style.cssText = `position:fixed;top:0;right:0;z-index:2000;max-height:100vh;overflow:auto;margin:0;padding:8px;
         background:rgba(0,0,0,0.85);color:#c8f0c8;font:10px/1.3 'Courier New',monospace;`
       document.body.appendChild(pre)

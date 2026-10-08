@@ -225,7 +225,9 @@
       border-radius: 6px;
       padding: 18px 26px;
       display: flex; flex-direction: column; gap: 14px;
-      min-width: 420px;
+      /* Même largeur pour tous les blocs : celui de l'affichage (quatre choix de qualité et leur aide) en demande plus
+         que les 420 px d'avant, une colonne de largeurs inégales ferait désordre. */
+      width: 520px; max-width: calc(100vw - 32px);
     }
     .settings-title {
       font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase;
@@ -246,6 +248,19 @@
     }
     .settings-row input[type=checkbox] { width: 16px; height: 16px; accent-color: #4eff4e; }
     .set-val { font-size: 12px; color: #ffd44e; text-align: right; }
+    /* Affichage : choix parmi quelques valeurs (puces du remappage des touches ; la valeur retenue en jaune, comme
+       les valeurs des curseurs), aide d'une ligne sous le réglage qu'elle explique. */
+    .settings-row.settings-choice { grid-template-columns: 160px 1fr; }
+    .choices { display: flex; flex-wrap: wrap; gap: 6px; }
+    .choice {
+      background: rgba(200,240,200,0.08); border: 1px solid rgba(200,240,200,0.25);
+      border-radius: 4px; padding: 3px 12px; cursor: pointer; min-width: 44px;
+      font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 0.08em; color: #c8f0c8;
+    }
+    .choice:hover { background: rgba(78,255,78,0.15); border-color: #4eff4e; color: #4eff4e; }
+    .choice[aria-pressed="true"] { background: rgba(255,212,78,0.14); border-color: #ffd44e; color: #ffd44e; }
+    .choice:focus-visible, .settings-row input:focus-visible { outline: 2px solid #ffd44e; outline-offset: 2px; }
+    .settings-hint { font-size: 11px; color: rgba(200,240,200,0.6); margin: -8px 0 0 174px; line-height: 1.4; }
     .keymap {
       display: flex; justify-content: space-between; gap: 30px;
       font-size: 12px; color: rgba(200,240,200,0.7);
@@ -471,6 +486,34 @@
         <input type="checkbox" id="set-inverty">
         <span class="set-val"></span>
       </div>
+    </div>
+
+    <div class="settings-group" id="settings-display">
+      <div class="settings-title">Affichage</div>
+      <div class="settings-row settings-choice">
+        <span id="set-graphics-label">Qualité</span>
+        <div class="choices" role="group" aria-labelledby="set-graphics-label" data-setting="graphics">
+          <button type="button" class="choice" data-value="auto" aria-pressed="false">AUTO</button>
+          <button type="button" class="choice" data-value="bas" aria-pressed="false">BAS</button>
+          <button type="button" class="choice" data-value="moyen" aria-pressed="false">MOYEN</button>
+          <button type="button" class="choice" data-value="haut" aria-pressed="false">HAUT</button>
+        </div>
+      </div>
+      <div class="settings-hint">Auto : qualité moyenne, résolution abaissée en mission si les images ralentissent.</div>
+      <div class="settings-row">
+        <label for="set-showstats">Afficher les performances</label>
+        <input type="checkbox" id="set-showstats">
+        <span class="set-val"></span>
+      </div>
+      <div class="settings-row settings-choice">
+        <span id="set-motion-label">Effets atténués</span>
+        <div class="choices" role="group" aria-labelledby="set-motion-label" data-setting="reducedMotion">
+          <button type="button" class="choice" data-value="auto" aria-pressed="false">AUTO</button>
+          <button type="button" class="choice" data-value="oui" aria-pressed="false">OUI</button>
+          <button type="button" class="choice" data-value="non" aria-pressed="false">NON</button>
+        </div>
+      </div>
+      <div class="settings-hint">Flash du tir, secousses et glitchs adoucis. Auto suit les animations du système.</div>
     </div>
 
     <div class="settings-group">

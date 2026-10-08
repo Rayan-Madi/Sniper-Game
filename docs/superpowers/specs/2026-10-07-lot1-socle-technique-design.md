@@ -94,6 +94,8 @@ reducedMotion: 'auto',   // 'auto' (suit le système) | 'oui' | 'non'
 
 L'anticrénelage reste actif (il ne se change qu'en recréant le renderer). Un changement de préréglage s'applique immédiatement (densité, taille et type d'ombre : la carte d'ombre est recréée par `sun.shadow.map.dispose()` puis `null`).
 
+Écarts de L4 : three r185 a déprécié `PCFSoftShadowMap`, qu'il remplace au premier rendu par `PCFShadowMap` avec un avertissement dans la console. Le jeu rendait donc déjà en `PCFShadowMap`, et tous les préréglages l'utilisent : Haut rend exactement comme avant le lot (captures identiques à l'octet). « Cibles et gardes » s'entend des personnages qui se montrent comme tels : le commanditaire de M6 (modèle de la foule, sans marqueur) et l'avatar du contre-tueur en PvP suivent la règle des civils, sinon leur ombre les distinguerait de la foule en Moyen.
+
 **Personnages écartés hors champ.** `characters.js` force aujourd'hui `frustumCulled = false` (les maillages animés sortent de leur sphère englobante et clignotaient). Correction : chaque instance reçoit une sphère englobante généreuse calculée une fois (centre à mi-hauteur, rayon égal à 1,25 fois la hauteur d'ajustement), posée sur le `SkinnedMesh` cloné, puis `frustumCulled = true`. Test : la sphère contient la boîte de la pose de repos et celle de l'image la plus étendue du clip de marche (échantillonné), avec une marge. Écart de L3 : le rayon prévu, 0,75 fois la hauteur, couvre la marche mais pas les autres clips joués ; mesuré sommet par sommet sur les sept modèles, Dance (la foule de M6 et du PvP) en sortait de 43 cm, Death (le corps reste 8 s) de 78 cm, Look de quelques millimètres. À 1,25, tous les clips joués tiennent avec au moins 11 cm de marge, et le test échantillonne aussi une mort qui recule et finit couchée.
 
 **Interface** : l'écran Paramètres gagne une section « Affichage » : Qualité (Auto, Bas, Moyen, Haut), Afficher les performances, Effets atténués (Auto, Oui, Non), Plein écran. Mêmes composants que les réglages existants, libellés sans tiret cadratin.
@@ -135,6 +137,8 @@ Quand un briefing se joue avant une mission, la carte de la mission est montée 
 | Général | `npx vitest run` vert ; `npx vite build` sans erreur ; aucune régression visuelle sur les captures de M1, M3, M5, M6 et d'une cinématique comparées avant et après |
 
 Relecture de L3 : le critère « partie complète » ne peut pas tenir tel qu'écrit, le menu de départ n'ayant dessiné aucun personnage alors que les ressources des modèles GLB (partagées) restent au GPU après leur premier dessin. Reformulation proposée dans la tâche L8 du plan, à acter par le porteur de la spec ; le critère ci-dessus reste celui en vigueur d'ici là.
+
+Relecture de L4 : le seuil Bas des triangles de M6 (0,8 M) ne peut pas tenir avec les leviers de ce lot. En Bas, plus aucun personnage ne projette d'ombre, et les 27 PNJ de M6, tous dans le champ à la vue de départ, font à eux seuls 1,33 M triangles ; la carte en fait moins de 3 000 (mesure du 9 octobre 2026, README des annexes). Seuls des niveaux de détail des foules (lot poids) feraient descendre ce chiffre. Le seuil Moyen (1,5 M) tient : 1,42 M. Reformulation proposée dans la tâche L8 du plan, à acter par le porteur de la spec.
 
 ## 7. Risques
 

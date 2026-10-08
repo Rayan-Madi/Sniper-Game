@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { parseSync } from 'vite'
+import { MAIN_SRC as SRC, analyse, callsIn } from './mainSource.js'
 
 // Câblage de la libération dans main.js (spec du lot 1 §4.2). main.js ne s'importe pas sous jsdom (canevas WebGL, DOM
 // du jeu) : les aides (lock.js, convoy.js, effects.js, maps.js) ont leurs propres tests, ce fichier garde leurs points
@@ -9,8 +7,6 @@ import { parseSync } from 'vite'
 // appelée doit venir du bon module (pas d'une copie locale qui ne libérerait rien). Sans cette garde, retirer
 // removeMoralLock() d'unmountLevel ou MAP_BUILDERS[0]() de showMenu ne ferait rougir aucun test : seuls le memtest et
 // la capture retour<n> le verraient, à la main.
-
-const SRC = readFileSync(resolve(__dirname, '../../src/main.js'), 'utf8')
 
 // Ce que main.js doit importer, et d'où.
 const IMPORTS = {
@@ -39,35 +35,6 @@ const CALLS = [
   ['resolveBullet', 'removeMoralLock'],   // cadenas tiré
   ['resolveBullet', 'spawnBulletHole'],   // tir manqué : trou sur la géométrie et le matériau partagés
 ]
-
-function analyse(source) {
-  const { program, errors } = parseSync('main.js', source)
-  if (errors.length) throw new Error(`main.js : analyse impossible (${errors[0].message})`)
-  const fns = new Map(), imports = new Map()
-  for (const n of program.body) {
-    if (n.type === 'FunctionDeclaration') fns.set(n.id.name, n)
-    if (n.type === 'ImportDeclaration') for (const s of n.specifiers) imports.set(s.local.name, { from: n.source.value, node: s })
-  }
-  return { source, fns, imports }
-}
-
-// Appels faits dans le corps d'une fonction (fonctions imbriquées comprises), dans l'ordre du source, avec le texte de
-// l'appelé : 'removeMoralLock', 'MAP_BUILDERS[0]'. null si main.js n'a pas de fonction de ce nom.
-function callsIn(a, name) {
-  const fn = a.fns.get(name)
-  if (!fn) return null
-  const out = []
-  const walk = node => {
-    if (Array.isArray(node)) return node.forEach(walk)
-    if (!node || typeof node !== 'object') return
-    if (node.type === 'CallExpression') {
-      out.push({ callee: a.source.slice(node.callee.start, node.callee.end), start: node.start, end: node.end })
-    }
-    for (const k in node) if (k !== 'parent') walk(node[k])
-  }
-  walk(fn.body)
-  return out.sort((x, y) => x.start - y.start)
-}
 
 function wiringFaults(source) {
   const a = analyse(source)

@@ -3,6 +3,14 @@ import { scene } from './scene.js'
 import { spawnCharacter, animateRig } from './characters.js'
 import { getObstacles } from './maps.js'
 import { disposeObject } from './gfx/dispose.js'
+import { npcCastsShadow } from './gfx/quality.js'
+
+// Ombre des personnages (préréglage graphique, spec du lot 1 §4.3) : 'tous', 'cibles-gardes' ou 'aucun'. main.js le pose
+// (applyQuality) avant de monter une mission ; il vaut pour les PNJ créés ensuite, applyShadows le reporte sur ceux
+// qui sont déjà en scène. 'tous' par défaut : le rendu d'avant le lot 1.
+let shadowMode = 'tous'
+export function setNpcShadows(mode) { shadowMode = mode }
+export function npcShadowMode() { return shadowMode }
 
 // Durée (s de jeu) pendant laquelle le corps d'un PNJ abattu reste à terre.
 const BODY_TIME = 8
@@ -209,6 +217,12 @@ export class NPC {
       this.mesh = makePerson(color, isTarget, isGuard, { hideMarker, hat, female })
     }
     this.mesh.position.set(x, groundY, z)   // les pieds sur le sol de la carte, pas sous la dalle
+    // Ombre : rôle visible du personnage. Le commanditaire de M6 (modèle de la foule) a celui des civils, sinon son
+    // ombre le distinguerait des danseurs quand seules les cibles et les gardes en ont une.
+    this.shadowRole = isGuard ? 'garde' : (isTarget && modelType !== 'civilian') ? 'cible' : 'civil'
+    this._shadowCasters = []
+    this.mesh.traverse(o => { if (o.isMesh && o.castShadow) this._shadowCasters.push(o) })
+    this.applyShadows(shadowMode)
     scene.add(this.mesh)
 
     this.state        = lockState || STATES.WALK
@@ -544,6 +558,13 @@ export class NPC {
     const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.mesh.rotation)
     const angle = Math.acos(Math.max(-1, Math.min(1, toShooter.dot(fwd)))) * (180 / Math.PI)
     return angle < (this.levelData?.guardFOV || 70) / 2
+  }
+
+  // Ombre selon le mode (npcCastsShadow) : seuls les maillages qui en projetaient une à la création (corps du modèle,
+  // membres du modèle procédural) sont concernés, jamais les marqueurs ni les yeux.
+  applyShadows(mode) {
+    const on = npcCastsShadow(mode, this.shadowRole)
+    for (const m of this._shadowCasters) m.castShadow = on
   }
 
   // Retire le PNJ de la scène et libère ce qu'il possède (spec du lot 1 §4.2) : son clone (un squelette par maillage

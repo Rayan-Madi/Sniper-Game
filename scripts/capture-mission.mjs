@@ -10,7 +10,8 @@
 //   (pause, MENU ; MENU de l'écran d'échec si une cible a fui) → shots/<dossier>/retour-m<n>.png. Le décor de la
 //   scène (__decor() : fond, objets hors carte) est affiché avant et après le retour.
 // Variables : CHROME (chemin de Chrome), BASE_URL (défaut http://localhost:5173/), IMAGES (défaut 20),
-// GPU=1 (carte graphique au lieu du rendu logiciel), PARAMS (ajoutés à l'URL, ex. stats=1).
+// GPU=1 (carte graphique au lieu du rendu logiciel), PARAMS (ajoutés à l'URL, ex. stats=1), QUALITE (préréglage
+// graphique enregistré dans le profil jetable : auto, bas, moyen, haut ; sans elle, celui d'un premier lancement, Auto).
 // Le port DevTools est choisi par Chrome (--remote-debugging-port=0, relu dans DevToolsActivePort) : jamais un port
 // fixe, qui pourrait désigner le navigateur d'une autre session. Profil jetable, supprimé à la fin.
 import { spawn } from 'node:child_process'
@@ -131,6 +132,7 @@ async function shoot(target) {
     const retour = /^retour(\d)$/.exec(target)
     const n = target === 'menu' ? 1 : retour ? +retour[1] : +target
     await js(c, `localStorage.setItem('sniper-save', ${JSON.stringify(JSON.stringify(saveAt(n)))})`)
+    if (process.env.QUALITE) await js(c, `localStorage.setItem('sniper-settings', ${JSON.stringify(JSON.stringify({ graphics: process.env.QUALITE }))})`)
     await c.send('Page.enable')
     await c.send('Runtime.enable')
     await c.send('Page.addScriptToEvaluateOnNewDocument', { source: DETERMINISME })

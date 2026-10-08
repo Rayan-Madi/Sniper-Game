@@ -166,3 +166,25 @@ describe('QUITTER et nouveau décor', () => {
     expect(crowdLeft).toEqual([])
   })
 })
+
+// Ombre des personnages (spec du lot 1 §4.3, tâche L4) : la foule est faite de civils, et l'avatar du contre-tueur doit
+// s'y fondre. Il suit donc la règle des civils : en Moyen (cibles et gardes seulement), ni la foule ni lui ne
+// projettent d'ombre ; en Haut, tous. Sinon, seul à avoir une ombre, il serait trouvé sans chercher.
+describe('ombre de la foule et de l\'avatar', () => {
+  const skinned = objs => { const out = []; for (const o of objs) o.traverse(m => { if (m.isSkinnedMesh) out.push(m) }); return out }
+  for (const [mode, expected] of [['cibles-gardes', false], ['aucun', false], ['tous', true]]) {
+    for (const role of ['sniper', 'pnj']) {
+      it(`mode ${mode}, rôle ${role} : ${expected ? 'tous projettent leur ombre' : 'personne ne projette d\'ombre'}`, async () => {
+        ;(await import('../../src/npc.js')).setNpcShadows(mode)
+        const added = addedBy(() => pvp.buildRoundScene(4242, role))
+        const avatar = skinned([avatarGroup(added)])
+        const crowd = skinned(added.slice(0, -1))
+        expect(avatar.length).toBeGreaterThan(0)
+        expect(crowd.length).toBeGreaterThan(54)
+        expect(avatar.map(m => m.castShadow)).toEqual(avatar.map(() => expected))
+        expect(crowd.filter(m => m.castShadow !== expected)).toEqual([])
+        pvp.releaseRoundScene()
+      })
+    }
+  }
+})

@@ -38,6 +38,8 @@ node scripts/memtest.mjs --images=5 --qualite=bas                      # images 
 
 Variables : `CHROME` (chemin de Chrome), `BASE_URL` (défaut `http://localhost:5173/`), `BUDGET_MS` (budget de temps virtuel de Chrome, défaut 1 200 000 ; la mesure prend environ 3 min 30 en temps réel). Sans `--qualite`, les seuils de triangles sont ceux du préréglage Moyen.
 
+Depuis la tâche L4, `--qualite` (`auto`, `bas`, `moyen`, `haut`) est appliqué par la route le temps de la mesure, sans être enregistré ; `data-qualite` du `<pre>` porte le préréglage effectif. Sans `--qualite`, la route mesure celui d'un premier lancement, Auto : les paramètres de Moyen, la résolution dynamique ne tournant pas (la route ne passe pas par la boucle du jeu). Une seule mesure à la fois : trois lancées ensemble se partagent le processeur, épuisent le budget de temps virtuel avant la fin et écrivent leur résultat sous le même nom de fichier.
+
 ### Référence d'avant correction (`2026-10-07-memtest-reference.json`)
 
 Relevée le 7 octobre 2026 sur `b8b3f4b` plus l'instrumentation de la tâche L1 (panneau, route, script), avant toute libération de ressource. `--check` y trouve 4 seuils dépassés sur 5 : c'est l'état à corriger.
@@ -84,6 +86,25 @@ Mesure du 8 octobre 2026 sur `129e7f5` plus la correction de l'étape `menu-fina
 - **Du menu au retour de campagne, +38 géométries et +29 textures** : ce sont exactement les ressources des sept modèles GLB, comptées dans les fichiers (primitives des maillages, textures référencées par les matériaux) : `gangster_man_01` 9 et 4, `mafia_boss` 2 et 2, `mafia_woman_01` 7 et 4, `mafia_henchman` 2 et 7, `gangster_man_02` 5 et 3, `mafia_woman_02` 7 et 4, `mafia_woman_03` 6 et 5. Marquées partagées au chargement, elles partent au GPU la première fois qu'un personnage les dessine et y restent pour toute la session, voulu (spec §4.2). Le menu de départ n'a dessiné aucun personnage : le critère « partie complète » du §6 (géométries ≤ menu + 2 %, textures ≤ menu + 2) ne peut donc pas tenir tel qu'écrit. Reformulation proposée pour L8 : ligne L8 du plan.
 - **`menu-final`, +2 géométries (449) jusqu'à cette correction** : depuis L2, l'étape portait 449 géométries, 542 appels et 10 452 triangles, contre 447, 540 et 10 506 aux autres étapes menu. Pas un modèle : les sept sont déjà tous dessinés à `menu-campagne` (les 38 géométries sont toutes les leurs) et le PvP n'en charge pas d'autre. La cause était la route : le bouton QUITTER (`quitToMenu`) reconstruit la rue avec le début de la suite à graine du menu, puis `showMenu` la libère et en reconstruit une autre avec la suite. Cette seconde rue a autant de géométries (466 dans les deux cas, comptées sous jsdom) mais d'autres tirages (fenêtres allumées et leurs linteaux, place et taille des arbres) : à la vue du menu, elle dessine 2 objets de plus (542 appels), donc envoie 2 géométries de plus au GPU (le renderer n'envoie que ce qu'il dessine). Avant L2, `showMenu` ne reconstruisait pas la rue et l'écart n'existait pas. Depuis la relecture de L3, `showMenu` tire à nouveau la graine du menu : `menu-final` est identique à `menu-campagne` et à `menu-m6` à l'unité près, ce qui montre aussi que l'arène, la foule, les avatars, le laser et le pistolet du PvP ne laissent rien derrière eux.
 
+### Après la tâche L4 (réglages graphiques)
+
+Mesures du 9 octobre 2026 sur `1883d77` plus la tâche L4 (`shots/memtest-2026-10-08T23-03-30.json` en Moyen, `shots/memtest-2026-10-08T23-08-04.json` en Bas, dossier local, horodatage en UTC). Géométries, textures et Δ des relances sont ceux d'après L3, à l'unité près, dans les deux préréglages ; seuls changent les programmes (ombres en moins, donc moins de variantes de shaders), les appels et les triangles.
+
+| Vue de départ | Haut (rendu d'avant L4) | Moyen | Bas |
+|---|---|---|---|
+| M1 | 630 appels, 567 572 | 608, 386 303 | 599, 289 249 |
+| M2 | 411, 890 404 | 382, 642 205 | 364, 448 097 |
+| M3 | 179, 799 412 | 156, 606 084 | 139, 400 884 |
+| M4 | 241, 1 103 970 | 212, 855 771 | 186, 553 517 |
+| M5 | 297, 486 082 | 297, 486 082 | 280, 245 961 |
+| M6 | 442, 2 657 836 | 294, **1 422 955** | 290, **1 330 361** |
+| pvp-1 à pvp-5 | 770, 5 494 500 | 445, 2 748 345 | 445, 2 748 345 |
+
+- **Haut** rend exactement comme avant L4 : compteurs identiques à ceux de la mesure d'après L3 (`shots/memtest-2026-10-07T23-41-50.json`) sur les 23 étapes relevées (la mesure en Haut, lancée en même temps que deux autres, s'est arrêtée à `pvp-4`, faute de temps virtuel), et captures du menu, de M1, M3, M5 et M6 identiques à l'octet près à celles de L3 (`shots/l4-haut/` contre `shots/l3/`). En M5, Moyen rend comme Haut : le convoi n'a que des cibles et des gardes, qui gardent leur ombre en Moyen (capture identique à l'octet aussi).
+- **Seuil Moyen de M6 (≤ 1,5 M) : tenu**, 1 422 955.
+- **Seuil Bas de M6 (≤ 0,8 M) : dépassé**, 1 330 361. Décomposition relevée dans le jeu (M6 lancée par le menu, 20 images, Chrome sans interface) : les 27 PNJ sont tous dans le champ à la vue de départ, leurs 156 maillages animés font 1 333 420 triangles à eux seuls, la carte moins de 3 000 (1 878 sans ombre). En Bas, plus aucun personnage ne projette d'ombre et la passe d'ombre ne compte plus qu'un millier de triangles : il ne reste que la géométrie propre des personnages, que seuls des niveaux de détail des foules réduiraient (lot poids, hors de ce lot). Le « (ombres des personnages coupées) » du §6 supposait que couper ces ombres suffirait ; la mesure dit que non. Reformulation à acter par le porteur de la spec : tâche L8 du plan.
+- **Sphère d'instance, rayon 1,25 contre 0,75** (écart de L3 au §4.3 de la spec) : mesure refaite en Moyen et en Bas avec un rayon de 0,75 le temps de deux mesures (`shots/memtest-2026-10-08T23-14-00.json` et `…T23-19-19.json`, jamais commité). Les 25 étapes sont identiques à l'unité près (géométries, textures, programmes, appels, triangles) : aux vues de départ des six missions et de l'arène, aucun personnage n'est assez près du bord du champ pour que le rayon change quoi que ce soit. Le rayon de 1,25 ne coûte donc rien à ces vues ; il évite les personnages coupés en bord d'écran quand on vise ailleurs.
+
 ## Captures déterministes (`scripts/capture-mission.mjs`)
 
 Pour comparer deux versions du code image par image, à la vue de départ d'une mission ou sur le menu : `Math.random` à graine, `requestAnimationFrame` et `performance.now` pilotés à la main (20 images de 1/60 s), minuteurs du jeu de 1 s et plus sur cette même horloge (aide de 5 s, indice du cadenas), fondus CSS figés, rendu logiciel SwiftShader. Même code : mêmes octets PNG, vérifié sur deux passes.
@@ -92,6 +113,8 @@ Pour comparer deux versions du code image par image, à la vue de départ d'une 
 node scripts/capture-mission.mjs avant-lot1 menu 1 2 3 4 5 6   # shots/avant-lot1/menu.png, m1.png … m6.png
 cmp shots/avant-lot1/m3.png shots/apres-l1/m3.png              # comparaison à l'octet près
 ```
+
+`QUALITE=bas` (ou `auto`, `moyen`, `haut`) enregistre ce préréglage dans le profil jetable avant le lancement. Sans elle, le jeu part du préréglage d'un premier lancement, Auto, qui rend comme Moyen à la vue de départ : depuis la tâche L4, une capture sans `QUALITE` n'est donc plus le rendu d'avant le lot. Pour comparer avec les captures d'avant L4, prendre `QUALITE=haut`.
 
 `GPU=1` rend sur la carte graphique (plus rapide) ; deux sessions peuvent alors différer d'un niveau de couleur sur quelques pixels (shaders compilés par le pilote) : pour une comparaison à l'octet, rester en SwiftShader.
 
