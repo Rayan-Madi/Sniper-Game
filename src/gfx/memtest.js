@@ -42,8 +42,10 @@ export function seedOf(step) {
   return 7
 }
 
-// Compteurs du renderer (three r185 : renderer.info) et tas JS de Chrome (performance.memory), null ailleurs.
-export function measure(info, memory) {
+// Compteurs du renderer (three r185 : renderer.info) et tas JS de Chrome (performance.memory), null ailleurs. models :
+// géométries et textures des modèles chargés (characters.js, modelResources), publiées avec le relevé : le critère
+// « partie complète » les ajoute au menu de départ (spec du lot 1, §6 reformulé le 9 octobre 2026, §8).
+export function measure(info, memory, models) {
   return {
     geometries: info.memory.geometries,
     textures: info.memory.textures,
@@ -51,6 +53,7 @@ export function measure(info, memory) {
     appels: info.render.calls,
     triangles: info.render.triangles,
     tasMo: memory ? Math.round(memory.usedJSHeapSize / 1e6) : null,
+    ...(models ? { geometriesModeles: models.geometries, texturesModeles: models.textures } : {}),
   }
 }
 

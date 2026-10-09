@@ -153,17 +153,17 @@ Relecture de L7, actée le 9 octobre 2026 (§8) :
 |---|---|
 | Niveau 1 | 100 % des ressources possédées libérées ; 0 ressource partagée libérée |
 | Niveau 2 | Δ géométries = 0 et Δ textures = 0 après chaque cycle |
-| Chrome réel, partie complète (menu, M1 à M6, menu) | géométries ≤ référence du menu + 2 % ; textures ≤ référence du menu + 2 |
+| Chrome réel, partie complète (menu, M1 à M6, menu) | géométries de `menu-campagne` ≤ géométries de `menu` + 2 % + géométries des modèles ; textures de `menu-campagne` ≤ textures de `menu` + 2 + textures des modèles ; `menu-m6` et `menu-final` identiques à `menu-campagne` (Δ = 0, géométries et textures). Nombres des modèles (géométries et textures distinctes des modèles chargés, marquées partagées) relevés par la route et publiés dans le JSON, jamais écrits en dur |
 | Chrome réel, 10 montages de M6 | Δ = 0 entre le 2ᵉ et le 10ᵉ (géométries, textures, programmes) |
 | Chrome réel, PvP | Δ = 0 après la 1re arène |
-| Triangles rendus en M6, vue de départ | Moyen ≤ 1,5 M ; Bas ≤ 0,8 M (ombres des personnages coupées) |
+| Triangles rendus en M6, vue de départ | Moyen ≤ 1,5 M ; Bas ≤ 1,4 M (géométrie des personnages seule, aucune ombre de personnage) ; 0,8 M en Bas : objectif du lot poids (niveaux de détail des foules) |
 | Chargement | aucune mission ni manche ne démarre avec des PNJ procéduraux si les modèles sont encore en cours de chargement (test sur `launchLevel` extrait) |
 | Confort | les trois réglages d'effets atténués changent bien l'opacité du flash et les appels de secousse (tests) |
 | Général | `npx vitest run` vert ; `npx vite build` sans erreur ; aucune régression visuelle sur les captures de M1, M3, M5, M6 et d'une cinématique comparées avant et après |
 
-Relecture de L3 : le critère « partie complète » ne peut pas tenir tel qu'écrit, le menu de départ n'ayant dessiné aucun personnage alors que les ressources des modèles GLB (partagées) restent au GPU après leur premier dessin. Reformulation proposée dans la tâche L8 du plan, actée le 9 octobre 2026 (§8) ; le critère ci-dessus reste celui en vigueur d'ici là.
+Relecture de L3 : le critère « partie complète » ne peut pas tenir tel qu'écrit, le menu de départ n'ayant dessiné aucun personnage alors que les ressources des modèles GLB (partagées) restent au GPU après leur premier dessin. Reformulation proposée dans la tâche L8 du plan, actée le 9 octobre 2026 (§8) et reportée dans le tableau ci-dessus à la tâche L8 (critère d'origine : géométries ≤ référence du menu + 2 % ; textures ≤ référence du menu + 2).
 
-Relecture de L4 : le seuil Bas des triangles de M6 (0,8 M) ne peut pas tenir avec les leviers de ce lot. En Bas, plus aucun personnage ne projette d'ombre, et les 27 PNJ de M6, tous dans le champ à la vue de départ, font à eux seuls 1,33 M triangles ; la carte en fait moins de 3 000 (mesure du 9 octobre 2026, README des annexes). Seuls des niveaux de détail des foules (lot poids) feraient descendre ce chiffre. Le seuil Moyen (1,5 M) tient : 1,42 M. Reformulation proposée dans la tâche L8 du plan, actée le 9 octobre 2026 (§8).
+Relecture de L4 : le seuil Bas des triangles de M6 (0,8 M) ne peut pas tenir avec les leviers de ce lot. En Bas, plus aucun personnage ne projette d'ombre, et les 27 PNJ de M6, tous dans le champ à la vue de départ, font à eux seuls 1,33 M triangles ; la carte en fait moins de 3 000 (mesure du 9 octobre 2026, README des annexes). Seuls des niveaux de détail des foules (lot poids) feraient descendre ce chiffre. Le seuil Moyen (1,5 M) tient : 1,42 M. Reformulation proposée dans la tâche L8 du plan, actée le 9 octobre 2026 (§8) et reportée dans le tableau ci-dessus à la tâche L8 (seuil d'origine : Bas ≤ 0,8 M, ombres des personnages coupées).
 
 ## 7. Risques
 

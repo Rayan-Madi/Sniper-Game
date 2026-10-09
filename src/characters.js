@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { markShared } from './gfx/dispose.js'
+import { markShared, sharedResources } from './gfx/dispose.js'
 import { progressOf } from './campaign/loading.js'
 
 // ─── Chargement de personnages 3D (.glb) ────────────────────────────
@@ -62,6 +62,14 @@ export function hasModel(type) { return !!cache[type] }
 
 // URL des modèles chargés pour un type, dans l'ordre du pool (relecture, tests).
 export function poolUrls(type) { return (cache[type] || []).map(p => p.cfg.url) }
+
+// Ressources des modèles chargés (géométries et textures distinctes, marquées partagées) : le renderer les garde pour
+// la session dès qu'un personnage les a dessinées. Relevées par la route ?memtest=1 et publiées avec chaque relevé :
+// le critère « partie complète » les ajoute au menu de départ (spec du lot 1, §6 reformulé le 9 octobre 2026, §8), sans
+// nombre écrit en dur qu'un modèle ajouté ou compressé fausserait.
+export function modelResources() {
+  return sharedResources(Object.values(cache).flat().map(p => p.scene))
+}
 
 // Liste des variantes d'un type, chacune avec sa config (héritée du type)
 function variantsFor(type, cfg) {

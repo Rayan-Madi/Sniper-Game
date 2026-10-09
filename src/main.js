@@ -8,7 +8,7 @@ import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject } from './maps.js
 import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
 import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
-import { preloadCharacters, charactersReady, charactersProgress, charactersSettled } from './characters.js'
+import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
 import { fovFor, aimAngles } from './aim.js'
@@ -1639,9 +1639,11 @@ if (import.meta.env.DEV) {
         for (let i = 2; i < images; i++) renderer.render(scene, camera)
         return { premiereImageMs, programmesPremiereImage, imageSuivanteMs, programmesImagesSuivantes: programsSince(apres) }
       }
+      // Avec chaque relevé, les géométries et textures des modèles chargés (critère « partie complète » de
+      // scripts/memtest.mjs : jamais un nombre écrit en dur).
       const snapshot = () => {
         if (typeof window.gc === 'function') window.gc()   // Chrome lancé avec --js-flags=--expose-gc
-        return measure(renderer.info, performance.memory)
+        return measure(renderer.info, performance.memory, modelResources())
       }
       const report = (entries, state) => { pre.textContent = JSON.stringify(entries, null, 1); document.title = 'memtest:' + state }
       await runMemtest({ steps: memtestSteps(), act, render, snapshot, report })

@@ -101,6 +101,42 @@ describe('modèles GLB : chargés une fois, partagés', () => {
   })
 })
 
+// Ce que le critère « partie complète » ajoute au menu de départ (spec du lot 1 §6, reformulé le 9 octobre 2026, §8) :
+// les ressources des modèles chargés, que la route ?memtest=1 relève et publie au lieu d'un nombre écrit en dur.
+describe('modelResources : ressources des modèles chargés, gardées pour la session', () => {
+  it('géométries et textures distinctes des sept modèles chargés', () => {
+    const res = glbResources()
+    const geometries = new Set(res.filter(r => r.isBufferGeometry)).size
+    const textures = new Set(res.filter(r => r.isTexture)).size
+    expect([geometries, textures]).toEqual([7 * 2, 7 * 3])   // faux modèle : deux maillages, trois textures
+    expect(characters.modelResources()).toEqual({ geometries, textures })
+  })
+
+  it('aucun modèle chargé : rien', async () => {
+    await load({ models: false })
+    expect(characters.modelResources()).toEqual({ geometries: 0, textures: 0 })
+  })
+
+  // Chaque modèle dessiné (teinte blanche, qui garde les matériaux du modèle, ou copiée), puis tous les PNJ libérés :
+  // le renderer garde exactement ce que modelResources annonce.
+  it('chaque modèle dessiné puis les PNJ libérés : le renderer garde exactement modelResources()', () => {
+    const r = createFakeRenderer()
+    const npcs = []
+    for (const [make, picks] of [[civilian, [0, 0.5, 0.9]], [KINDS['cible marquée'], [0, 0.5, 0.9]], [KINDS.garde, [0, 0.5]]]) {
+      for (const k of picks) {
+        const random = vi.spyOn(Math, 'random').mockReturnValue(k)
+        npcs.push(make())
+        random.mockRestore()
+      }
+    }
+    expect(new Set(npcs.map(n => n.character.cfg.url)).size).toBe(7)
+    r.render(scene)
+    for (const npc of npcs) npc.dispose()
+    r.render(scene)
+    expect(r.info()).toEqual(characters.modelResources())
+  })
+})
+
 describe('NPC.dispose, niveau 1 : tout ce que le PNJ possède est libéré, rien du modèle partagé', () => {
   for (const [name, make] of Object.entries(KINDS)) {
     it(name, () => {

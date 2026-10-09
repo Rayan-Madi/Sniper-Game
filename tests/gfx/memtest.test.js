@@ -74,6 +74,16 @@ describe('measure : compteurs du renderer et tas JS', () => {
     const info = { memory: { geometries: 0, textures: 0 }, programs: null, render: { calls: 0, triangles: 0 } }
     expect(measure(info, undefined)).toEqual({ geometries: 0, textures: 0, programmes: 0, appels: 0, triangles: 0, tasMo: null })
   })
+
+  // Critère « partie complète » (spec du lot 1 §6, reformulé le 9 octobre 2026, §8) : son seuil ajoute les ressources
+  // des modèles chargés, relevées par la route (characters.js, modelResources) et publiées avec chaque relevé.
+  it('publie les géométries et textures des modèles chargés quand on les lui donne', () => {
+    const info = { memory: { geometries: 447, textures: 32 }, programs: [], render: { calls: 540, triangles: 10506 } }
+    expect(measure(info, undefined, { geometries: 38, textures: 29 })).toEqual({
+      geometries: 447, textures: 32, programmes: 0, appels: 540, triangles: 10506, tasMo: null,
+      geometriesModeles: 38, texturesModeles: 29,
+    })
+  })
 })
 
 describe('runMemtest : monte, rend, mesure, publie', () => {
@@ -129,11 +139,16 @@ describe('runMemtest : monte, rend, mesure, publie', () => {
 })
 
 describe('checkMemtest : seuils du §6 de la spec', () => {
-  // Résultat qui tient tous les seuils : on en dérive un qui en casse un seul à la fois.
-  const base = { geometries: 500, textures: 40, programmes: 20, appels: 300, triangles: 900000, tasMo: 80 }
+  // Résultat qui tient tous les seuils : on en dérive un qui en casse un seul à la fois. Chaque relevé porte les
+  // ressources des modèles chargés, publiées par la route (geometriesModeles, texturesModeles).
+  const base = { geometries: 500, textures: 40, programmes: 20, appels: 300, triangles: 900000, tasMo: 80,
+    geometriesModeles: 38, texturesModeles: 29 }
   const good = () => memtestSteps().map(s => ({ etape: s.etape, ...base }))
   const set = (entries, etape, patch) => entries.map(e => e.etape === etape ? { ...e, ...patch } : e)
   const failed = r => r.filter(c => !c.ok).map(c => c.critere)
+  // Les trois retours au menu d'après le menu de départ, changés ensemble (ils doivent rester identiques).
+  const RETOURS = ['menu-campagne', 'menu-m6', 'menu-final']
+  const retours = (entries, patch) => RETOURS.reduce((e, etape) => set(e, etape, patch), entries)
 
   it('tout tenu : aucun échec', () => {
     const r = checkMemtest(good())
@@ -141,11 +156,37 @@ describe('checkMemtest : seuils du §6 de la spec', () => {
     expect(r.length).toBeGreaterThanOrEqual(4)
   })
 
-  it('partie complète : géométries au plus 2 % au-dessus du menu, textures au plus 2 de plus', () => {
-    expect(failed(checkMemtest(set(good(), 'menu-campagne', { geometries: 510 })))).toEqual([])
-    expect(failed(checkMemtest(set(good(), 'menu-campagne', { geometries: 511 })))).toEqual(['partie complète'])
-    expect(failed(checkMemtest(set(good(), 'menu-campagne', { textures: 42 })))).toEqual([])
-    expect(failed(checkMemtest(set(good(), 'menu-campagne', { textures: 43 })))).toEqual(['partie complète'])
+  // Critère « partie complète » reformulé le 9 octobre 2026 (spec du lot 1 §8, qui remplace le §6 d'origine) : au
+  // retour de campagne, le renderer garde en plus les ressources des modèles GLB, partagées et gardées pour la session.
+  it('partie complète : géométries au plus menu + 2 % + celles des modèles, textures au plus menu + 2 + celles des modèles', () => {
+    // 500 × 1,02 + 38 = 548 ; 40 + 2 + 29 = 71
+    expect(failed(checkMemtest(retours(good(), { geometries: 548 })))).toEqual([])
+    expect(failed(checkMemtest(retours(good(), { geometries: 549 })))).toEqual(['partie complète'])
+    expect(failed(checkMemtest(retours(good(), { textures: 71 })))).toEqual([])
+    expect(failed(checkMemtest(retours(good(), { textures: 72 })))).toEqual(['partie complète'])
+  })
+
+  it('partie complète : les nombres des modèles sont ceux que la route publie, jamais des constantes', () => {
+    const autres = good().map(e => ({ ...e, geometriesModeles: 10, texturesModeles: 5 }))
+    // 500 × 1,02 + 10 = 520 ; 40 + 2 + 5 = 47
+    expect(failed(checkMemtest(retours(autres, { geometries: 520, textures: 47 })))).toEqual([])
+    expect(failed(checkMemtest(retours(autres, { geometries: 521 })))).toEqual(['partie complète'])
+    expect(failed(checkMemtest(retours(autres, { textures: 48 })))).toEqual(['partie complète'])
+  })
+
+  it('partie complète : sans les nombres des modèles, échec (jamais un succès par défaut)', () => {
+    const sans = good().map(({ geometriesModeles, texturesModeles, ...e }) => e)
+    expect(failed(checkMemtest(sans))).toEqual(['partie complète'])
+    expect(failed(checkMemtest(set(good(), 'menu-campagne', { geometriesModeles: null })))).toEqual(['partie complète'])
+  })
+
+  it('partie complète : menu-m6 et menu-final identiques à menu-campagne, en géométries et en textures', () => {
+    expect(failed(checkMemtest(set(good(), 'menu-m6', { geometries: 501 })))).toEqual(['partie complète'])
+    expect(failed(checkMemtest(set(good(), 'menu-final', { textures: 41 })))).toEqual(['partie complète'])
+    expect(failed(checkMemtest(set(good(), 'menu-final', { geometries: 499 })))).toEqual(['partie complète'])   // sous le seuil, mais différent
+    expect(failed(checkMemtest(good().filter(e => e.etape !== 'menu-m6')))).toEqual(['partie complète'])
+    // Les programmes n'en sont pas : les shaders du PvP restent compilés, menu-final en a plus.
+    expect(failed(checkMemtest(set(good(), 'menu-final', { programmes: 25 })))).toEqual([])
   })
 
   it('10 montages de M6 : rien ne bouge entre le 2e et le 10e', () => {
@@ -160,11 +201,13 @@ describe('checkMemtest : seuils du §6 de la spec', () => {
     expect(failed(checkMemtest(set(good(), 'pvp-5', { geometries: 499 })))).toEqual(['PvP'])
   })
 
-  it('triangles de M6 à la vue de départ : 1,5 M en Moyen (par défaut), 0,8 M en Bas', () => {
+  // Seuil Bas : 1,4 M pour le lot 1 (géométrie des personnages seule), 0,8 M reporté au lot poids (spec du lot 1 §8).
+  it('triangles de M6 à la vue de départ : 1,5 M en Moyen (par défaut), 1,4 M en Bas', () => {
     expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1.5e6 })))).toEqual([])
     expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1.5e6 + 1 })))).toEqual(['triangles de M6'])
-    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 0.8e6 + 1 }), { qualite: 'bas' }))).toEqual(['triangles de M6'])
-    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 0.8e6 }), { qualite: 'bas' }))).toEqual([])
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1.4e6 }), { qualite: 'bas' }))).toEqual([])
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1.4e6 + 1 }), { qualite: 'bas' }))).toEqual(['triangles de M6'])
+    expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1330361 }), { qualite: 'bas' }))).toEqual([])   // mesure de L4
     expect(failed(checkMemtest(set(good(), 'M6', { triangles: 1.5e6 + 1 }), { qualite: 'auto' }))).toEqual(['triangles de M6'])
     expect(failed(checkMemtest(set(good(), 'M6', { triangles: 3e6 }), { qualite: 'haut' }))).toEqual([])   // pas de seuil en Haut
   })

@@ -53,6 +53,20 @@ export function isShared(resource) {
   return !!(resource && resource.userData && resource.userData.shared)
 }
 
+// Géométries et textures distinctes marquées partagées dans des arbres (modèles GLB du cache) : ce que le renderer garde
+// pour la session une fois qu'ils ont été dessinés. Relevé par la route ?memtest=1 pour le critère « partie complète »
+// (spec du lot 1, §6 reformulé le 9 octobre 2026, §8). Ce qui n'est pas marqué repart avec l'instance qui le possède.
+export function sharedResources(roots) {
+  const geometries = new Set(), textures = new Set()
+  for (const root of roots) {
+    root.traverse(o => {
+      if (isShared(o.geometry)) geometries.add(o.geometry)
+      for (const m of materialsOf(o)) for (const t of texturesOf(m)) if (isShared(t)) textures.add(t)
+    })
+  }
+  return { geometries: geometries.size, textures: textures.size }
+}
+
 // Ressources déjà libérées : une ressource commune à deux objets (lampadaire cloné, matériau réutilisé) ou un
 // second appel sur le même arbre ne la libèrent pas deux fois. Une ressource libérée n'est jamais réutilisée par le
 // jeu (chaque montage recrée la sienne) ; ce qui doit survivre est marqué partagé.

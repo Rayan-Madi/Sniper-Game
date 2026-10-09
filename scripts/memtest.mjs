@@ -45,9 +45,14 @@ export function memtestUrl(base, { images = 3, qualite = '', precompilation = tr
   return `${base}?memtest=1&images=${images}${qualite ? '&qualite=' + encodeURIComponent(qualite) : ''}${precompilation ? '' : '&precompilation=0'}`
 }
 
-// Seuils du §6 de la spec (Chrome réel). Chaque critère : { critere, ok, detail }. Une étape absente ou en erreur fait
-// échouer les critères qui en dépendent : jamais de succès par défaut.
+// Seuils du §6 de la spec (Chrome réel), avec les reformulations actées le 9 octobre 2026 (§8). Chaque critère :
+// { critere, ok, detail }. Une étape absente ou en erreur fait échouer les critères qui en dépendent : jamais de succès
+// par défaut.
 const KEYS = ['geometries', 'textures', 'programmes']
+// Seuil des triangles de M6 à la vue de départ, par préréglage : Auto rend comme Moyen (sans la résolution dynamique,
+// qui ne tourne pas dans la route) ; Bas à 1,4 M pour le lot 1, 0,8 M étant reporté au lot poids (niveaux de détail
+// des foules) ; aucun seuil en Haut.
+const TRIANGLES_M6 = { bas: 1.4e6, moyen: 1.5e6, auto: 1.5e6, haut: Infinity }
 export function checkMemtest(entries, { qualite } = {}) {
   const get = name => entries.find(e => e.etape === name && !e.erreur)
   const same = (a, b) => KEYS.every(k => a[k] === b[k])
@@ -57,11 +62,20 @@ export function checkMemtest(entries, { qualite } = {}) {
   const erreur = entries.find(e => e.erreur)
   out.push({ critere: 'mesure complète', ok: !erreur, detail: erreur ? `${erreur.etape} : ${erreur.erreur}` : `${entries.length} étapes` })
 
-  const menu = get('menu'), retour = get('menu-campagne')
+  // Partie complète (§6 reformulé, §8) : au retour de campagne, le renderer garde en plus les ressources des modèles
+  // GLB, partagées et gardées pour la session (le menu de départ n'a dessiné aucun personnage). Leurs nombres sont ceux
+  // que la route publie avec chaque relevé (geometriesModeles, texturesModeles), jamais écrits ici : un modèle ajouté
+  // ou compressé ne fausse pas le seuil. Les retours suivants au menu ne gardent rien de plus (Δ = 0).
+  const menu = get('menu'), retour = get('menu-campagne'), apresM6 = get('menu-m6'), final = get('menu-final')
+  const g = retour?.geometriesModeles, t = retour?.texturesModeles
+  const modeles = Number.isFinite(g) && Number.isFinite(t)
+  const identique = e => !!e && e.geometries === retour.geometries && e.textures === retour.textures
   out.push({
     critere: 'partie complète',
-    ok: !!(menu && retour && retour.geometries * 100 <= menu.geometries * 102 && retour.textures <= menu.textures + 2),
-    detail: `géométries ≤ menu + 2 %, textures ≤ menu + 2 ; ${show(menu)} ; ${show(retour)}`,
+    ok: !!(menu && retour && modeles && retour.geometries * 100 <= menu.geometries * 102 + g * 100 &&
+      retour.textures <= menu.textures + 2 + t && identique(apresM6) && identique(final)),
+    detail: `géométries ≤ menu × 1,02 + modèles (${modeles ? g : 'absent'}), textures ≤ menu + 2 + modèles (${modeles ? t : 'absent'}), ` +
+      `menu-m6 et menu-final identiques à menu-campagne ; ${show(menu)} ; ${show(retour)} ; ${show(apresM6)} ; ${show(final)}`,
   })
 
   const m6 = entries.filter(e => /^M\d+-\d+$/.test(e.etape))
@@ -82,7 +96,7 @@ export function checkMemtest(entries, { qualite } = {}) {
   })
 
   const q = qualite || 'moyen'
-  const limit = q === 'bas' ? 0.8e6 : q === 'haut' ? Infinity : 1.5e6
+  const limit = TRIANGLES_M6[q] ?? TRIANGLES_M6.moyen
   const tri = get('M6')
   out.push({
     critere: 'triangles de M6',
@@ -222,6 +236,8 @@ async function main(argv) {
     console.log(e.etape.padEnd(15), String(e.geometries).padStart(7), String(e.textures).padStart(7), String(e.programmes).padStart(6),
       String(e.appels).padStart(7), String(e.triangles).padStart(10), String(e.tasMo).padStart(7))
   }
+  const mod = dump.etapes.find(e => Number.isFinite(e.geometriesModeles))
+  if (mod) console.log(`modèles chargés (gardés pour la session une fois dessinés) : ${mod.geometriesModeles} géométries, ${mod.texturesModeles} textures`)
   const p = dump.etapes.find(e => e.etape === 'premiere-image' && !e.erreur)
   if (p) {
     console.log(`première image (${p.precompilation ? 'mission préparée et shaders compilés pendant le briefing' : 'sans précompilation, comme avant L7'}) : ` +

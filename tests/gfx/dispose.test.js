@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { markShared, isShared, disposeObject } from '../../src/gfx/dispose.js'
+import { markShared, isShared, disposeObject, sharedResources } from '../../src/gfx/dispose.js'
 import { createFakeRenderer, trackDisposals } from './fakeRenderer.js'
 
 // Libération par parcours (spec du lot 1 §4.2) : tout ce que l'arbre possède émet 'dispose' une fois, rien de ce qui
@@ -137,6 +137,38 @@ describe('disposeObject', () => {
 
   it('sans arbre : rien à libérer', () => {
     expect(disposeObject(null)).toEqual({ geometries: 0, materials: 0, textures: 0, skeletons: 0 })
+  })
+})
+
+// Ressources des modèles GLB du cache (route ?memtest=1, critère « partie complète » de la spec du lot 1, §6 et §8) :
+// ce que le renderer garde pour la session une fois les modèles dessinés, leurs géométries et leurs textures
+// distinctes, marquées partagées. Une ressource commune à deux maillages ou à deux matériaux compte une fois ; ce qui
+// n'est pas marqué partagé repart avec l'instance qui le possède et ne compte pas.
+describe('sharedResources', () => {
+  it('compte les géométries et les textures distinctes marquées partagées de plusieurs arbres', () => {
+    const geo = new THREE.BoxGeometry(), tex = texture()
+    const a = new THREE.Group()
+    a.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, normalMap: texture() })))
+    a.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex })))   // même géométrie, même texture
+    const b = new THREE.Group()
+    b.add(new THREE.Mesh(new THREE.SphereGeometry(), [new THREE.MeshBasicMaterial({ map: texture() }), new THREE.MeshBasicMaterial()]))
+    markShared(a); markShared(b)
+    expect(sharedResources([a, b])).toEqual({ geometries: 2, textures: 3 })
+  })
+
+  it('ce qui n\'est pas marqué partagé ne compte pas', () => {
+    const model = markShared(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ map: texture() })))
+    const root = new THREE.Group()
+    root.add(model, new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshBasicMaterial({ map: texture() })))
+    // Matériau copié pour une teinte : à l'instance, mais sa texture reste celle du modèle.
+    const tinted = model.material.clone()
+    delete tinted.userData.shared
+    root.add(new THREE.Mesh(model.geometry, tinted))
+    expect(sharedResources([root])).toEqual({ geometries: 1, textures: 1 })
+  })
+
+  it('aucun arbre : rien', () => {
+    expect(sharedResources([])).toEqual({ geometries: 0, textures: 0 })
   })
 })
 
