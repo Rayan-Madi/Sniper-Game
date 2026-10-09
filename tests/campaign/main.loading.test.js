@@ -46,9 +46,34 @@ function topLevelCall(a, callee) {
   return st ? { text: a.source.slice(st.start, st.end), calls: callsInNode(a, st).map(c => c.callee) } : null
 }
 
+// Écouteur clavier de premier niveau qui gère Échap (pause et reprise de la mission) : son texte, ou null.
+function escapeListener(a) {
+  const st = a.program.body.find(n => n.type === 'ExpressionStatement'
+    && a.source.slice(n.start, n.end).startsWith("document.addEventListener('keydown'")
+    && a.source.slice(n.start, n.end).includes('resumeGame()'))
+  return st ? a.source.slice(st.start, st.end) : null
+}
+
+// Rendu interrompu (relecture de L5) : la pause de la spec §4.4 tient jusqu'au rechargement. onRenderLost pose le
+// drapeau renderLost ; Échap ne reprend pas la partie sous l'écran (le focus est sur RECHARGER, mais la touche remonte
+// au document) ; une mission en attente des modèles ou au bout de son briefing ne démarre pas dessous.
+function renderLostFaults(a) {
+  const faults = []
+  const body = name => { const fn = a.fns.get(name); return fn ? a.source.slice(fn.body.start, fn.body.end) : '' }
+  if (!/\brenderLost = true\b/.test(body('onRenderLost'))) faults.push('onRenderLost ne pose pas renderLost')
+  if (!/isCurrent = \(\) => [^\n]*\brenderLost\b/.test(body('enterLevel'))) faults.push('enterLevel démarre une mission sous le rendu interrompu')
+  const esc = escapeListener(a)
+  if (!esc) faults.push('Échap n\'est plus géré au clavier')
+  else {
+    const guard = /if \([^)]*\brenderLost\b[^)]*\) return\b/.exec(esc)
+    if (!guard || guard.index > esc.indexOf('resumeGame()')) faults.push('Échap reprend la partie sous le rendu interrompu')
+  }
+  return faults
+}
+
 function wiringFaults(source) {
   const a = analyse(source)
-  const faults = []
+  const faults = renderLostFaults(a)
   for (const [name, from] of Object.entries(IMPORTS)) {
     if (a.imports.get(name)?.from !== from) faults.push(`${name} n'est pas importé de ${from}`)
   }
@@ -141,6 +166,28 @@ describe('témoins de la garde', () => {
     const st = topLevelCall(a, 'watchContextLoss')
     const next = mutated(SRC.replace(st.text, st.text.replace('location.reload()', 'void 0')))
     expect(wiringFaults(next)).toContain('contexte rendu sans rechargement de la page')
+  })
+
+  it('rendu interrompu sans drapeau : rouge', () => {
+    const fn = a.fns.get('onRenderLost')
+    const body = SRC.slice(fn.body.start, fn.body.end)
+    expect(body, 'onRenderLost ne pose déjà plus renderLost : témoin impossible').toMatch(/\brenderLost = true\b/)
+    const next = mutated(SRC.slice(0, fn.body.start) + body.replace(/\brenderLost = true\b/, 'void 0') + SRC.slice(fn.body.end))
+    expect(wiringFaults(next)).toContain('onRenderLost ne pose pas renderLost')
+  })
+
+  it('mission en attente des modèles ou au bout du briefing, lancement qui ignore le rendu interrompu : rouge', () => {
+    const fn = a.fns.get('enterLevel')
+    const body = SRC.slice(fn.body.start, fn.body.end)
+    const next = mutated(SRC.slice(0, fn.body.start) + body.replace(/ && !renderLost\b/, '') + SRC.slice(fn.body.end))
+    expect(wiringFaults(next)).toContain('enterLevel démarre une mission sous le rendu interrompu')
+  })
+
+  it('Échap sans garde du rendu interrompu, comme dans le commit de L5 : rouge', () => {
+    const esc = escapeListener(a)
+    expect(esc, 'Échap n\'est déjà plus géré : témoin impossible').not.toBeNull()
+    const next = mutated(SRC.replace(esc, esc.replace(/\n[^\n]*if \([^)]*\brenderLost\b[^)]*\) return\b[^\n]*/, '')))
+    expect(wiringFaults(next)).toContain('Échap reprend la partie sous le rendu interrompu')
   })
 
   it('RECHARGER sans rechargement : rouge', () => {

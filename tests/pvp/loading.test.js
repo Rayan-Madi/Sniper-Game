@@ -188,3 +188,79 @@ describe('départ de manche pendant le chargement des modèles', () => {
     expect(intro.active).toBe(true)
   })
 })
+
+// Messages de manche reçus pendant l'attente des modèles (relecture de L5). Le relais envoie le départ aux deux joueurs
+// à la fois : celui dont les modèles sont prêts passe son intro et joue pendant que l'autre attend, jusqu'à 20 s. Ce
+// qu'il fait pendant ce temps ne doit pas se perdre chez celui qui attend.
+// Pièces d'arme du décor monté (groupes de pvpMap.js : un octaèdre et sa lumière), dans l'ordre de arena.partSpots.
+const partGroups = () => scene.children.filter(o => o.isGroup && o.children.some(c => c.geometry?.type === 'OctahedronGeometry'))
+const taken = g => g.children.find(c => c.isLight).intensity === 0
+
+describe('messages de manche reçus pendant l\'attente des modèles', () => {
+  // Fin de manche de l'adversaire (touché, bavure) : la même fin ici, sinon l'un voit VICTOIRE et l'autre démarre
+  // ensuite une manche seul, jusqu'au chrono de 10 min, et les scores divergent.
+  const ENDS = [
+    ['hit_pnj', 'pnj', 'DÉFAITE'],          // le sniper a abattu l'avatar immobile du contre-tueur qui attend
+    ['hit_civilian', 'pnj', 'VICTOIRE'],    // bavure du sniper
+    ['hit_sniper', 'sniper', 'DÉFAITE'],    // le contre-tueur a touché le nid
+  ]
+  for (const [t, role, title] of ENDS) {
+    it(`${t} pendant l'attente (${role}) : ${title}, comme chez l'adversaire, et aucune manche ensuite`, async () => {
+      const before = snap()
+      const ws = startMatch(role)
+      await wait(220)
+      ws.receive({ t })
+      expect($('mp-result').style.display).toBe('flex')
+      expect($('mp-result-title').textContent).toBe(title)
+      expect($('btn-mp-rematch').style.display).toBe('inline-block')   // revanche possible, comme après toute manche jouée
+      expect($('loading-screen').classList.contains('on')).toBe(false)
+      load.finish()
+      await wait(0)
+      expect(untouched(before)).toBe(true)
+      expect(intro.active).toBe(false)
+      expect($('mp-result').style.display).toBe('flex')
+    })
+  }
+
+  // Le même défaut existait pendant l'intro de rôle (11 s au plus, manche pas encore active) : traité de la même façon.
+  it('touché pendant l\'intro de rôle : l\'intro s\'arrête sur la même fin que chez l\'adversaire, décor retiré', () => {
+    load.finish()
+    const before = snap()
+    const ws = startMatch('pnj')
+    expect(intro.active).toBe(true)
+    ws.receive({ t: 'hit_pnj' })
+    expect(intro.active).toBe(false)
+    expect($('mp-result').style.display).toBe('flex')
+    expect($('mp-result-title').textContent).toBe('DÉFAITE')
+    expect(added(before)).toBe(0)
+  })
+
+  it('pièce ramassée par l\'adversaire pendant l\'attente : retirée et comptée dans la manche montée ensuite', async () => {
+    const ws = startMatch('sniper')
+    ws.receive({ t: 'part_pickup', idx: 1 })
+    load.finish()
+    await wait(0)
+    expect(partGroups().map(taken)).toEqual([false, true, false])
+    ws.receive({ t: 'part_pickup', idx: 0 })
+    expect($('mp-killfeed').textContent).toContain('(2/3)')
+    expect(partGroups().map(taken)).toEqual([true, true, false])
+  })
+
+  it('pièces reçues pour un départ remplacé par un autre : oubliées avec lui', async () => {
+    const ws = startMatch('sniper')
+    ws.receive({ t: 'part_pickup', idx: 2 })
+    ws.receive({ t: 'start', role: 'sniper', serverTime: 77 })
+    load.finish()
+    await wait(0)
+    expect(partGroups().map(taken)).toEqual([false, false, false])
+  })
+
+  // Téléphone, alarme, PNJ collant : des effets de quelques secondes sur une manche qui n'est pas montée ici (beginRound
+  // les remettrait à zéro). Ni son sous l'écran de chargement, ni message.
+  it('capacité du sniper reçue pendant l\'attente : sans effet', () => {
+    const ws = startMatch('pnj')
+    $('mp-killfeed').textContent = ''
+    for (const kind of ['phone', 'alarm', 'cling']) ws.receive({ t: 'ability', kind })
+    expect($('mp-killfeed').textContent).toBe('')
+  })
+})

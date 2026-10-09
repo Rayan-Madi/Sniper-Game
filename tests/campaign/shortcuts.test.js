@@ -33,8 +33,9 @@ describe('raccourci de mission : réservé au développement, jamais par-dessus 
     expect(levelShortcut('Digit3', { ...DEV_MENU, dev: false })).toBe(null)
   })
 
-  it('pendant une mission, une pause, un briefing ou l\'enquête : rien', () => {
-    for (const phase of ['playing', 'paused', 'briefing', 'investigation']) {
+  // 'loading' : écran PRÉPARATION DU DOSSIER, la mission attend les modèles (spec du lot 1 §4.4), comme sous un briefing.
+  it('pendant une mission, une pause, un briefing, l\'attente des modèles ou l\'enquête : rien', () => {
+    for (const phase of ['playing', 'paused', 'briefing', 'loading', 'investigation']) {
       expect(levelShortcut('Digit3', { ...DEV_MENU, phase })).toBe(null)
     }
   })

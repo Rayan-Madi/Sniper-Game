@@ -47,10 +47,10 @@ let phoneShakeUntil = 0, alarmUntil = 0
 let crowdPanicUntil = 0     // la foule fuit (alarme du sniper)
 let speedMultiplier = 1
 
-// Départ de manche en attente des modèles (spec du lot 1 §4.4) : son écran PRÉPARATION DU DOSSIER, et un jeton
-// incrémenté à chaque départ reçu ou annulé (adversaire parti, relais perdu, QUITTER) : seul le dernier départ monte
-// sa manche.
-let pendingStart = null   // { screen } pendant l'attente
+// Départ de manche en attente des modèles (spec du lot 1 §4.4) : son écran PRÉPARATION DU DOSSIER, les pièces d'arme
+// ramassées entre-temps par l'adversaire (rejouées par beginRound), et un jeton incrémenté à chaque départ reçu ou
+// annulé (adversaire parti ou touché, relais perdu, QUITTER) : seul le dernier départ monte sa manche.
+let pendingStart = null   // { screen, parts } pendant l'attente
 let startToken = 0
 
 // Sniper
@@ -228,27 +228,28 @@ export function initMultiplayerMenu() {
   // L'adversaire est parti, ou c'est notre liaison au relais qui a lâché :
   // dans les deux cas la manche ne peut plus continuer. Un seul écran de fin
   // (endRound ne fait rien si la manche est déjà close).
-  const onPeerLost = (reason) => {
-    // Manche encore en attente des modèles : annulée, rien n'est monté ; endRound affiche l'écran de fin
-    if (cancelPendingStart()) roundActive = true
-    if (isPvpIntroActive()) { stopPvpIntro(); roundActive = true /* pour laisser endRound nettoyer normalement */ }
-    if (roundActive) endRound(null, reason)
-  }
   // Départ de l'adversaire sur l'écran de fin : le relais a fermé la partie, la manche suivante ne viendra plus.
   net.on('peer_left', () => {
-    if (roundActive || isPvpIntroActive() || pendingStart) return onPeerLost('peer_left')
+    if (roundActive || isPvpIntroActive() || pendingStart) return endRoundFromPeer(null, 'peer_left')
     if (mpResult.style.display === 'flex') { rematchBtn.disabled = true; rematchBtn.textContent = 'ADVERSAIRE PARTI.' }
   })
   // Relais perdu hors manche : l'attente en cours (partie créée, partie rejointe, manche suivante) ne peut plus
   // aboutir. Un message la remplace ; ANNULER et QUITTER restent utilisables.
   net.on('disconnected', () => {
-    if (roundActive || isPvpIntroActive() || pendingStart) return onPeerLost('disconnected')
+    if (roundActive || isPvpIntroActive() || pendingStart) return endRoundFromPeer(null, 'disconnected')
     if (mpCreate.style.display === 'flex') { codeDisplay.textContent = '----'; createStatus.textContent = 'Relais perdu.' }
     if (mpJoin.style.display === 'flex') joinError.textContent = 'Relais perdu.'
     if (mpResult.style.display === 'flex') { rematchBtn.disabled = true; rematchBtn.textContent = 'RELAIS PERDU.' }
   })
-  net.on('ability', (msg) => applyIncomingAbility(msg.kind))
-  net.on('part_pickup', (msg) => removePartVisual(msg.idx))
+  // Capacité du sniper reçue pendant l'attente des modèles : ignorée. Ses effets durent quelques secondes, sur une
+  // manche qui n'est pas encore montée ici (beginRound les remettrait à zéro) ; ni son sous l'écran, ni message.
+  net.on('ability', (msg) => { if (!pendingStart) applyIncomingAbility(msg.kind) })
+  // Pièce prise pendant l'attente : rangée avec le départ, retirée et comptée par beginRound une fois l'arène montée
+  // (avant, il n'y a pas d'arène, ou celle de la manche précédente, et beginRound remet le compte à zéro).
+  net.on('part_pickup', (msg) => {
+    if (pendingStart) pendingStart.parts.push(msg.idx)
+    else if (arena) removePartVisual(msg.idx)
+  })
   net.on('aim', (msg) => { sniperYaw = msg.yaw; sniperPitch = msg.pitch })
   net.on('pos', (msg) => {
     if (!lastPnjNet) lastPnjNet = new THREE.Vector3()
@@ -256,9 +257,9 @@ export function initMultiplayerMenu() {
     if (msg.yaw !== undefined) lastPnjYaw = msg.yaw
     lastPnjAnim = msg.anim || 'idle'
   })
-  net.on('hit_pnj', () => { if (roundActive) endRound('sniper', 'hit') })
-  net.on('hit_sniper', () => { if (roundActive) endRound('pnj', 'hit') })
-  net.on('hit_civilian', () => { if (roundActive) endRound('pnj', 'civilian') })
+  net.on('hit_pnj', () => endRoundFromPeer('sniper', 'hit'))
+  net.on('hit_sniper', () => endRoundFromPeer('pnj', 'hit'))
+  net.on('hit_civilian', () => endRoundFromPeer('pnj', 'civilian'))
 
   // ── Boutons ──
   el('btn-multiplayer').onclick = () => {
@@ -321,15 +322,20 @@ function onMatchStart(msg) {
     settled: charactersSettled,
     wait: () => {
       const screen = createLoadingScreen(el('loading-screen'))
-      pendingStart = { screen }
+      pendingStart = { screen, parts: [] }
       return waitForCharacters({ ready: charactersReady, progress: charactersProgress, show: screen.show, hide: screen.hide, isCurrent })
     },
-    start: () => { pendingStart = null; beginRound(msg) },
+    start: () => {
+      const parts = pendingStart ? pendingStart.parts : []
+      pendingStart = null
+      beginRound(msg, parts)
+    },
     isCurrent,
   })
 }
 
-// Annule un départ en attente des modèles (l'écran disparaît, la manche ne montera pas). Vrai s'il y en avait un.
+// Annule un départ en attente des modèles (l'écran disparaît, la manche ne montera pas, les pièces rangées avec lui
+// sont oubliées). Vrai s'il y en avait un.
 function cancelPendingStart() {
   if (!pendingStart) return false
   pendingStart.screen.hide()
@@ -338,8 +344,19 @@ function cancelPendingStart() {
   return true
 }
 
-// Manche montée et lancée (modèles prêts) : décor du seed partagé, rôle, intro, puis la boucle.
-function beginRound(msg) {
+// Fin de manche venue de l'adversaire : touché, bavure (winnerRole), départ ou relais perdu (null). Elle vaut aussi
+// quand la manche n'est pas encore active ici, alors que l'autre joue déjà : départ en attente des modèles (annulé,
+// rien n'est monté) ou intro de rôle (arrêtée). Les deux joueurs voient ainsi la même fin ; sans cela, l'un voyait
+// VICTOIRE et l'autre démarrait ensuite une manche seul, jusqu'au chrono. Sans manche en cours ni à venir, rien.
+function endRoundFromPeer(winnerRole, reason) {
+  if (cancelPendingStart()) roundActive = true   // pour laisser endRound afficher l'écran de fin
+  if (isPvpIntroActive()) { stopPvpIntro(); roundActive = true /* pour laisser endRound nettoyer normalement */ }
+  if (roundActive) endRound(winnerRole, reason)
+}
+
+// Manche montée et lancée (modèles prêts) : décor du seed partagé, rôle, intro, puis la boucle. parts : pièces prises
+// par l'adversaire pendant l'attente des modèles, retirées et comptées une fois l'arène montée.
+function beginRound(msg, parts = []) {
   partsCollected = 0; oppPartsCount = 0
   pistolMesh = null
   emoteUntil = 0; pnjAiming = false
@@ -352,6 +369,7 @@ function beginRound(msg) {
   // Seed partagé (même serverTime chez les deux) → décor + foule IDENTIQUES.
   matchSeed = (msg.serverTime >>> 0) || 1
   buildRoundScene(matchSeed, myRole)
+  for (const idx of parts) removePartVisual(idx)
 
   roleBanner.textContent = myRole === 'sniper' ? 'RÔLE : SNIPER' : 'RÔLE : CONTRE-TUEUR'
   partsEl.style.display = myRole === 'pnj' ? 'block' : 'none'

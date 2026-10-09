@@ -68,6 +68,9 @@ const missionPhase = () => ({ phase: gamePhase, killcam: killcamActive, failPend
 
 // Jeton de mission : incrémenté à chaque lancement, il neutralise les minuteurs de fin d'une mission abandonnée
 let missionToken = 0
+// Contexte WebGL perdu (onRenderLost) : la page attend d'être rechargée derrière l'écran « Le rendu a été interrompu ».
+// Échap n'y reprend pas la partie, et aucune mission ne démarre dessous (attente des modèles, fin d'un briefing).
+let renderLost = false
 
 // Choix moral (cadenas du conteneur, niveau du port)
 let moralLockMesh = null, moralLockBox = null, moralLockLight = null
@@ -423,10 +426,11 @@ function launchLevel(n, { forceBriefing = false } = {}) {
 // Départ de la mission n une fois les modèles chargés (spec du lot 1 §4.4) : tout de suite s'ils le sont, le cas
 // ordinaire (rien ne change alors), sinon derrière l'écran PRÉPARATION DU DOSSIER, 20 s au plus, sans rendu WebGL ni
 // nappe de mission. Sans cette attente, une mission lancée juste après l'ouverture du jeu (REPRENDRE, briefing déjà vu)
-// partait avec des PNJ procéduraux. Une mission relancée ou quittée pendant l'attente ne démarre pas (jeton de mission).
+// partait avec des PNJ procéduraux. Une mission relancée ou quittée pendant l'attente ne démarre pas (jeton de mission),
+// ni une mission dont le rendu a été interrompu entre-temps (pendant l'attente ou son briefing).
 function enterLevel(n) {
   const token = missionToken
-  const isCurrent = () => token === missionToken
+  const isCurrent = () => token === missionToken && !renderLost
   startWhenReady({
     settled: charactersSettled,
     wait: () => {
@@ -1181,6 +1185,7 @@ const overlayOpen = () => TYPING_SCREENS.some(id => {
 // Apnée : maintenir Maj pour stabiliser la visée
 document.addEventListener('keydown', e => {
   if (campaignPaused) return   // mode PvP actif : le mode histoire ne réagit pas
+  if (renderLost) return       // écran « Le rendu a été interrompu » : ni reprise de la partie dessous, ni mission lancée
   if (isShift(e.code)) holdBreathKey = true
 
   // Échap : pause / reprise
@@ -1446,11 +1451,13 @@ loop()
 
 // ─── Contexte WebGL perdu (spec du lot 1 §4.4) ─────────────────────
 // Pilote graphique réinitialisé, mise en veille, carte saturée : plus rien ne s'affiche. La partie se met en pause
-// derrière l'écran « Le rendu a été interrompu » et le pointeur revient. Contexte rendu par le navigateur, ou
+// derrière l'écran « Le rendu a été interrompu » et le pointeur revient ; elle y reste (renderLost : Échap ne la
+// reprend pas, une mission en attente des modèles ou en briefing ne démarre pas). Contexte rendu par le navigateur, ou
 // RECHARGER : la page se recharge (la sauvegarde est faite à chaque réussite). Pendant la kill-cam ou un échec en
 // attente, la pause est refusée (canPause) : la fin de mission tombe sous l'écran, et la réussite est enregistrée.
 const contextLostEl = document.getElementById('context-lost')
 function onRenderLost() {
+  renderLost = true
   if (gamePhase === 'playing') pauseGame()
   hideScope()
   releaseMouse()

@@ -179,6 +179,16 @@ describe('startWhenReady : départ d\'une mission ou d\'une manche', () => {
     await done
     expect(start).not.toHaveBeenCalled()
   })
+
+  // Le rendu interrompu (contexte WebGL perdu) rend tout lancement caduc dans main.js, même modèles prêts : la fin d'un
+  // briefing joué sous l'écran « Le rendu a été interrompu » ne démarre pas la mission dessous (relecture de L5).
+  it('lancement déjà caduc, modèles prêts : ni départ, ni attente', () => {
+    const start = vi.fn(), wait = vi.fn(() => Promise.resolve())
+    const done = startWhenReady({ settled: () => true, wait, start, isCurrent: () => false })
+    expect(done).toBe(null)
+    expect(start).not.toHaveBeenCalled()
+    expect(wait).not.toHaveBeenCalled()
+  })
 })
 
 describe('écran PRÉPARATION DU DOSSIER (index.html, #loading-screen)', () => {

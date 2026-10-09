@@ -51,10 +51,10 @@ export function waitForCharacters({ ready, progress, show, hide, isCurrent = () 
 
 // Départ d'une mission ou d'une manche (start) une fois les modèles prêts. settled() vrai : départ dans le même
 // appel, sans attente ni écran, exactement comme avant ce lot. Sinon wait() (waitForCharacters), puis départ si le
-// lancement est toujours d'actualité (isCurrent : jeton de mission de main.js, manche de pvp.js). Renvoie la promesse
-// de l'attente, ou null sans attente.
+// lancement est toujours d'actualité (isCurrent : jeton de mission et rendu interrompu de main.js, manche de pvp.js).
+// Un lancement déjà caduc ne part jamais, modèles prêts ou non. Renvoie la promesse de l'attente, ou null sans attente.
 export function startWhenReady({ settled, wait, start, isCurrent = () => true }) {
-  if (settled()) { start(); return null }
+  if (settled()) { if (isCurrent()) start(); return null }
   return wait().then(() => { if (isCurrent()) start() })
 }
 
