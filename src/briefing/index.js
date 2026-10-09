@@ -30,7 +30,9 @@ function ensureKitStyle() {
 }
 
 // reducedMotion : effets atténués (spec du lot 1 §4.5), transmis au kit ; main.js le lit dans les réglages et le système.
-export async function playCinematic(id, { onDone = () => {}, params = null, freeze = null, audio = null, reducedMotion = false, root = document.getElementById('briefing-root') } = {}) {
+// ready : promesse que la scène attend pour démarrer, l'écran noir déjà affiché (main.js : la mission montée pendant
+// son briefing, spec du lot 1 §4.6, pour que le montage ne fige pas l'animation). Rejetée : la scène démarre quand même.
+export async function playCinematic(id, { onDone = () => {}, params = null, freeze = null, audio = null, reducedMotion = false, ready = null, root = document.getElementById('briefing-root') } = {}) {
   const load = SCENES[id]
   if (!load) throw new Error('cinématique inconnue : ' + id)
   const ticket = ++generation
@@ -44,6 +46,7 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
     if (ticket === generation && !current) root.hidden = true
     throw error
   }
+  if (ready) await Promise.resolve(ready).catch(() => {})
   // une demande plus récente est arrivée pendant le chargement : la dernière gagne, celle-ci s'efface sans bruit
   if (ticket !== generation) return { kit: null, stop() {}, cancel() {} }
 

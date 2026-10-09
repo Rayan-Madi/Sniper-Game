@@ -391,6 +391,50 @@ const SCENARIOS = {
     }
   },
 
+  // Briefing de M6 pas encore vu (spec du lot 1 §4.6) : la mission se monte et ses shaders se compilent pendant la
+  // cinématique. Sous la cinématique, la foule est déjà là et rien n'est rendu (compte des rendus immobile) ; au départ,
+  // la mission reprend cette foule au lieu d'en tirer une autre. Deux passes : modèles déjà chargés (montage sur l'écran
+  // noir, avant que la scène de la cinématique ne démarre), puis réseau bridé à 2 Mo/s sans cache (la cinématique
+  // démarre sans les attendre, la mission se monte à leur arrivée, jamais avant : PNJ procéduraux).
+  async 'briefing-montage'() {
+    for (const bride of [false, true]) {
+      const c = await openChrome({ ...saveAt(6), briefingSeen: [true, true, true, true, true, false] })
+      const passe = bride ? 'modèles en chargement' : 'modèles chargés'
+      try {
+        if (bride) {
+          await c.send('Network.enable')
+          await c.send('Network.setCacheDisabled', { cacheDisabled: true })
+          await c.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: 2e6, uploadThroughput: 2e6 })
+          await js(c, 'window.__ancienne = true')
+          await c.send('Page.reload')
+          await until(c, `!window.__ancienne && document.readyState === 'complete' && typeof window.__mission === 'function'`, 60000)
+        } else {
+          await sleep(1500)   // modèles des personnages
+        }
+        await click(c, 'btn-start')
+        await until(c, `!!document.querySelector('#briefing-root #st')`, 30000)   // la scène de la cinématique a démarré
+        const auDebut = (await mission(c)).pnj.length
+        if (bride) check(auDebut === 0, `${passe} : la cinématique démarre sans attendre les modèles, rien n'est monté avant eux`, auDebut)
+        else check(auDebut > 0, `${passe} : la mission est montée avant que la cinématique ne démarre`, auDebut)
+        await until(c, `__mission().phase === 'briefing' && __mission().pnj.length > 0`, 90000)
+        const pendant = await mission(c)
+        const r1 = (await js(c, '__mem()')).images
+        await sleep(2000)
+        const r2 = (await js(c, '__mem()')).images
+        check(r2 === r1 && (await mission(c)).phase === 'briefing', `${passe} : rien n'est rendu sous la cinématique`, { r1, r2 })
+        await capture(c, `briefing-montage-${bride ? 'chargement' : 'pret'}-cinematique`)
+        await escape(c)   // délai de grâce de 0,5 s passé
+        await until(c, `__mission().phase === 'playing'`, 30000)
+        const apres = await mission(c)
+        const proche = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]) < 0.5
+        check(apres.pnj.length === pendant.pnj.length && apres.pnj.every((p, i) => proche(p, pendant.pnj[i])),
+          `${passe} : la mission reprend la foule montée pendant le briefing`, { pendant: pendant.pnj.slice(0, 3), apres: apres.pnj.slice(0, 3) })
+        await frames(c, 10)
+        await capture(c, `briefing-montage-${bride ? 'chargement' : 'pret'}-mission`)
+      } finally { await c.close() }
+    }
+  },
+
   // Convoi (M5) : jeeps et occupants sur la route (0,2 m). Le colonel abattu suit sa jeep, qui roule encore à 15 %
   // pendant le ralenti, au lieu de rester suspendu en l'air.
   async convoi() {

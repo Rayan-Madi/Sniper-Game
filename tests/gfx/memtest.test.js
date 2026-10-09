@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { memtestSteps, withSeed, seedOf, measure, runMemtest } from '../../src/gfx/memtest.js'
-import { checkMemtest, parseDump } from '../../scripts/memtest.mjs'
+import { checkMemtest, parseDump, memtestUrl } from '../../scripts/memtest.mjs'
 
 describe('memtestSteps : la partie scriptée de la spec du lot 1 §4.1', () => {
   const steps = memtestSteps()
   const names = steps.map(s => s.etape)
 
-  it('menu, M1 à M6, retour au menu, 10 montages de M6, menu, 5 arènes PvP, menu', () => {
+  it('menu, première image de M1, M1 à M6, retour au menu, 10 montages de M6, menu, 5 arènes PvP, menu', () => {
     expect(names).toEqual([
-      'menu', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'menu-campagne',
+      'menu', 'premiere-image', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'menu-campagne',
       'M6-1', 'M6-2', 'M6-3', 'M6-4', 'M6-5', 'M6-6', 'M6-7', 'M6-8', 'M6-9', 'M6-10', 'menu-m6',
       'pvp-1', 'pvp-2', 'pvp-3', 'pvp-4', 'pvp-5', 'menu-final',
     ])
@@ -16,10 +16,18 @@ describe('memtestSteps : la partie scriptée de la spec du lot 1 §4.1', () => {
 
   it('chaque étape dit quoi monter', () => {
     expect(steps[0]).toEqual({ etape: 'menu', type: 'menu' })
-    expect(steps[3]).toEqual({ etape: 'M3', type: 'mission', n: 3 })
-    expect(steps[17]).toEqual({ etape: 'M6-10', type: 'mission', n: 6 })
-    expect(steps[19]).toEqual({ etape: 'pvp-1', type: 'pvp', i: 1 })
-    expect(steps[24]).toEqual({ etape: 'menu-final', type: 'menu', apresPvp: true })
+    expect(steps[1]).toEqual({ etape: 'premiere-image', type: 'premiere', n: 1 })
+    expect(steps[4]).toEqual({ etape: 'M3', type: 'mission', n: 3 })
+    expect(steps[18]).toEqual({ etape: 'M6-10', type: 'mission', n: 6 })
+    expect(steps[20]).toEqual({ etape: 'pvp-1', type: 'pvp', i: 1 })
+    expect(steps[25]).toEqual({ etape: 'menu-final', type: 'menu', apresPvp: true })
+  })
+
+  // Première image d'une mission (spec du lot 1 §4.6) : mesurée à froid, aucun shader de mission encore compilé, donc
+  // juste après le menu de départ, comme la première mission d'une session.
+  it('la première image est mesurée juste après le menu de départ, avant toute mission', () => {
+    expect(steps.findIndex(s => s.type === 'premiere')).toBe(1)
+    expect(steps.filter(s => s.type === 'premiere')).toHaveLength(1)
   })
 })
 
@@ -37,6 +45,12 @@ describe('withSeed et seedOf : chaque montage d\'une même étape tire le même 
     const orig = Math.random
     expect(() => withSeed(1, () => { throw new Error('carte') })).toThrow('carte')
     expect(Math.random).toBe(orig)
+  })
+
+  // La première image monte la foule de M1 : l'étape M1 qui suit dessine les mêmes modèles et garde ses compteurs.
+  it('la première image tire le hasard de M1', () => {
+    const steps = memtestSteps()
+    expect(seedOf(steps.find(s => s.etape === 'premiere-image'))).toBe(seedOf(steps.find(s => s.etape === 'M1')))
   })
 
   it('les montages de M6 partagent une graine, différente de celle de M5', () => {
@@ -80,6 +94,23 @@ describe('runMemtest : monte, rend, mesure, publie', () => {
     expect(log).toEqual(['monte menu', 'rend menu', 'monte M1', 'rend M1'])
     expect(entries).toEqual([{ etape: 'menu', geometries: 1 }, { etape: 'M1', geometries: 2 }])
     expect(reports).toEqual([[1, 'en-cours'], [2, 'en-cours'], [2, 'fini']])
+  })
+
+  // Étape premiere-image : la préparation (act) et la première image (render) publient leurs durées et leurs comptes,
+  // rangés après les compteurs du renderer. Une étape qui ne renvoie rien (ou autre chose qu'un objet) n'ajoute rien.
+  it('ce que renvoient act et render est ajouté à l\'entrée de l\'étape', async () => {
+    const entries = await runMemtest({
+      steps,
+      act: async s => s.etape === 'M1' ? { precompilation: true, preparationMs: 12.5 } : 3,
+      render: s => s.etape === 'M1' ? { premiereImageMs: 40.2 } : undefined,
+      snapshot: () => ({ geometries: 7 }),
+      report: () => {},
+      pause: async () => {},
+    })
+    expect(entries).toEqual([
+      { etape: 'menu', geometries: 7 },
+      { etape: 'M1', geometries: 7, precompilation: true, preparationMs: 12.5, premiereImageMs: 40.2 },
+    ])
   })
 
   it('une étape qui échoue arrête la mesure et le dit', async () => {
@@ -143,6 +174,16 @@ describe('checkMemtest : seuils du §6 de la spec', () => {
     expect(failed(checkMemtest(sansPvp))).toEqual(['PvP'])
     const erreur = [...good().slice(0, 3), { etape: 'M3', erreur: 'x' }]
     expect(failed(checkMemtest(erreur))).toEqual(['mesure complète', 'partie complète', '10 montages de M6', 'PvP', 'triangles de M6'])
+  })
+})
+
+describe('memtestUrl : adresse de la route', () => {
+  it('images par étape, qualité transmise, précompilation coupée sur demande (mesure d\'avant la tâche L7)', () => {
+    const base = 'http://localhost:5173/'
+    expect(memtestUrl(base, { images: 3 })).toBe('http://localhost:5173/?memtest=1&images=3')
+    expect(memtestUrl(base, { images: 5, qualite: 'bas' })).toBe('http://localhost:5173/?memtest=1&images=5&qualite=bas')
+    expect(memtestUrl(base, { images: 3, precompilation: false })).toBe('http://localhost:5173/?memtest=1&images=3&precompilation=0')
+    expect(memtestUrl(base, { images: 3, precompilation: true })).toBe('http://localhost:5173/?memtest=1&images=3')
   })
 })
 

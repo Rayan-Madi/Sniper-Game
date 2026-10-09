@@ -23,6 +23,7 @@ import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
+import { prepareDuringBriefing, afterPaint } from './campaign/prepare.js'
 import { shotFlash, bindFullscreenButton } from './comfort.js'
 
 // ─── État ──────────────────────────────────────────────────────────
@@ -421,18 +422,42 @@ function launchLevel(n, { forceBriefing = false } = {}) {
   stopMissionAmbience()   // jamais la nappe d'une mission sous un briefing
   gamePhase = 'briefing'
   clock.getDelta()
+  // La mission se monte pendant la cinématique et ses shaders s'y compilent (spec du lot 1 §4.6, campaign/prepare.js) :
+  // si les modèles sont chargés, sur son écran noir (afterPaint : le clic ne reste pas figé le temps du montage), avant
+  // que son animation ne démarre (ready) ; sinon à leur arrivée. Rien n'est rendu en phase 'briefing' : la mission
+  // n'apparaît jamais sous la cinématique.
+  const token = missionToken
+  const prep = prepareDuringBriefing({
+    settled: charactersSettled,
+    ready: charactersReady,
+    prepare: () => prepareLevel(n),
+    isCurrent: () => token === missionToken && !renderLost,
+    onError: err => console.error('[préparation]', err),
+    schedule: afterPaint,
+  })
   cinematic('m' + (idx + 1), {
     audio: cinematicAudio(),
-    onDone: () => { markBriefingSeen(idx); saveProgress(); clock.getDelta(); enterLevel(n) },
+    ready: prep.begun,
+    onDone: () => { markBriefingSeen(idx); saveProgress(); clock.getDelta(); enterLevel(n, prep) },
   })
+}
+
+// Montage de la mission n pendant son briefing, par la fonction du jeu (mountLevel), puis compilation de ses shaders
+// avec l'éclairage de sa carte : la première image de la mission n'a plus à les compiler. Les ombres des lumières
+// (variantes de profondeur) restent compilées par la première image. Appelée par launchLevel (prepareDuringBriefing)
+// et par la route ?memtest=1 (étape premiere-image).
+function prepareLevel(n) {
+  mountLevel(n)
+  renderer.compile(scene, camera)
 }
 
 // Départ de la mission n une fois les modèles chargés (spec du lot 1 §4.4) : tout de suite s'ils le sont, le cas
 // ordinaire (rien ne change alors), sinon derrière l'écran PRÉPARATION DU DOSSIER, 20 s au plus, sans rendu WebGL ni
 // nappe de mission. Sans cette attente, une mission lancée juste après l'ouverture du jeu (REPRENDRE, briefing déjà vu)
 // partait avec des PNJ procéduraux. Une mission relancée ou quittée pendant l'attente ne démarre pas (jeton de mission),
-// ni une mission dont le rendu a été interrompu entre-temps (pendant l'attente ou son briefing).
-function enterLevel(n) {
+// ni une mission dont le rendu a été interrompu entre-temps (pendant l'attente ou son briefing). prep : la préparation
+// faite pendant le briefing (launchLevel), reprise par startLevel ; null sans briefing.
+function enterLevel(n, prep = null) {
   const token = missionToken
   const isCurrent = () => token === missionToken && !renderLost
   startWhenReady({
@@ -442,7 +467,7 @@ function enterLevel(n) {
       stopMissionAmbience()
       return waitForCharacters({ ready: charactersReady, progress: charactersProgress, show: loadingScreen.show, hide: loadingScreen.hide, isCurrent })
     },
-    start: () => startLevel(n),
+    start: () => startLevel(n, prep),
     isCurrent,
   })
 }
@@ -472,15 +497,18 @@ function unmountLevel() {
   clearEffects()
 }
 
-function startLevel(n) {
-  clearEntities()
+// prep : mission montée pendant son briefing (launchLevel), reprise telle quelle. Sinon (sans briefing, modèles arrivés
+// trop tard, montage en échec), elle est démontée et montée ici, comme avant le lot 1.
+function startLevel(n, prep = null) {
+  const prepared = !!prep && prep.take()
+  if (!prepared) clearEntities()
   breathMeter = 1; isHolding = false; holdBreathKey = false
   statShots = 0; statHits = 0; statStart = performance.now(); statAlerts = 0
   timeScale = 1; killcamActive = false; failPending = false; lastTargetKillAt = -99999
   const token = missionToken   // minuteurs de cette mission : sans effet si elle est relancée ou abandonnée
   if (((n - 1) % 6) + 1 === 3) upgradeState.freedVictims = false   // chaque essai du port repart d'un choix vierge
 
-  mountLevel(n)
+  if (!prepared) mountLevel(n)
 
   // Cadenas du port : indice au bout de quelques secondes
   if (moralLockMesh) {
@@ -1473,12 +1501,13 @@ document.getElementById('btn-context-reload').onclick = () => location.reload()
 // Développement : ?cine=m3&freeze=12000&port=libres joue (ou fige) une cinématique directement.
 if (import.meta.env.DEV) {
   const q = new URLSearchParams(location.search)
-  // Mémoire GPU / JS de la partie (contrôle du nettoyage, spec §6.8) : __mem() dans la console
+  // Mémoire GPU / JS de la partie (contrôle du nettoyage, spec §6.8) : __mem() dans la console. images : rendus de la
+  // scène depuis le chargement (renderer.info), immobile pendant une cinématique, où rien ne doit être rendu.
   window.__mem = () => {
     let objets = 0; scene.traverse(() => objets++)
     const i = renderer.info
     return { geometries: i.memory.geometries, textures: i.memory.textures, programmes: i.programs ? i.programs.length : 0,
-      appels: i.render.calls, triangles: i.render.triangles, objets,
+      appels: i.render.calls, triangles: i.render.triangles, objets, images: i.render.frame,
       tasJSMo: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null }
   }
   // Décor de la scène (scripts/capture-mission.mjs, retour au menu) : couleur du fond (celle de la carte affichée,
@@ -1509,8 +1538,8 @@ if (import.meta.env.DEV) {
   }
   // ?memtest=1&images=3 : mesure mémoire scriptée (spec du lot 1 §4.1), lue par scripts/memtest.mjs. Pas de
   // requestAnimationFrame : la boucle du jeu est suspendue, chaque étape monte sa scène par les fonctions du jeu
-  // (showMenu, clearEntities puis mountLevel, buildRoundScene et releaseRoundScene, le bouton QUITTER du PvP), rend
-  // quelques images par appel direct, puis relève renderer.info. Résultat en JSON dans <pre id="memtest">,
+  // (showMenu, clearEntities puis mountLevel ou prepareLevel, buildRoundScene et releaseRoundScene, le bouton QUITTER
+  // du PvP), rend quelques images par appel direct, puis relève renderer.info. Résultat en JSON dans <pre id="memtest">,
   // document.title passe à 'memtest:fini' (ou 'memtest:erreur').
   if (q.has('memtest')) {
     import('./gfx/memtest.js').then(async ({ memtestSteps, withSeed, seedOf, measure, runMemtest }) => {
@@ -1527,9 +1556,39 @@ if (import.meta.env.DEV) {
       document.title = 'memtest:modeles'
       await charactersLoading   // sans les modèles, les PNJ seraient procéduraux et la mesure fausse
       const images = Math.max(1, +q.get('images') || 3)
+      // Étape premiere-image (spec du lot 1 §4.6) : la mission montée comme pendant son briefing (prepareLevel, shaders
+      // compilés), puis l'attente de leur compilation, que le briefing couvre ; &precompilation=0 : montée sans
+      // compilation, comme avant la tâche L7. Durées en temps réel seulement (scripts/memtest.mjs --temps-reel) : sous
+      // le temps virtuel de --dump-dom, performance.now ne bouge pas pendant une tâche. Les comptes de programmes, eux,
+      // valent partout : programmes créés (compilés) pendant la préparation, la première image, les images suivantes,
+      // repérés par leur numéro (WebGLProgram.id, croissant), ceux qu'une étape libère n'étant pas décomptés.
+      const precompile = q.get('precompilation') !== '0'
+      const programs = () => renderer.info.programs || []
+      const lastProgram = () => programs().reduce((m, p) => Math.max(m, p.id), -1)
+      const programsSince = id => programs().filter(p => p.id > id).length
+      const ms = v => Math.round(v * 10) / 10
+      const gl = renderer.getContext()
+      const pixel = new Uint8Array(4)
+      // Une image rendue jusqu'au bout : la lecture d'un pixel attend que tout ce qu'elle a demandé soit exécuté
+      // (shaders encore en compilation, textures envoyées).
+      const timedFrame = () => {
+        const t0 = performance.now()
+        renderer.render(scene, camera)
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel)
+        return performance.now() - t0
+      }
       let round = false
-      const act = step => withSeed(seedOf(step), () => {
-        if (step.type === 'mission') {
+      const mount = step => withSeed(seedOf(step), () => {
+        if (step.type === 'premiere') {
+          clearEntities()   // comme launchLevel
+          const last = lastProgram()
+          const t0 = performance.now()
+          if (precompile) prepareLevel(step.n)
+          else mountLevel(step.n)
+          const preparationMs = ms(performance.now() - t0)
+          aimMissionCamera()
+          return { precompilation: precompile, preparationMs, programmesPreparation: programsSince(last) }
+        } else if (step.type === 'mission') {
           clearEntities()   // comme launchLevel puis startLevel
           mountLevel(step.n)
           aimMissionCamera()
@@ -1556,7 +1615,25 @@ if (import.meta.env.DEV) {
           withSeed(seedOf(step), () => { showMenu(); driftMenuCamera(0) })
         }
       })
-      const render = () => { for (let i = 0; i < images; i++) renderer.render(scene, camera) }
+      const act = async step => {
+        const mounted = mount(step)
+        if (step.type === 'premiere' && precompile) {
+          const t0 = performance.now()
+          await renderer.compileAsync(scene, camera)   // aucun nouveau programme : attend ceux de prepareLevel
+          mounted.attenteShadersMs = ms(performance.now() - t0)
+        }
+        return mounted
+      }
+      const render = step => {
+        if (step.type !== 'premiere') { for (let i = 0; i < images; i++) renderer.render(scene, camera); return }
+        const avant = lastProgram()
+        const premiereImageMs = ms(timedFrame())
+        const programmesPremiereImage = programsSince(avant)
+        const apres = lastProgram()
+        const imageSuivanteMs = ms(timedFrame())
+        for (let i = 2; i < images; i++) renderer.render(scene, camera)
+        return { premiereImageMs, programmesPremiereImage, imageSuivanteMs, programmesImagesSuivantes: programsSince(apres) }
+      }
       const snapshot = () => {
         if (typeof window.gc === 'function') window.gc()   // Chrome lancé avec --js-flags=--expose-gc
         return measure(renderer.info, performance.memory)

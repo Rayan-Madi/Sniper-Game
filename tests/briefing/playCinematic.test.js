@@ -170,6 +170,48 @@ describe('playCinematic', () => {
     })
   })
 
+  // Mission montée pendant son briefing (spec du lot 1 §4.6, tâche L7) : main.js passe ready, promesse tenue une fois
+  // la mission montée. L'écran noir s'affiche tout de suite ; la scène ne démarre qu'ensuite, pour que le montage, qui
+  // bloque le fil principal, ne fige pas son animation.
+  describe('option ready', () => {
+    it('écran noir tout de suite, scène démarrée seulement une fois ready tenue', async () => {
+      let go
+      const ready = new Promise(r => { go = r })
+      const pending = playCinematic('test', { ready })
+      const root = document.getElementById('briefing-root')
+      expect(root.hidden).toBe(false)
+      await flush()
+      expect(root.querySelector('#scene')).toBeNull()
+      expect(isCinematicPlaying()).toBe(false)
+      go()
+      await pending
+      expect(root.querySelector('#scene')).not.toBeNull()
+      expect(isCinematicPlaying()).toBe(true)
+    })
+
+    it('ready rejetée : la scène démarre quand même', async () => {
+      const onDone = vi.fn()
+      const handle = await playCinematic('test', { onDone, ready: Promise.reject(new Error('montage')) })
+      expect(handle.kit).not.toBeNull()
+      expect(isCinematicPlaying()).toBe(true)
+      expect(onDone).not.toHaveBeenCalled()
+    })
+
+    it('une cinématique demandée pendant l\'attente de ready la remplace sans bruit', async () => {
+      let go
+      const first = vi.fn()
+      const pending = playCinematic('test', { onDone: first, ready: new Promise(r => { go = r }) })
+      await flush()
+      const second = await playCinematic('longue', {})
+      go()
+      const stale = await pending
+      expect(stale.kit).toBeNull()
+      expect(second.kit).not.toBeNull()
+      expect(isCinematicPlaying()).toBe(true)
+      expect(first).not.toHaveBeenCalled()
+    })
+  })
+
   it('refuse une cinématique inconnue', async () => {
     await expect(playCinematic('nope', {})).rejects.toThrow(/inconnue/)
   })

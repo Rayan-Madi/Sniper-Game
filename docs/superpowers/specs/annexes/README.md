@@ -11,6 +11,7 @@ Mesures et relevés qui servent de référence aux specs de `docs/superpowers/sp
 | Étapes | Monté par |
 |---|---|
 | `menu` | `showMenu()` : la rue construite au démarrage ; depuis la tâche L2, `showMenu` libère la carte courante et reconstruit la rue |
+| `premiere-image` | depuis la tâche L7 : `clearEntities()` puis `prepareLevel(1)` (M1 montée et ses shaders compilés, comme pendant son briefing), attente de la compilation (`renderer.compileAsync`), puis la première image, chronométrée ; avec `--sans-precompilation`, `mountLevel(1)` seul, comme avant L7. Voir « Après la tâche L7 » |
 | `M1` à `M6` | `clearEntities()` puis `mountLevel(n)`, comme `launchLevel` puis `startLevel` |
 | `menu-campagne` | `showMenu()` après la campagne |
 | `M6-1` à `M6-10` | dix relances de M6 |
@@ -34,7 +35,11 @@ node scripts/memtest.mjs --check         # applique les seuils du §6 de la spec
 node scripts/memtest.mjs --reference     # recopie le résultat dans 2026-10-07-memtest-reference.json
 node scripts/memtest.mjs --annexe=2026-10-07-memtest-apres-lot1.json   # recopie le résultat sous ce nom
 node scripts/memtest.mjs --images=5 --qualite=bas                      # images rendues par étape ; qualité transmise à la route
+node scripts/memtest.mjs --temps-reel --gpu --qualite=moyen            # durées de l'étape premiere-image (temps réel, carte graphique)
+node scripts/memtest.mjs --temps-reel --gpu --qualite=moyen --sans-precompilation   # la même, montée comme avant la tâche L7
 ```
+
+`--temps-reel` (tâche L7) remplace `--dump-dom` et son temps virtuel par le protocole DevTools : sous le temps virtuel, `performance.now` ne bouge pas pendant une tâche (une boucle de calcul y dure 0 ms, vérifié), et les durées de l'étape `premiere-image` y valent 0. Port choisi par Chrome (`--remote-debugging-port=0`, relu dans `DevToolsActivePort`), jamais un port fixe. Sur la carte graphique, la mesure complète prend environ 25 s. Les compteurs sont les mêmes dans les deux modes.
 
 Variables : `CHROME` (chemin de Chrome), `BASE_URL` (défaut `http://localhost:5173/`), `BUDGET_MS` (budget de temps virtuel de Chrome, défaut 1 200 000 ; la mesure prend environ 3 min 30 en temps réel). Sans `--qualite`, les seuils de triangles sont ceux du préréglage Moyen.
 
@@ -104,6 +109,34 @@ Mesures du 9 octobre 2026 sur `1883d77` plus la tâche L4 (`shots/memtest-2026-1
 - **Seuil Moyen de M6 (≤ 1,5 M) : tenu**, 1 422 955.
 - **Seuil Bas de M6 (≤ 0,8 M) : dépassé**, 1 330 361. Décomposition relevée dans le jeu (M6 lancée par le menu, 20 images, Chrome sans interface) : les 27 PNJ sont tous dans le champ à la vue de départ, leurs 156 maillages animés font 1 333 420 triangles à eux seuls, la carte moins de 3 000 (1 878 sans ombre). En Bas, plus aucun personnage ne projette d'ombre et la passe d'ombre ne compte plus qu'un millier de triangles : il ne reste que la géométrie propre des personnages, que seuls des niveaux de détail des foules réduiraient (lot poids, hors de ce lot). Le « (ombres des personnages coupées) » du §6 supposait que couper ces ombres suffirait ; la mesure dit que non. Reformulation à acter par le porteur de la spec : tâche L8 du plan.
 - **Sphère d'instance, rayon 1,25 contre 0,75** (écart de L3 au §4.3 de la spec) : mesure refaite en Moyen et en Bas avec un rayon de 0,75 le temps de deux mesures (`shots/memtest-2026-10-08T23-14-00.json` et `…T23-19-19.json`, jamais commité). Les 25 étapes sont identiques à l'unité près (géométries, textures, programmes, appels, triangles) : aux vues de départ des six missions et de l'arène, aucun personnage n'est assez près du bord du champ pour que le rayon change quoi que ce soit. Le rayon de 1,25 ne coûte donc rien à ces vues ; il évite les personnages coupés en bord d'écran quand on vise ailleurs.
+
+### Après la tâche L7 (précompilation pendant le briefing)
+
+Mesures du 9 octobre 2026 sur `f6b742f` plus la tâche L7, Moyen (dossier local `shots/`, horodatage en UTC).
+
+**Étape `premiere-image`** : M1 montée à froid, juste après le menu de départ, comme la première mission d'une session (aucun de ses shaders n'est encore compilé), puis sa première image, chronométrée jusqu'à la lecture d'un pixel (tout ce qu'elle a demandé est exécuté). Elle tire le hasard de M1 : l'étape M1 qui suit dessine les mêmes modèles, et les 25 autres étapes sont identiques à l'unité près à la mesure en Moyen d'après L4 (`shots/memtest-2026-10-09T11-49-50.json` contre `…2026-10-08T23-03-30.json` : géométries, textures, programmes, appels, triangles). Les programmes comptés sont ceux que chaque moment crée (compile), repérés par leur numéro : ils valent aussi sous le temps virtuel.
+
+Carte graphique de Rayan (RTX 3080), `--temps-reel --gpu`, trois mesures de chaque (`shots/memtest-2026-10-09T11-32-37.json`, `…T11-33-24`, `…T11-34-12` ; avant : `…T11-33-01`, `…T11-33-48`, `…T11-34-36`) :
+
+| M1 à froid | Préparation (fil principal) | Attente des shaders (en fond) | Première image | Image suivante |
+|---|---|---|---|---|
+| Avant L7 (`--sans-precompilation`) : montage au départ de la mission | 81 à 90 ms, 0 programme | | **1 184 à 1 222 ms**, 9 programmes | 11 à 16 ms, 1 programme |
+| Après L7 : montage et compilation pendant le briefing | 105 à 132 ms, 8 programmes | 252 à 274 ms | **392 à 409 ms**, 1 programme | 12 à 16 ms, 1 programme |
+
+Dans le jeu lui-même (Chrome sans interface sur la carte graphique, script de diagnostic non versionné : sauvegarde à la mission voulue, COMMENCER, briefing passé au bout de 6 s, `renderer.render` chronométré jusqu'à la lecture d'un pixel ; deux mesures de chaque, `main.js` de `f6b742f` remis le temps des mesures d'avant) :
+
+| Session à froid | Écran noir avant la cinématique | Fin du briefing : montage | Première image de la mission |
+|---|---|---|---|
+| M1, avant L7 | 56 ms | 0,12 à 0,15 s | 1 274 à 1 401 ms, 9 programmes |
+| M1, après L7 | 176 à 180 ms, montage compris | aucun | 443 à 502 ms, 1 programme |
+| M6, avant L7 | 57 à 59 ms | 0,35 à 0,41 s | 2 480 à 2 485 ms, 9 programmes |
+| M6, après L7 | 400 à 407 ms, montage compris | aucun | 481 à 658 ms, 1 programme |
+
+(Montage au départ relevé sur le départ sans briefing, qui monte comme avant L7 : 123 à 146 ms pour M1, 352 à 412 ms pour M6, clic compris.)
+
+- **Entre la cinématique et la mission, l'arrêt passe d'environ 2,8 s à 0,5 à 0,7 s en M6, et d'environ 1,4 s à 0,5 s en M1**, sur la machine de Rayan. En contrepartie, l'écran noir qui précède la cinématique dure le temps du montage (0,4 s en M6) : le montage bloque le fil principal, il se fait sur l'écran noir déjà peint, et la cinématique ne démarre qu'ensuite (sinon son animation se figeait). Le clic sur le bouton de lancement, lui, rend la main en 45 à 50 ms comme avant (une première version, qui montait dans le clic, le figeait 0,4 s en M6).
+- **Ce qui reste dans la première image** : un programme de profondeur des ombres pour les personnages animés, compilé par la passe d'ombre, que `renderer.compile` ne parcourt pas, et l'envoi au GPU des textures des modèles (environ 0,15 s : avec les 18 textures de M1 envoyées d'avance par `renderer.initTexture`, 432 ms au lieu de 587 ms dans la même mesure). La deuxième image compile encore une variante de profondeur sans animation, avant comme après L7. Hors du §4.6 de la spec ; suite possible : envoyer les textures pendant le briefing (`renderer.initTexture`).
+- **Sous SwiftShader** (temps réel, une mesure de chaque), le rendu logiciel domine : 1 826 ms (9 programmes) avant, 1 584 ms (1 programme) après, pour 440 ms par image ensuite.
 
 ## Captures déterministes (`scripts/capture-mission.mjs`)
 
