@@ -81,6 +81,7 @@ Questions encore ouvertes :
 - **Interface** : en 1280 × 720, l'aide des commandes passe sur deux lignes ; deux libellés du journal de Viktor sont peu contrastés (2,3:1 et 2,9:1) ; les tirets cadratins restent dans les répliques des scènes générées.
 - `scripts/verif-mission.mjs`, scénario `aide-reussite` : non concluant une fois sur trois quand le premier tir touche un civil (problème du script, pas du jeu).
 - `scripts/verif-mission.mjs`, scénario `journal` : peut sortir rouge si on le lance pendant un memtest (fichier DevToolsActivePort verrouillé, ou cible qui fuit après un tir manqué) ; lancé seul, il est vert. Ne pas lancer les deux en même temps.
+- `scripts/memtest.mjs` sur un serveur Vite fraîchement lancé : la première mesure peut s'arrêter à « memtest:modeles » avec 0 étape (modules compilés à la première visite pendant que le temps virtuel de Chrome s'écoule) ; la relancer suffit. À rendre robuste au lot 2 (nouvel essai automatique).
 - **Restes du lot 1** (détail dans sa spec, §4.3, §4.5, §4.6 et §8) :
   - cas rare : une mission lancée alors que les modèles chargent encore (REPRENDRE juste après l'ouverture du jeu, briefing pas encore vu) se monte à leur arrivée, en pleine cinématique, qu'elle fige de 0,1 à 0,4 s ; gardé tel quel (pistes au plan du lot 1, tâche L7) ;
   - l'écran noir qui ouvre un briefing s'allonge du temps du montage de la mission (0,4 s en M6 sur la RTX 3080, sans doute 0,8 à 1 s sur un PC de milieu de gamme, non mesuré) ; l'arrêt qui suit la cinématique, lui, raccourcit bien plus ;
