@@ -1,12 +1,14 @@
 import { getStats } from './upgrades.js'
-import { stepTremble } from './aim.js'
+import { stepTremble, trembleParams, mradToPixels, fovFor } from './aim.js'
 
 const canvas = document.getElementById('scope-canvas')
 const ctx = canvas.getContext('2d')
 
 let visible = false
 let zoom = 4
-let tremble = { x: 0, y: 0, vx: 0, vy: 0, phase: 0 }   // phase : oscillation de respiration
+// Écart de la visée au centre, en milliradians (phase : oscillation de respiration). Réglé en angle : le même à tous les
+// zooms ; converti en pixels pour le réticule et le rayon du tir (getTrembleOffset).
+let tremble = { x: 0, y: 0, vx: 0, vy: 0, phase: 0 }
 let stress = 0
 let steady = 1        // 1 = normal, <1 = apnée (visée stabilisée)
 
@@ -19,19 +21,23 @@ export function getZoom() { return zoom }
 export function setStress(s) { stress = s }
 export function setSteady(s) { steady = s }
 
+// Tremblement toujours présent (respiration), amplifié par le stress : cibles en milliradians de src/shot/tuning.js,
+// physique dans src/aim.js (même écart quel que soit le nombre d'images par seconde).
 export function updateTremble(dt) {
-  const stats = getStats()
-  // Tremblement de base TOUJOURS présent (respiration) + amplifié par le stress
-  const baseBreath = 14 * stats.trembleScale                       // balancement constant net
-  const stressKick = stress * stress * 220 * stats.trembleScale    // quadratique : explose à haut stress
-  const intensity  = (baseBreath + stressKick) * steady
-  // Amplitude de la dérive en huit (respiration)
-  const sway = (8 + stress * 30) * stats.trembleScale * steady
-  // Physique dans src/aim.js : même dispersion quel que soit le nombre d'images par seconde
-  stepTremble(tremble, { intensity, sway, breathRate: 1.2 + stress * 1.5 }, dt, Math.random)
+  if (!(dt > 0)) return
+  const p = trembleParams(stress, { scale: getStats().trembleScale, steady }, dt)
+  stepTremble(tremble, p, dt, Math.random)
 }
 
+// Décalage du réticule à l'écran (pixels CSS, y vers le bas) : l'angle du tremblement vu dans le champ de la lunette.
+// main.js en tire le rayon du tir (shoot) : la balle part là où le réticule est dessiné.
 export function getTrembleOffset() {
+  const fov = fovFor(zoom, true)
+  return { x: mradToPixels(tremble.x, fov, innerHeight), y: mradToPixels(tremble.y, fov, innerHeight) }
+}
+
+// Écart de la visée en milliradians (accroche de dev __aim()).
+export function getTrembleMrad() {
   return { x: tremble.x, y: tremble.y }
 }
 
@@ -80,8 +86,9 @@ export function drawScope() {
 
   // ─── RÉTICULE — suit le tremblement (c'est là que part la balle) ─────
   // Le centre du réticule = centre écran + offset de tremblement
-  const rx = cx + tremble.x
-  const ry = cy + tremble.y
+  const offset = getTrembleOffset()
+  const rx = cx + offset.x
+  const ry = cy + offset.y
 
   ctx.save()
   // Couleur du réticule vire au rouge avec le stress (alerte visuelle)

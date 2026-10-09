@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { BASE_FOV, fovFor, aimAngles, stepTremble } from '../src/aim.js'
+import { BASE_FOV, fovFor, aimAngles, stepTremble, mradToPixels, pixelsToMrad } from '../src/aim.js'
 
 // Générateur congruentiel linéaire à graine : la même suite dans [0, 1) à chaque exécution.
 function lcg(seed) {
@@ -18,6 +18,48 @@ describe('champ de vision de la lunette', () => {
   it('lunette fermée : 60, quel que soit le zoom réglé', () => {
     expect(fovFor(4, false)).toBe(60)
     expect(fovFor(12, false)).toBe(60)
+  })
+})
+
+describe('conversion entre angle et pixels écran', () => {
+  // Où la caméra du jeu (perspective, champ vertical `fov`, pixels carrés) projette une direction écartée de θ de son
+  // axe, en x ou en y : la vérité que mradToPixels doit rendre, quelle que soit la largeur de l'écran.
+  function projette(theta, fov, w, h, axe) {
+    const cam = new THREE.PerspectiveCamera(fov, w / h, 0.1, 100)
+    cam.updateMatrixWorld()
+    const p = axe === 'x' ? new THREE.Vector3(Math.tan(theta), 0, -1) : new THREE.Vector3(0, Math.tan(theta), -1)
+    p.project(cam)
+    return axe === 'x' ? p.x * w / 2 : p.y * h / 2
+  }
+  const cas = [[1, 15], [4.5, 5], [-30, 15], [100, 60], [400, 60]]   // [mrad, champ vertical en degrés]
+  const ecrans = [[1920, 1080], [1280, 720], [1080, 1920]]
+
+  // Écart relatif le plus grand entre une conversion et la projection de la caméra, tous cas, écrans et axes.
+  function pire(conv) {
+    let max = 0
+    for (const [mrad, fov] of cas) for (const [w, h] of ecrans) for (const axe of ['x', 'y']) {
+      const vrai = projette(mrad / 1000, fov, w, h, axe)
+      max = Math.max(max, Math.abs(conv(mrad, fov, h) - vrai) / Math.abs(vrai))
+    }
+    return max
+  }
+
+  it('mradToPixels tombe là où la caméra projette la direction, en x comme en y', () => {
+    expect(pire(mradToPixels)).toBeLessThan(1e-9)
+    // Témoin : la règle de trois (pixels proportionnels à l'angle) s'en écarte aux grands angles, et la mesure le voit.
+    const regleDeTrois = (mrad, fov, h) => (mrad / 1000) / (fov * Math.PI / 360) * (h / 2)
+    expect(pire(regleDeTrois)).toBeGreaterThan(0.01)
+  })
+
+  it('pixelsToMrad est l\'inverse exact de mradToPixels', () => {
+    for (const [mrad, fov] of cas) for (const h of [720, 1080]) {
+      expect(pixelsToMrad(mradToPixels(mrad, fov, h), fov, h)).toBeCloseTo(mrad, 9)
+    }
+  })
+
+  it('sur un écran de 1080 pixels de haut, 1 mrad couvre 4,1 pixels à ×4 et 12,4 pixels à ×12', () => {
+    expect(mradToPixels(1, fovFor(4, true), 1080)).toBeCloseTo(4.10, 2)
+    expect(mradToPixels(1, fovFor(12, true), 1080)).toBeCloseTo(12.37, 2)
   })
 })
 

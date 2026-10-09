@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQuality } from './scene.js'
-import { showScope, hideScope, isVisible, setZoom, getZoom, setStress, setSteady, updateTremble, getTrembleOffset, drawScope } from './scope.js'
+import { showScope, hideScope, isVisible, setZoom, getZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope } from './scope.js'
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
@@ -11,7 +11,8 @@ import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, in
 import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
-import { fovFor, aimAngles } from './aim.js'
+import { fovFor, aimAngles, stepStress } from './aim.js'
+import { STRESS, APNEE } from './shot/tuning.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
 import { rankFor, precisionOf, isHit } from './campaign/rank.js'
@@ -879,7 +880,7 @@ function shoot() {
   statShots++
   shotFlash(effectsReduced())   // 0,22 d'opacité, 0,06 en effets atténués
   stats.silenced ? playSilencedShot() : playShot()
-  stress = Math.min(1, stress + 0.12)
+  stress = Math.min(1, stress + STRESS.parTir)
 
   // CAPTURER la visée MAINTENANT (le réticule visible au clic) —
   // pas à l'impact, sinon le tremblement a dérivé pendant le délai de vol
@@ -979,7 +980,7 @@ function resolveBullet() {
     if (holePos) spawnBulletHole(holePos)
 
     if (!stats.silenced) {
-      stress = Math.min(1, stress + 0.15)
+      stress = Math.min(1, stress + STRESS.tirManque)
       fleeNearby(shotPos, 20)
       reactNearby(shotPos, 28)
       checkGuardAlert(shotPos, stats)
@@ -1010,7 +1011,7 @@ function killTarget(npc, headshot = false) {
   let bonus = npc.onVehicle ? 400 : (npc.isStill() ? 250 : 120)
   if (headshot) bonus *= 2
   score += bonus
-  stress = Math.max(0, stress - 0.1)
+  stress = Math.max(0, stress - STRESS.cibleAbattue)
   addKillFeed(headshot ? `🎯 HEADSHOT : cible éliminée (+${bonus} pts)` : `✓ Cible éliminée (+${bonus} pts)`)
 
   // Double élimination : deux cibles en moins de 4 secondes
@@ -1058,7 +1059,7 @@ function hitGuard(npc, stats) {
     }
   } else {
     triggerAlert('⚠ Garde touché : ALERTE DÉCLENCHÉE')
-    stress = Math.min(1, stress + 0.45)
+    stress = Math.min(1, stress + STRESS.gardeTouche)
   }
 }
 
@@ -1165,14 +1166,14 @@ document.addEventListener('contextmenu', e => e.preventDefault())
 
 document.addEventListener('mousedown', e => {
   if (gamePhase !== 'playing') return
-  if (e.button === 2) { showScope(); stress = Math.min(1, stress + 0.04) }
+  if (e.button === 2) { showScope(); stress = Math.min(1, stress + STRESS.ouvertureLunette) }
   if (e.button === 0 && isVisible()) shoot()
 })
 
 document.addEventListener('mouseup', e => {
   if (e.button === 2) {
     hideScope()
-    stress = Math.max(0, stress - 0.06)
+    stress = Math.max(0, stress - STRESS.fermetureLunette)
   }
 })
 
@@ -1404,28 +1405,20 @@ function loop(rafAt) {
       if (bulletDelay <= 0) resolveBullet()
     }
 
-    // Stress
-    const stats = getStats()
-    if (isVisible()) {
-      stress += 0.008 * stats.stressRate * dt * 60
-    } else {
-      stress -= 0.02 * dt * 60
-    }
-    stress = Math.max(0, Math.min(1, stress))
-    setStress(stress)
-
-    // ── Apnée (retenir son souffle) ──
+    // ── Apnée (retenir son souffle) : visée quasi stable, au plus APNEE.dureeS, jauge rechargée en APNEE.rechargeS ──
     isHolding = holdBreathKey && isVisible() && breathMeter > 0.02
     if (isHolding) {
-      breathMeter = Math.max(0, breathMeter - dt / 4.0)   // ~4s d'apnée max
-      setSteady(0.12)                                      // visée quasi stable
-      // Mais l'apnée fait monter le stress plus vite (manque d'air)
-      stress = Math.min(1, stress + 0.10 * dt)
+      breathMeter = Math.max(0, breathMeter - dt / APNEE.dureeS)
+      setSteady(APNEE.stabilite)
     } else {
-      breathMeter = Math.min(1, breathMeter + dt / 6.0)   // récupération
+      breathMeter = Math.min(1, breathMeter + dt / APNEE.rechargeS)   // récupération
       setSteady(1)
     }
     setHoldingBreath(isHolding)
+
+    // Stress, en secondes : il monte lunette ouverte (moins vite avec le Sang-froid), redescend lunette fermée, et
+    // l'apnée en ajoute (manque d'air). Vitesses dans src/shot/tuning.js.
+    stress = stepStress(stress, dt, { scoped: isVisible(), holding: isHolding, rate: getStats().stressRate })
     setStress(stress)
 
     // Audio respiration / cœur
@@ -1520,8 +1513,9 @@ if (import.meta.env.DEV) {
   // cadenas, PNJ ou jeeps restés dans la scène).
   window.__decor = () => ({ fond: scene.background && scene.background.getHexString(),
     horsCarte: scene.children.filter(o => !isMapObject(o) && o !== ambient && o !== sun && o !== fill).map(o => o.type) })
-  // Visée (relectures du zoom) : __aim() dans la console
-  window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), scoped: isVisible() })
+  // Visée (relectures du zoom, du stress et du tremblement en milliradians et en pixels) : __aim() dans la console
+  window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), scoped: isVisible(), stress,
+    trembleMrad: getTrembleMrad(), tremblePx: getTrembleOffset() })
   // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console
   window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,
     pnj: npcs.map(n => n.mesh.position.toArray().map(v => +v.toFixed(3))),

@@ -111,6 +111,8 @@ Tremblement exprimé en **milliradians** (écart quadratique moyen visé, apnée
 | Stress 1 | 4,5 mrad | 14 cm | 1,9 m |
 | Apnée | × 0,15 | | |
 
+Précisions de la tâche T1 : l'écart quadratique moyen est **radial** (racine de la moyenne de x² + y² de l'écart de visée, en régime établi), comme la mesure de l'audit ; entre les trois points (stress 0, 0,5 et 1), la loi est la parabole qui y passe ; le mouvement garde la forme d'avant le lot 2 (à-coups, dérive en huit, respiration), ramenée à la cible pour le pas de chaque image, si bien que l'écart vaut la cible à toute cadence (à 2 % près à 30, 60, 144 et 240 i/s, là où une normalisation unique laissait environ 8 % d'écart entre 60 et 144 i/s).
+
 Stress : il monte de **0,07 par seconde** lunette ouverte (moitié en 7 s, plein en 14 s) au lieu de 0,48, redescend de 0,5 par seconde lunette fermée, +0,12 par tir comme aujourd'hui ; Sang-froid garde son effet relatif. Apnée inchangée (4 s, recharge 6 s). À 30 m ces valeurs gardent un vrai enjeu sur la tête (sphère de 13 cm) ; à 430 m (lot 3) elles rendent l'apnée et le calme décisifs. Toutes ces valeurs vivent dans `tuning.js` : le lot 3 les reréglera à la main sur la longue distance.
 
 ### 3.7 Petites corrections de la même famille
