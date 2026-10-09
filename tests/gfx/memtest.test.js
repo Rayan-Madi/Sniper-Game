@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { memtestSteps, withSeed, seedOf, measure, runMemtest } from '../../src/gfx/memtest.js'
 import { checkMemtest, parseDump, memtestUrl } from '../../scripts/memtest.mjs'
 
@@ -253,5 +255,30 @@ describe('parseDump : sortie de Chrome --dump-dom', () => {
   it('page sans mesure : titre lu, aucune étape', () => {
     expect(parseDump('<html><head><title>Sniper</title></head><body></body></html>'))
       .toEqual({ title: 'Sniper', qualite: '', etapes: [] })
+  })
+})
+
+// Mesures versionnées dans les annexes (README des annexes, « Après le lot 1 ») : la mesure de fin de lot (tâche L8)
+// tient les seuils du §6 de la spec, reformulés le 9 octobre 2026 (§8), en Moyen et en Bas ; la référence d'avant
+// correction en dépasse quatre sur cinq. Sans cette garde, un changement de checkMemtest pourrait démentir les annexes
+// et leur README sans que rien ne le signale.
+describe('annexes : mesures versionnées du lot 1', () => {
+  const annexe = nom => JSON.parse(readFileSync(resolve(__dirname, '../../docs/superpowers/specs/annexes', nom), 'utf8'))
+  const failed = r => r.filter(c => !c.ok).map(c => c.critere)
+
+  it('fin de lot : les cinq seuils tenus en Moyen et en Bas', () => {
+    for (const nom of ['2026-10-07-memtest-apres-lot1.json', '2026-10-07-memtest-apres-lot1-bas.json']) {
+      const r = annexe(nom)
+      expect(r.etat).toBe('memtest:fini')
+      const crit = checkMemtest(r.etapes, { qualite: r.qualite })
+      expect(crit).toHaveLength(5)
+      expect([nom, r.qualite, failed(crit)]).toEqual([nom, nom.endsWith('-bas.json') ? 'bas' : 'moyen', []])
+    }
+  })
+
+  it('référence d\'avant correction : quatre seuils dépassés sur cinq', () => {
+    const r = annexe('2026-10-07-memtest-reference.json')
+    expect(failed(checkMemtest(r.etapes, { qualite: r.qualite })))
+      .toEqual(['partie complète', '10 montages de M6', 'PvP', 'triangles de M6'])
   })
 })

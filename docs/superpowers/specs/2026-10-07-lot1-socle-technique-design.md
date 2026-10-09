@@ -172,6 +172,8 @@ Relecture de L3 : le critère « partie complète » ne peut pas tenir tel qu'é
 
 Relecture de L4 : le seuil Bas des triangles de M6 (0,8 M) ne peut pas tenir avec les leviers de ce lot. En Bas, plus aucun personnage ne projette d'ombre, et les 27 PNJ de M6, tous dans le champ à la vue de départ, font à eux seuls 1,33 M triangles ; la carte en fait moins de 3 000 (mesure du 9 octobre 2026, README des annexes). Seuls des niveaux de détail des foules (lot poids) feraient descendre ce chiffre. Le seuil Moyen (1,5 M) tient : 1,42 M. Reformulation proposée dans la tâche L8 du plan, actée le 9 octobre 2026 (§8) et reportée dans le tableau ci-dessus à la tâche L8 (seuil d'origine : Bas ≤ 0,8 M, ombres des personnages coupées).
 
+Mesure de fin de lot (tâche L8, 9 octobre 2026, `5b8e7ec`) : les cinq critères Chrome réel du tableau sont tenus en Moyen et en Bas (`node scripts/memtest.mjs --check`, annexes `2026-10-07-memtest-apres-lot1.json` et `…-apres-lot1-bas.json`) ; captures du menu, de M1, M3, M5, M6 et d'une cinématique sans régression visible face à celles d'avant le lot. Chiffres avant et après : README des annexes, « Après le lot 1 ».
+
 ## 7. Risques
 
 - **Libérer une ressource partagée** (modèles noirs ou sans texture) : traité par le marquage au chargement et par le test « 0 partagé libéré ».
