@@ -218,12 +218,21 @@ Les captures d'avant sont identiques à l'octet près à celles de `shots/avant-
 - M1, M3 et M6 : la foule est placée autrement (hasard décalé depuis L3, ci-dessus), mais tous les personnages sont là, avec leurs textures (costumes et cible marquée de M1, tenue camouflée de M3, danseurs de M6), et le décor, ses textures et ses ombres sont intacts (étal, immeubles, arbres, voitures, poubelles en M1) ;
 - ombres en Moyen : M1 en Moyen contre M1 en Haut, même code (`QUALITE=haut`, `shots/l8-haut/m1.png`) : 100 pixels diffèrent, tous dans un rectangle de 147 × 14 pixels, au sol, au pied des civils proches du passage piéton et de l'étal. En Moyen, seuls les civils perdent leur ombre (spec §4.3) ; la cible marquée, la carte et leurs ombres sont celles de Haut, au pixel près.
 
-**Retour au menu** (tâche L2) : la cible `retour<n>` joue la mission n, tire trois balles qui passent au-dessus des PNJ (trois trous d'impact au sol, poussière et traceur encore en vie), met en pause, revient au MENU, puis capture `retour-m<n>.png`. Le script affiche `__decor()` avant et après le retour : accroche de dev de `main.js` qui donne la couleur du fond de la scène et le type des objets qui ne sont ni la carte affichée ni les trois lumières du jeu.
+**Retour au menu** (tâche L2) : la cible `retour<n>` joue la mission n, tire trois balles qui passent au-dessus des PNJ (trois trous d'impact au sol, poussière et sillage encore en vie ; traceur avant le lot 2), met en pause, revient au MENU, puis capture `retour-m<n>.png`. Depuis la culasse du lot 2 (tâche T3), le script avance les images jusqu'à `__aim().pret` avant chaque tir (1,2 s entre deux coups) : ces captures ne se comparent plus à l'octet avec celles d'avant. Le script affiche `__decor()` avant et après le retour : accroche de dev de `main.js` qui donne la couleur du fond de la scène et le type des objets qui ne sont ni la carte affichée ni les trois lumières du jeu.
 
 ```bash
 node scripts/capture-mission.mjs l2 retour3   # shots/l2/retour-m3.png
 ```
 
 Avant L2, le port restait derrière le menu avec son cadenas (`{"fond":"0a1520","horsCarte":["Group"]}`) ; après L2, la rue est reconstruite et rien d'autre ne reste (`{"fond":"87a0b0","horsCarte":[]}`).
+
+**Coup de feu** (lot 2, tâche T3, 9 octobre 2026) : la cible `tir<n>` ouvre la lunette sur la vue de départ (15 images), tire, puis capture `tir-m<n>.png` `APRES` images plus tard (12 par défaut, 200 ms : balle en vol, sillage qui monte vers le point visé, vue relevée par le recul, jauge de la culasse sous le réticule ; `APRES=4` pour la lueur chaude des bords de la lunette, éteinte en 140 ms). `VISER=cible` (ou `garde`, `civil`, `cadenas`, comme `__aimAt`) vise ce PNJ avant le tir. Le script affiche la course de la culasse, le recul en degrés et l'état de la balle.
+
+```bash
+VISER=cible node scripts/capture-mission.mjs t3 tir1          # shots/t3/tir-m1.png
+VISER=cible APRES=4 node scripts/capture-mission.mjs t3 tir1  # la lueur du coup de feu
+```
+
+Mesuré au commit de T3 : lunette ouverte et à mi-ouverture (`lunette1`, `mi-lunette1`, `lunette2`, `mi-lunette2`) identiques à l'octet près à celles de T2 (`shots/lot2-t2/`) : sans tir, la lunette ne change pas. Après un tir sur la cible de M1 (`VISER=cible`) : à 200 ms, recul de 0,94° encore en cours, culasse à 17 %, sillage visible dans la lunette (`12f1d191bebfe186`) ; à 67 ms, recul de 2,11°, lueur visible (`e843ffb30fbde801`).
 
 **Attente des modèles** : jusqu'à L2, le script comptait aussi les messages « [characters] chargé » de la première page, celle qui pose la sauvegarde et qui charge encore ses modèles quand on la quitte. Le clic sur COMMENCER partait alors parfois avant la fin du chargement de la page rechargée : 488 tirages de hasard en moins avant le clic (les identifiants des objets three.js en consomment), donc d'autres fenêtres allumées, d'autres tonneaux, d'autres PNJ, au même code, environ une capture sur trois. Seuls comptent désormais les messages de la page rechargée (son contexte d'exécution).

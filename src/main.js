@@ -1,18 +1,20 @@
 import * as THREE from 'three'
 import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQuality } from './scene.js'
-import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope, getScopeFov, getScopeOpenness, setZoom, getZoom, getEffectiveZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope, resizeScope } from './scope.js'
+import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope, getScopeFov, getScopeOpenness, setZoom, getZoom, getEffectiveZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope, resizeScope, shotGlow, setBoltProgress } from './scope.js'
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
 import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject } from './maps.js'
-import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
-import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
+import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
+import { spawnTrail, spawnImpact, spawnDust, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
 import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
 import { aimAngles, stepStress, clampPitch } from './aim.js'
-import { STRESS, APNEE } from './shot/tuning.js'
+import { STRESS, APNEE, SILLAGE } from './shot/tuning.js'
+import { createRecoil } from './shot/recoil.js'
+import { createBolt } from './shot/bolt.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
 import { rankFor, precisionOf, isHit } from './campaign/rank.js'
@@ -26,7 +28,7 @@ import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js
 import { onPixelRatioChange } from './gfx/pixelRatio.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
 import { prepareDuringBriefing, afterPaint } from './campaign/prepare.js'
-import { shotFlash, bindFullscreenButton } from './comfort.js'
+import { bindFullscreenButton } from './comfort.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -50,6 +52,15 @@ const SENSITIVITY = 0.0018
 let bulletInFlight = false
 let bulletDelay = 0
 let pendingShotRay = null   // rayon capturé À L'INSTANT du tir (pas à l'impact)
+// Coup de feu (spec du lot 2, §3.3) : recul ajouté au regard du joueur (recoilOffset, en radians, relu à chaque image)
+// et culasse, toutes deux au temps de la mission (missionClock, en secondes, avancé de dt en jeu : arrêté en pause,
+// ralenti pendant la kill-cam).
+const recoil = createRecoil()
+let recoilOffset = { pitch: 0, yaw: 0 }
+const bolt = createBolt()
+let missionClock = 0
+// Départ du sillage de la balle, dans le repère de la caméra : le canon (SILLAGE.canon, src/shot/tuning.js).
+const MUZZLE = new THREE.Vector3(...SILLAGE.canon)
 
 // Statistiques de mission (rapport de fin de niveau + rang)
 let statShots = 0, statHits = 0, statStart = 0, statAlerts = 0
@@ -522,6 +533,7 @@ function startLevel(n, prep = null) {
   }
 
   stress = 0; alertActive = false; alertTimer = 0; bulletInFlight = false
+  missionClock = 0; bolt.reset()   // culasse prête au premier coup
   document.getElementById('game-over-reason').textContent = 'Vous avez été repéré'
   score = upgradeState.totalScore
 
@@ -579,6 +591,7 @@ function mountLevel(n) {
   }
 
   setZoom(4, { instant: true })   // posé d'un coup, pas lissé depuis la mission d'avant ; la caméra suit dans loop() (syncFov)
+  recoil.reset(); recoilOffset = { pitch: 0, yaw: 0 }   // cadrage de départ sans recul de la mission d'avant
 
   const b = currentMapInfo.spawnBounds
   const groundY = mapGround()   // les pieds des PNJ sur la dalle du port, le tarmac, la route du convoi
@@ -874,18 +887,20 @@ function triggerConvoyEscaped() {
 
 // ─── Tir ───────────────────────────────────────────────────────────
 function shoot() {
-  // Lunette ouverte à 100 % seulement (spec du lot 2, §3.2), ni pendant le ralenti, ni après un civil abattu
-  if (!isScopeReady() || bulletInFlight || !canShoot(missionPhase())) return
+  // Lunette ouverte à 100 % seulement (spec du lot 2, §3.2), culasse revenue (§3.3), ni pendant le ralenti, ni après
+  // un civil abattu
+  if (!isScopeReady() || bulletInFlight || !bolt.ready(missionClock) || !canShoot(missionPhase())) return
   const stats = getStats()
   bulletInFlight = true
   bulletDelay = stats.bulletDelay
+  bolt.fire(missionClock, stats.boltS)   // 1,2 s sans pouvoir tirer (moins avec la Vélocité), sons et jauge
   statShots++
-  shotFlash(effectsReduced())   // 0,22 d'opacité, 0,06 en effets atténués
+  shotGlow(effectsReduced())   // lueur chaude sur les bords de la lunette : 0,12 d'opacité, 0,06 en effets atténués
   stats.silenced ? playSilencedShot() : playShot()
   stress = Math.min(1, stress + STRESS.parTir)
 
-  // CAPTURER la visée MAINTENANT (le réticule visible au clic) —
-  // pas à l'impact, sinon le tremblement a dérivé pendant le délai de vol
+  // CAPTURER la visée MAINTENANT (le réticule visible au clic), pas à l'impact, sinon le tremblement a dérivé pendant
+  // le délai de vol
   const t = getTrembleOffset()
   const aimX =  (t.x / innerWidth)  * 2.0
   const aimY = -(t.y / innerHeight) * 2.0
@@ -893,6 +908,29 @@ function shoot() {
   syncFov()   // la caméra prend le champ affiché, celui que getTrembleOffset utilise : réticule et rayon cohérents
   ray.setFromCamera(new THREE.Vector2(aimX, aimY), camera)
   pendingShotRay = ray
+
+  // Sillage : du canon jusqu'à ce que la balle rencontre sur son rayon au moment du coup, pendant le temps de vol
+  spawnTrail(camera.localToWorld(MUZZLE.clone()), firstHit(ray.ray).point, stats.bulletDelay)
+  // Recul : la vue monte après le départ de la balle, qui va là où l'on visait
+  recoil.kick()
+}
+
+// Ce que la balle rencontre en premier sur son rayon : le PNJ vivant le plus proche (boîte de getBounds), sinon le
+// cadenas du port, sinon le sol de la carte (ou 40 m devant). kind : 'target', 'civilian', 'guard', 'lock' ou 'miss' ;
+// point : où la balle s'arrête ; hole : trou d'impact laissé au sol (tir manqué), ou null.
+function firstHit(ray) {
+  let npc = null, dist = Infinity, point = null
+  for (const n of npcs) {
+    if (!n.alive) continue
+    const { center, size } = n.getBounds()
+    const pt = ray.intersectBox(new THREE.Box3().setFromCenterAndSize(center, size), new THREE.Vector3())
+    if (pt && ray.origin.distanceTo(pt) < dist) { dist = ray.origin.distanceTo(pt); npc = n; point = pt }
+  }
+  if (npc) return { kind: npc.isTarget ? 'target' : npc.isCivilian ? 'civilian' : 'guard', npc, point, hole: null }
+  const lockPt = moralLockBox && ray.intersectBox(moralLockBox, new THREE.Vector3())
+  if (lockPt) return { kind: 'lock', npc: null, point: lockPt, hole: null }
+  const { point: missPt, hole } = missImpact(ray, mapGround())
+  return { kind: 'miss', npc: null, point: missPt, hole }
 }
 
 function resolveBullet() {
@@ -905,39 +943,11 @@ function resolveBullet() {
 
   const stats = getStats()
 
-  // Trouver le NPC le plus proche intersecté
-  let closestNpc  = null
-  let closestDist = Infinity
-  let closestPt   = null
-
-  for (const npc of npcs) {
-    if (!npc.alive) continue
-    const { center, size } = npc.getBounds()
-    const aabb = new THREE.Box3().setFromCenterAndSize(center, size)
-    const pt = new THREE.Vector3()
-    const inter = raycaster.ray.intersectBox(aabb, pt)
-    if (inter) {
-      const dist = camera.position.distanceTo(pt)
-      if (dist < closestDist) {
-        closestDist = dist
-        closestNpc  = npc
-        closestPt   = pt.clone()
-      }
-    }
-  }
-
   // Ce que la balle touche : le PNJ le plus proche, sinon le cadenas du port, sinon rien
-  const kind = closestNpc
-    ? (closestNpc.isTarget ? 'target' : closestNpc.isCivilian ? 'civilian' : 'guard')
-    : (moralLockBox && raycaster.ray.intersectsBox(moralLockBox)) ? 'lock' : 'miss'
+  const { kind, npc: closestNpc, point: closestPt, hole: holePos } = firstHit(raycaster.ray)
   if (isHit(kind)) statHits++   // précision du rapport de fin : le cadenas compte, libérer n'interdit pas FANTÔME
 
-  // Traceur de balle (part légèrement sous la ligne de visée pour être visible)
-  const muzzlePos = camera.position.clone()
-    .add(new THREE.Vector3(0, -0.5, 0))
-
   if (closestNpc) {
-    spawnTracer(muzzlePos, closestPt)
     // Éclaboussure de sang au point d'impact
     spawnImpact(closestPt, closestNpc.isCivilian ? 0xcc0000 : 0xaa2222, 16)
     // HEADSHOT : impact dans la zone de la tête (haut de la hitbox)
@@ -953,7 +963,6 @@ function resolveBullet() {
 
   // CHOIX MORAL : tir sur le cadenas du conteneur → les victimes s'échappent
   if (kind === 'lock') {
-    spawnTracer(muzzlePos, moralLockMesh.position)
     spawnImpact(moralLockMesh.position.clone(), 0xc9a227, 10)
     const lockPos = moralLockMesh.position.clone()
     removeMoralLock()
@@ -975,8 +984,7 @@ function resolveBullet() {
   // Tir raté
   if (kind === 'miss') {
     // Point d'impact sur le sol de la carte (ou loin devant)
-    const { point: shotPos, hole: holePos } = missImpact(raycaster.ray, mapGround())
-    spawnTracer(muzzlePos, shotPos)
+    const shotPos = closestPt
     spawnDust(shotPos)
     // trou d'impact persistant dans le sol (témoin de tes tirs ratés)
     if (holePos) spawnBulletHole(holePos)
@@ -1302,7 +1310,8 @@ function syncFov() {
 function aimMissionCamera() {
   syncFov()
   const [baseX, baseY, baseZ] = currentMapInfo ? currentMapInfo.cameraPos : [0, 8, 30]
-  const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ')
+  // Regard du joueur, plus le recul du dernier coup qui y revient (spec du lot 2, §3.3)
+  const euler = new THREE.Euler(pitch + recoilOffset.pitch, yaw + recoilOffset.yaw, 0, 'YXZ')
   const dir = new THREE.Vector3(0, 0, -1).applyEuler(euler)
   camera.position.set(baseX, baseY, baseZ)
   camera.lookAt(baseX + dir.x, baseY + dir.y, baseZ + dir.z)
@@ -1417,6 +1426,13 @@ function loop(rafAt) {
       if (bulletDelay <= 0) resolveBullet()
     }
 
+    // Coup de feu (spec du lot 2, §3.3), au temps de la mission : la culasse s'ouvre puis se referme (sons à leurs
+    // instants, jauge sous le réticule), et le recul revient vers la visée du joueur
+    missionClock += dt
+    for (const son of bolt.cues(missionClock)) son === 'ouverture' ? playBoltOpen() : playBoltClose()
+    setBoltProgress(bolt.progress(missionClock))
+    recoilOffset = recoil.update(dt)
+
     // ── Apnée (retenir son souffle) : visée quasi stable, au plus APNEE.dureeS, jauge rechargée en APNEE.rechargeS ──
     isHolding = holdBreathKey && isVisible() && breathMeter > 0.02
     if (isHolding) {
@@ -1527,11 +1543,20 @@ if (import.meta.env.DEV) {
   // cadenas, PNJ ou jeeps restés dans la scène).
   window.__decor = () => ({ fond: scene.background && scene.background.getHexString(),
     horsCarte: scene.children.filter(o => !isMapObject(o) && o !== ambient && o !== sun && o !== fill).map(o => o.type) })
-  // Visée (relectures du zoom choisi et affiché, de l'ouverture de la lunette, du stress et du tremblement en
-  // milliradians et en pixels) : __aim() dans la console ; pret : le clic gauche tire (lunette ouverte à 100 %)
+  // Direction où la caméra regarde (degrés ; tangage positif vers le haut) : la visée du joueur et le recul compris.
+  const viewAngles = () => {
+    const d = camera.getWorldDirection(new THREE.Vector3())
+    const deg = r => +THREE.MathUtils.radToDeg(r).toFixed(4)
+    return { lacet: deg(Math.atan2(-d.x, -d.z)), tangage: deg(Math.asin(Math.max(-1, Math.min(1, d.y)))) }
+  }
+  // Visée (relectures du zoom choisi et affiché, de l'ouverture de la lunette, de la culasse, du stress, du
+  // tremblement en milliradians et en pixels, du regard et du recul) : __aim() dans la console ; pret : le clic gauche
+  // tire (lunette ouverte à 100 %, culasse revenue, aucune balle en vol)
   window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), zoomAffiche: getEffectiveZoom(), scoped: isVisible(),
-    ouverture: getScopeOpenness(), pret: isScopeReady(), stress,
-    trembleMrad: getTrembleMrad(), tremblePx: getTrembleOffset() })
+    ouverture: getScopeOpenness(), pret: isScopeReady() && bolt.ready(missionClock) && !bulletInFlight,
+    culasse: +bolt.progress(missionClock).toFixed(3), stress,
+    trembleMrad: getTrembleMrad(), tremblePx: getTrembleOffset(), regard: viewAngles(),
+    reculDeg: { tangage: +THREE.MathUtils.radToDeg(recoilOffset.pitch).toFixed(4), lacet: +THREE.MathUtils.radToDeg(recoilOffset.yaw).toFixed(4) } })
   // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console
   window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,
     pnj: npcs.map(n => n.mesh.position.toArray().map(v => +v.toFixed(3))),
@@ -1540,14 +1565,17 @@ if (import.meta.env.DEV) {
     jeeps: convoyCar ? convoyCar.vehicles.map(v => v.mesh.position.toArray().map(c => +c.toFixed(3))) : null })
   // Visée scriptée (scripts/verif-mission.mjs) : __aimAt('cadenas') vise le cadenas du port, __aimAt('civil', 2) le
   // troisième civil vivant ('cible', 'garde', 'civil'). Faux si rien ne correspond. Le tir reste celui du joueur.
-  // avance (s) : vise devant une cible du convoi, qui roule pendant le vol de la balle (M5).
+  // avance (s) : vise là où le PNJ sera après le vol de la balle : une cible du convoi, qui roule (M5), ou un PNJ qui
+  // marche ou qui fuit (vitesses de NPC._move : speed en marche, speed × 8 en fuite, déviations ignorées).
+  const vitessePnj = npc => npc.state === STATES.FLEE ? npc.fleeDir.clone().multiplyScalar(npc.speed * 8)
+    : npc.state === STATES.WALK ? npc.walkDir.clone().multiplyScalar(npc.speed) : new THREE.Vector3()
   window.__aimAt = (what, n = 0, avance = 0) => {
     const role = npc => npc.isTarget ? 'cible' : npc.isCivilian ? 'civil' : 'garde'
-    const p = what === 'cadenas'
-      ? moralLockBox && moralLockBox.getCenter(new THREE.Vector3())
-      : npcs.filter(npc => npc.alive && role(npc) === what)[n]?.getBounds().center
+    const npc = what === 'cadenas' ? null : npcs.filter(x => x.alive && role(x) === what)[n]
+    const p = what === 'cadenas' ? moralLockBox && moralLockBox.getCenter(new THREE.Vector3()) : npc?.getBounds().center
     if (!p) return false
-    if (avance && convoyCar && what !== 'cadenas') p.x += convoyCar.dir * convoyCar.speed * avance
+    if (avance && convoyCar && npc) p.x += convoyCar.dir * convoyCar.speed * avance
+    else if (avance && npc) p.addScaledVector(vitessePnj(npc), avance)
     ;({ yaw, pitch } = aimAngles(camera.position.toArray(), p.toArray()))
     return true
   }

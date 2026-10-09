@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { scene } from './scene.js'
 import { markShared, disposeObject } from './gfx/dispose.js'
+import { SILLAGE } from './shot/tuning.js'
 
 let effects = []
 
@@ -12,13 +13,37 @@ let particleGeo = null, flashGeo = null
 const particleGeometry = () => particleGeo || (particleGeo = markShared(new THREE.SphereGeometry(1, 4, 4)))
 const flashGeometry = () => flashGeo || (flashGeo = markShared(new THREE.SphereGeometry(0.4, 6, 6)))
 
-// Traceur : ligne lumineuse du tireur vers le point d'impact (géométrie et matériau à lui, libérés en fin de vie)
-export function spawnTracer(from, to) {
-  const geo = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone()])
-  const mat = new THREE.LineBasicMaterial({ color: 0xffdd88, transparent: true, opacity: 0.9 })
+// Sillage de la balle (spec du lot 2, §3.3) : un trait fin parcourt la trajectoire pendant le temps de vol, sa tête au
+// rythme de la balle et sa queue qui s'estompe derrière elle, puis s'efface une fois la balle arrivée. Il remplace le
+// traceur dessiné à l'impact seulement. Géométrie (deux points réécrits à chaque image, la queue transparente) et
+// matériau à lui, libérés en fin de vie. Réglages : SILLAGE (src/shot/tuning.js).
+export function spawnTrail(from, to, flightS) {
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3))
+  // Queue transparente, tête d'un blanc chaud : le trait s'estompe derrière la balle
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array([1, 0.85, 0.6, 0, 1, 0.95, 0.85, 1]), 4))
+  const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: SILLAGE.opacite,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
   const line = new THREE.Line(geo, mat)
+  line.frustumCulled = false   // les points bougent à chaque image : l'enveloppe calculée une fois serait périmée
   scene.add(line)
-  effects.push({ obj: line, life: 0.12, maxLife: 0.12, type: 'tracer' })
+  const vol = Math.max(1e-3, flightS)
+  const e = { obj: line, type: 'trail', from: from.clone(), to: to.clone(), vol, age: 0,
+    life: vol + SILLAGE.fonduS, maxLife: vol + SILLAGE.fonduS }
+  placeTrail(e)
+  effects.push(e)
+}
+
+// Points du sillage à son âge : tête au rythme du vol, queue en retard d'une part fixe du trajet, puis effacement.
+const _p = new THREE.Vector3()
+function placeTrail(e) {
+  const pos = e.obj.geometry.attributes.position
+  const tete = Math.min(1, e.age / e.vol)
+  const queue = Math.max(0, Math.min(1, (e.age - SILLAGE.longueur * e.vol) / e.vol))
+  pos.setXYZ(0, ...(_p.lerpVectors(e.from, e.to, queue).toArray()))
+  pos.setXYZ(1, ...(_p.lerpVectors(e.from, e.to, tete).toArray()))
+  pos.needsUpdate = true
+  e.obj.material.opacity = SILLAGE.opacite * Math.max(0, Math.min(1, 1 - (e.age - e.vol) / SILLAGE.fonduS))
 }
 
 // Impact : éclaboussure de particules au point touché
@@ -64,7 +89,10 @@ export function updateEffects(dt) {
     e.life -= dt
     const t = Math.max(0, e.life / e.maxLife)
 
-    if (e.type === 'tracer' || e.type === 'flash') {
+    if (e.type === 'trail') {
+      e.age += dt
+      placeTrail(e)
+    } else if (e.type === 'flash') {
       e.obj.material.opacity = t * 0.9
     } else if (e.type === 'impact') {
       e.material.opacity = t

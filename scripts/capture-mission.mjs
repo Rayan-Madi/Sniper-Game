@@ -5,15 +5,19 @@
 // graphique (GPU=1), deux sessions peuvent différer d'un niveau de couleur sur quelques pixels (shaders compilés par
 // le pilote).
 // Prérequis : npm run dev. Usage : node scripts/capture-mission.mjs <dossier> [menu] [1…6] [retour1…retour6]
-//   [lunette1…lunette6] [mi-lunette1…mi-lunette6]
+//   [lunette1…lunette6] [mi-lunette1…mi-lunette6] [tir1…tir6]
 //   ex. node scripts/capture-mission.mjs avant-lot1 menu 1 3 5 6   → shots/avant-lot1/m1.png, …
-//   retour<n> : mission n, trois tirs manqués (impacts au sol, poussière, traceurs encore en vie), puis retour au menu
+//   retour<n> : mission n, trois tirs manqués (impacts au sol, poussière, sillage encore en vie), puis retour au menu
 //   (pause, MENU ; MENU de l'écran d'échec si une cible a fui) → shots/<dossier>/retour-m<n>.png. Le décor de la
 //   scène (__decor() : fond, objets hors carte) est affiché avant et après le retour.
 //   lunette<n> : mission n, vue de départ, puis clic droit et 15 images (250 ms) : lunette ouverte à 100 %
 //   → shots/<dossier>/lunette-m<n>.png. mi-lunette<n> : 5 images seulement (83 ms sur les 180 de l'ouverture, spec du
 //   lot 2 §3.2) : vignette à mi-course, champ de vision entre 60° et 15°, réticule pas encore apparu
 //   → mi-lunette-m<n>.png. L'horloge pilotée fige l'animation à l'image près : pas besoin de route de dev.
+//   tir<n> : lunette<n>, puis un tir sur la vue de départ et APRES images (défaut 12, 200 ms) : balle en vol, sillage
+//   qui monte vers le point visé, vue relevée par le recul, jauge de la culasse sous le réticule (spec du lot 2 §3.3) ;
+//   APRES=4 pour la lueur du coup de feu (éteinte en 140 ms) ; VISER=cible (ou garde, civil, cadenas : __aimAt) vise
+//   ce PNJ avant le tir → shots/<dossier>/tir-m<n>.png.
 // Variables : CHROME (chemin de Chrome), BASE_URL (défaut http://localhost:5173/), IMAGES (défaut 20),
 // GPU=1 (carte graphique au lieu du rendu logiciel), PARAMS (ajoutés à l'URL, ex. stats=1), QUALITE (préréglage
 // graphique enregistré dans le profil jetable : auto, bas, moyen, haut ; sans elle, celui d'un premier lancement, Auto).
@@ -136,7 +140,8 @@ async function shoot(target) {
     await until(c, `document.readyState === 'complete'`)
     const retour = /^retour(\d)$/.exec(target)
     const lunette = /^(mi-)?lunette(\d)$/.exec(target)
-    const n = target === 'menu' ? 1 : retour ? +retour[1] : lunette ? +lunette[2] : +target
+    const tir = /^tir(\d)$/.exec(target)
+    const n = target === 'menu' ? 1 : retour ? +retour[1] : lunette ? +lunette[2] : tir ? +tir[1] : +target
     await js(c, `localStorage.setItem('sniper-save', ${JSON.stringify(JSON.stringify(saveAt(n)))})`)
     if (process.env.QUALITE) await js(c, `localStorage.setItem('sniper-settings', ${JSON.stringify(JSON.stringify({ graphics: process.env.QUALITE }))})`)
     await c.send('Page.enable')
@@ -170,11 +175,19 @@ async function shoot(target) {
       await js(c, `__step(${lunette[1] ? 5 : 15})`)
       console.log('  visée :', JSON.stringify(await js(c,
         `(({ fov, ouverture, pret }) => ({ fov: +fov.toFixed(2), ouverture: +ouverture.toFixed(3), pret }))(__aim())`)))
+    } else if (tir) {
+      await js(c, mouse('mousedown', { button: 2 }))
+      if (process.env.VISER && !await js(c, `__aimAt(${JSON.stringify(process.env.VISER)})`)) throw new Error(`rien à viser : ${process.env.VISER}`)
+      await js(c, `__step(15)`)
+      await js(c, mouse('mousedown', { button: 0 }))
+      await js(c, `__step(${+process.env.APRES || 12})`)
+      console.log('  après le tir :', JSON.stringify(await js(c,
+        `(({ culasse, reculDeg, pret }) => ({ culasse, reculDeg, pret, balle: __mission().balle, tirs: __mission().tirs }))(__aim())`)))
     } else {
       await js(c, `__step(1)`)
     }
     const { data } = await c.send('Page.captureScreenshot', { format: 'png' })
-    const nom = target === 'menu' ? 'menu' : retour ? `retour-m${n}` : lunette ? `${lunette[1] || ''}lunette-m${n}` : `m${n}`
+    const nom = target === 'menu' ? 'menu' : retour ? `retour-m${n}` : lunette ? `${lunette[1] || ''}lunette-m${n}` : tir ? `tir-m${n}` : `m${n}`
     const out = resolve('shots', dir, `${nom}.png`)
     mkdirSync(resolve('shots', dir), { recursive: true })
     const buf = Buffer.from(data, 'base64')
@@ -193,16 +206,17 @@ async function shoot(target) {
 
 // Lunette ouverte, visée relevée au-dessus des PNJ : la balle passe haut et finit au sol très loin derrière eux (une
 // soixantaine de mètres au port), aucun ne fuit et la mission continue. Trois tirs manqués un peu décalés, puis
-// retour au menu pendant que poussière et traceur sont encore en vie. Le clic gauche ne tire que lunette ouverte à
-// 100 % (180 ms, spec du lot 2 §3.2) : les images avancent jusque-là avant le premier tir.
+// retour au menu pendant que poussière et sillage sont encore en vie. Le clic gauche ne tire que lunette ouverte à
+// 100 % (180 ms, spec du lot 2 §3.2) et culasse revenue (1,2 s après le coup précédent, §3.3) : avant chaque tir, les
+// images avancent jusqu'à __aim().pret.
 const mouse = (type, init) => `document.dispatchEvent(new MouseEvent('${type}', ${JSON.stringify(init)}))`
 const playing = c => js(c, `__mission().phase === 'playing'`)
 async function missThenMenu(c) {
   await js(c, mouse('mousedown', { button: 2 }))
   await js(c, mouse('mousemove', { movementX: 0, movementY: -160 }))
-  for (let k = 0; k < 60 && !await js(c, '__aim().pret'); k++) await js(c, '__step(1)')
   for (let i = 0; i < 3 && await playing(c); i++) {
     if (i) await js(c, mouse('mousemove', { movementX: 40, movementY: 0 }))
+    for (let k = 0; k < 120 && !await js(c, '__aim().pret'); k++) await js(c, '__step(1)')
     await js(c, mouse('mousedown', { button: 0 }))
     for (let k = 0; k < 120 && await js(c, '__mission().balle') && await playing(c); k++) await js(c, '__step(1)')
   }

@@ -20,8 +20,22 @@ export const RECUL = {
 // ─── Culasse ───────────────────────────────────────────────────────
 export const CULASSE = {
   dureeS: [1.2, 1.125, 1.05, 0.975, 0.9],   // temps sans pouvoir tirer après un coup, par niveau de Vélocité (0 à 4)
+  // Sons de la course de 1,2 s ; une course plus courte (Vélocité) les rapproche d'autant, au même rythme.
   ouvertureS: 0.35,     // instant du son d'ouverture de la culasse après le coup
   fermetureS: 0.9,      // instant du son de fermeture
+}
+
+// ─── Le coup de feu à l'écran ──────────────────────────────────────
+export const LUEUR = {
+  tenueS: 0.04,         // temps où la lueur chaude des bords de la lunette reste pleine après le coup
+  fonduS: 0.1,          // temps où elle s'éteint ensuite (opacités : SHOT_FLASH de src/comfort.js, effets atténués)
+}
+export const SILLAGE = {
+  longueur: 0.35,       // part du trajet entre la queue et la tête du sillage : plus haut, traînée plus longue
+  fonduS: 0.25,         // effacement du sillage une fois la balle arrivée
+  opacite: 0.85,        // opacité du sillage en vol
+  canon: [0.15, -0.4, 0],   // départ du sillage dans le repère de la caméra (m) : sous la lunette, un peu à droite,
+                            // pour qu'il monte dans l'image au lieu de se cacher derrière le trait vertical du réticule
 }
 
 // ─── Tremblement de la lunette ─────────────────────────────────────

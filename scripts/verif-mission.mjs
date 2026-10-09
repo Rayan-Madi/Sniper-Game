@@ -134,20 +134,27 @@ async function play(n) {
 // Images du jeu : sous SwiftShader la boucle tourne lentement, et dt est plafonné (le temps du jeu retarde).
 const frames = (c, n) => js(c, `new Promise(r => { let k = ${n}; const f = () => (--k > 0 ? requestAnimationFrame(f) : r()); requestAnimationFrame(f) })`)
 
-// Lunette ouverte à 100 % (le clic gauche ne tire qu'à ce moment-là : 180 ms, spec du lot 2 §3.2) : __aim().pret.
+// Prêt à tirer : lunette ouverte à 100 % (180 ms, spec du lot 2 §3.2), culasse revenue (1,2 s après le coup précédent,
+// §3.3) et aucune balle en vol. Le clic gauche ne tire qu'alors : __aim().pret.
 const scopeOpen = c => until(c, '__aim().pret', 3000)
 
-// Lunette ouverte, souffle retenu, visée sur `what` (voir __aimAt), puis un tir dont on attend l'impact.
+// Lunette ouverte, souffle retenu, visée sur `what` (voir __aimAt), puis un tir dont on attend l'impact. Un PNJ qui
+// marche ou qui fuit est visé là où il sera à l'arrivée de la balle (délai de 0,45 s sans Vélocité, plus l'image où la
+// visée est prise, comme shootAhead) : depuis la culasse du lot 2 (1,2 s entre deux coups), le tir suivant tombe
+// souvent sur une cible lancée dans sa fuite (environ 6 m/s au port), qu'un tir au centre manquait.
 // Faux si la visée n'a rien trouvé.
 async function aimAndShoot(c, what, n = 0) {
   await mouse(c, 'mousedown', 2)
   await key(c, 'keydown', 'Shift', 'ShiftLeft')
   await frames(c, 10)   // le tremblement se calme
   await scopeOpen(c)
-  if (!await js(c, `__aimAt(${JSON.stringify(what)}, ${n})`)) return false
-  await frames(c, 2)    // la caméra prend la visée (appliquée par la boucle)
   const tirs = (await mission(c)).tirs
-  await mouse(c, 'mousedown', 0)
+  const avance = what === 'cadenas' ? 0 : 0.45 + 1 / 60
+  const ok = await js(c, `new Promise(r => {
+    if (!__aimAt(${JSON.stringify(what)}, ${n}, ${avance})) return r(false)
+    requestAnimationFrame(() => { document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); r(true) })
+  })`)
+  if (!ok) return false
   await until(c, `__mission().tirs === ${tirs + 1}`, 3000)
   await until(c, `!__mission().balle`)
   return true

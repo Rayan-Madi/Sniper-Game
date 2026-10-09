@@ -1,3 +1,5 @@
+import { CULASSE } from './shot/tuning.js'
+
 export const UPGRADES = {
   velocity:  { name: 'Vélocité',    desc: 'Balle plus rapide, moins de délai au tir', max: 4, cost: [1,2,2,3] },
   stability: { name: 'Stabilité',   desc: 'Le scope tremble moins sous le stress',    max: 4, cost: [1,2,2,3] },
@@ -72,6 +74,7 @@ export function getStats() {
   const l = state.levels
   return {
     bulletDelay:    0.45 - l.velocity * 0.08,   // secondes avant impact (réactif)
+    boltS:          CULASSE.dureeS[Math.max(0, Math.min(CULASSE.dureeS.length - 1, l.velocity))],   // culasse (s)
     trembleScale:   1.0 - l.stability * 0.20,
     stressRate:     1.0 - l.coldblood * 0.25,
     maxZoom:        6   + l.zoom      * 2,

@@ -31,14 +31,18 @@ const param = () => ({
   linearRampToValueAtTime(v, t) { this.events.push(['linear', v, t]) },
   exponentialRampToValueAtTime(v, t) { this.events.push(['exp', v, t]) },
 })
+// Nœuds créés depuis le début du test (sons du tir), dans l'ordre.
+const created = []
 function node(kind) {
-  return {
+  const n = {
     kind, inputs: new Set(), outputs: new Set(), gain: param(), frequency: param(), pan: param(), Q: param(),
-    type: '', loop: false, buffer: null,
+    type: '', loop: false, buffer: null, startAt: null, stopAt: null,
     connect(n) { this.outputs.add(n); n.inputs.add(this); return n },
     disconnect() { for (const o of this.outputs) o.inputs.delete(this); this.outputs.clear() },
-    start() {}, stop() {},
+    start(t = 0) { this.startAt = t }, stop(t = 0) { this.stopAt = t },
   }
+  created.push(n)
+  return n
 }
 class ClockedAudioContext {
   static made = 0
@@ -54,6 +58,7 @@ class ClockedAudioContext {
 beforeEach(() => {
   vi.resetModules()
   ClockedAudioContext.made = 0
+  created.length = 0
   vi.stubGlobal('AudioContext', ClockedAudioContext)
   vi.useFakeTimers()
 })
@@ -155,4 +160,62 @@ describe('sons du PvP', () => {
     const src = readFileSync(resolve(__dirname, '../src/pvp.js'), 'utf8')
     expect(src).not.toMatch(/AudioContext\s*\|\||new\s*\(?\s*(window\.)?(webkit)?AudioContext/)
   })
+})
+
+// Sons du coup de feu (spec du lot 2, §3.3 et §3.5 ; plan, tâche T3) : un « crack » supersonique bref en plus de la
+// détonation (le tir au silencieux garde son son), et la culasse, ouverte puis refermée (instants donnés par
+// src/shot/bolt.js, joués par la boucle de main.js).
+describe('sons du coup de feu', () => {
+  // Le nœud atteint-il le maître (par ses sorties, de proche en proche) ?
+  const reaches = (n, master, seen = new Set()) => n === master || (!seen.has(n) && (seen.add(n), [...n.outputs].some(o => reaches(o, master, seen))))
+  // Sources de bruit d'un son, avec le filtre qui les suit : { filtre, type, freq, duree (s) }.
+  const bruits = ctx => created.filter(n => n.kind === 'buffer').map(src => {
+    const f = [...src.outputs].find(o => o.kind === 'filter')
+    return { src, type: f?.type, freq: f?.frequency.value, duree: src.buffer.length / ctx.sampleRate }
+  })
+  // Gain de départ le plus fort parmi les nœuds créés (le niveau du son).
+  const pic = () => Math.max(0, ...created.filter(n => n.kind === 'gain').flatMap(g => g.gain.events.filter(e => e[0] === 'set').map(e => e[1])))
+  const crack = ctx => bruits(ctx).filter(b => b.type === 'highpass' && b.freq >= 2000 && b.duree <= 0.03)
+
+  it('tir sans silencieux : la détonation et un crack supersonique bref (bruit aigu de 30 ms au plus), vers le maître', async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext(), master = audio.masterNode()
+    created.length = 0
+    audio.playShot()
+    const c = crack(ctx)
+    expect(c.length, 'crack').toBe(1)
+    expect(reaches(c[0].src, master)).toBe(true)
+    expect(created.some(n => n.kind === 'oscillator' && n.type === 'sawtooth'), "détonation d'avant le lot 2").toBe(true)
+  })
+
+  // Non-régression : « avec silencieux, le son actuel » (spec §3.5).
+  it("tir au silencieux : le son d'avant, sans crack", async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext()
+    created.length = 0
+    audio.playSilencedShot()
+    expect(crack(ctx)).toEqual([])
+    expect(bruits(ctx).map(b => [b.type, b.freq])).toEqual([['bandpass', 800]])
+  })
+
+  for (const nom of ['playBoltOpen', 'playBoltClose']) {
+    it(`${nom} : un claquement métallique bref, plus discret que le tir, vers le maître`, async () => {
+      const audio = await import('../src/audio.js')
+      const ctx = audio.audioContext(), master = audio.masterNode()
+      created.length = 0
+      audio.playShot()
+      const tir = pic()
+      created.length = 0
+      ctx.currentTime = 3
+      audio[nom]()
+      const b = bruits(ctx)
+      expect(b.length, 'bruits du mécanisme').toBeGreaterThanOrEqual(1)
+      expect(b.some(x => x.freq >= 1500), 'métallique : bruit filtré haut').toBe(true)
+      expect(b.every(x => reaches(x.src, master))).toBe(true)
+      const fin = Math.max(...created.filter(n => n.stopAt !== null).map(n => n.stopAt))
+      expect(fin - 3, 'bref').toBeLessThanOrEqual(0.3)
+      expect(Math.min(...created.filter(n => n.startAt !== null).map(n => n.startAt)), 'joué maintenant').toBeGreaterThanOrEqual(3)
+      expect(pic(), 'plus discret que le tir').toBeLessThanOrEqual(tir / 2)
+    })
+  }
 })

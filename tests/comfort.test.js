@@ -1,21 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
-  reducedMotionActive, systemReducedMotion, shotFlash, SHOT_FLASH,
+  reducedMotionActive, systemReducedMotion, shotFlashAlpha, SHOT_FLASH,
   fullscreenLabel, toggleFullscreen, bindFullscreenButton,
 } from '../src/comfort.js'
 import { createKit } from '../src/briefing/kit.js'
 
 // Confort (spec du lot 1 §4.5, tâche L6).
 // - Effets atténués : réglage « Auto » (suit prefers-reduced-motion du système), « Oui » ou « Non » (forcés). Actif :
-//   flash du tir à 0,06 d'opacité au lieu de 0,22, aucune secousse dans les cinématiques, glitchs à un tiers
-//   d'intensité et sans glitchs d'ambiance (ces deux-là dans tests/briefing/kit.test.js).
+//   lueur du tir à 0,06 d'opacité au lieu de 0,12 (au lot 1, voile blanc à 0,22 sur tout l'écran ; lot 2, tâche T3 :
+//   lueur chaude sur les bords de la lunette, dessinée par scope.js, tests/shot/scopeShot.test.js), aucune secousse
+//   dans les cinématiques, glitchs à un tiers d'intensité et sans glitchs d'ambiance (ces deux-là dans
+//   tests/briefing/kit.test.js).
 // - Plein écran : bouton de la section « Affichage » des Paramètres ; toute la page (document.documentElement), sous
 //   Electron comme dans un navigateur ; son libellé dit ce qu'il va faire et suit fullscreenchange (sortie par Échap).
-
-const alpha = el => {
-  const m = /rgba\(\s*255,\s*255,\s*255,\s*([\d.]+)\s*\)/.exec(el.style.background || el.style.backgroundColor)
-  return m ? +m[1] : null
-}
 
 describe('effets atténués : le réglage et le système', () => {
   it('Oui : atténués, que le système le demande ou non', () => {
@@ -48,52 +45,37 @@ describe('effets atténués : le réglage et le système', () => {
   })
 })
 
-describe('flash du tir', () => {
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => { vi.useRealTimers(); document.body.innerHTML = '' })
-
-  it('effets normaux : voile blanc à 0,22, comme avant le lot', () => {
-    expect(SHOT_FLASH.normal).toBe(0.22)
-    expect(alpha(shotFlash(false))).toBe(0.22)
+describe('lueur du tir', () => {
+  // Témoin : au lot 1, le voile blanc plein écran était à 0,22 (SHOT_FLASH.normal).
+  it('effets normaux : 0,12 (spec du lot 2, §3.3)', () => {
+    expect(SHOT_FLASH.normal).toBe(0.12)
+    expect(shotFlashAlpha(false)).toBe(0.12)
   })
 
-  it('effets atténués : voile blanc à 0,06', () => {
+  it('effets atténués : 0,06, comme au lot 1', () => {
     expect(SHOT_FLASH.reduced).toBe(0.06)
-    expect(alpha(shotFlash(true))).toBe(0.06)
-  })
-
-  it('le voile ne capte pas la souris, s\'efface après 40 ms et quitte la page 120 ms plus tard', () => {
-    for (const reduced of [false, true]) {
-      const f = shotFlash(reduced)
-      expect(f.parentNode).toBe(document.body)
-      expect(f.style.pointerEvents).toBe('none')
-      vi.advanceTimersByTime(40)
-      expect(f.style.opacity).toBe('0')
-      expect(f.parentNode).toBe(document.body)
-      vi.advanceTimersByTime(120)
-      expect(f.parentNode).toBeNull()
-    }
-    expect(vi.getTimerCount()).toBe(0)
+    expect(shotFlashAlpha(true)).toBe(0.06)
   })
 })
 
-// Critère du §6 de la spec : les trois réglages changent bien l'opacité du flash et les secousses des cinématiques.
-describe('les trois réglages, de bout en bout (flash du tir et secousse du kit)', () => {
+// Critère du §6 de la spec : les trois réglages changent bien l'opacité de la lueur du tir et les secousses des
+// cinématiques.
+describe('les trois réglages, de bout en bout (lueur du tir et secousse du kit)', () => {
   afterEach(() => { vi.useRealTimers(); document.body.innerHTML = '' })
   const mountScene = () => {
     document.body.innerHTML = '<div id="root"><div class="st" id="st"><div class="scene" id="scene"></div></div></div>'
     return document.getElementById('root')
   }
   const CASES = [
-    ['auto', false, 0.22, 1], ['auto', true, 0.06, 0],
+    ['auto', false, 0.12, 1], ['auto', true, 0.06, 0],
     ['oui', false, 0.06, 0], ['oui', true, 0.06, 0],
-    ['non', false, 0.22, 1], ['non', true, 0.22, 1],
+    ['non', false, 0.12, 1], ['non', true, 0.12, 1],
   ]
   for (const [setting, system, flash, shakes] of CASES) {
-    it(`${setting}, système ${system ? 'réduit' : 'normal'} : flash à ${flash}, ${shakes} secousse`, () => {
+    it(`${setting}, système ${system ? 'réduit' : 'normal'} : lueur à ${flash}, ${shakes} secousse`, () => {
       vi.useFakeTimers()
       const reduced = reducedMotionActive(setting, system)
-      expect(alpha(shotFlash(reduced))).toBe(flash)
+      expect(shotFlashAlpha(reduced)).toBe(flash)
       const root = mountScene()
       const st = root.querySelector('#st')
       const K = createKit({ root, reducedMotion: reduced })

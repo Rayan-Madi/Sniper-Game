@@ -5,19 +5,20 @@ import { MAIN_SRC as SRC, analyse, callsIn, callsInNode } from './gfx/mainSource
 
 // Câblage du confort dans main.js et index.html (spec du lot 1 §4.5, tâche L6). Les pièces ont leurs tests (comfort,
 // settings, kit et playCinematic) ; main.js ne s'importe pas sous jsdom, cette garde vérifie en lisant le source :
-// - le flash du tir passe par shotFlash(effectsReduced()), et plus aucun flash à 0,22 n'est écrit en dur ;
+// - la lueur du tir passe par shotGlow(effectsReduced()) de scope.js (lot 2, tâche T3 : elle remplace le voile blanc
+//   shotFlash du lot 1), et plus aucun flash à 0,22 n'est écrit en dur ;
 // - toute cinématique passe par cinematic(), qui transmet reducedMotion: effectsReduced() à playCinematic (le réglage
 //   et le système relus à chaque lancement) ;
 // - le bouton Plein écran de la section « Affichage » est branché au chargement par bindFullscreenButton.
 
 const IMPORTS = {
-  shotFlash: './comfort.js',
+  shotGlow: './scope.js',
   bindFullscreenButton: './comfort.js',
   effectsReduced: './settings.js',
 }
 
 const CALLS = [
-  ['shoot', 'shotFlash'],
+  ['shoot', 'shotGlow'],
   ['shoot', 'effectsReduced'],
   ['cinematic', 'playCinematic'],
   ['cinematic', 'effectsReduced'],
@@ -57,8 +58,8 @@ function wiringFaults(source) {
     if (!calls) faults.push(`${fn} absente de main.js`)
     else if (!calls.some(c => c.callee === callee)) faults.push(`${fn} n'appelle pas ${callee}()`)
   }
-  const flash = callText(a, 'shoot', 'shotFlash')
-  if (flash && !flash.includes('effectsReduced()')) faults.push('le flash du tir ne suit pas effectsReduced()')
+  const flash = callText(a, 'shoot', 'shotGlow')
+  if (flash && !flash.includes('effectsReduced()')) faults.push('la lueur du tir ne suit pas effectsReduced()')
   if (/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0?\.22\s*\)/.test(source)) faults.push('main.js garde un flash à 0,22 écrit en dur')
   const play = callText(a, 'cinematic', 'playCinematic')
   if (play && !/reducedMotion\s*:\s*effectsReduced\(\)/.test(play)) faults.push('cinematic ne transmet pas reducedMotion: effectsReduced() à playCinematic')
@@ -81,7 +82,7 @@ function htmlFaults(html) {
 }
 
 describe('main.js et index.html : confort branché', () => {
-  it('flash du tir, cinématiques et plein écran branchés là où il faut', () => {
+  it('lueur du tir, cinématiques et plein écran branchés là où il faut', () => {
     expect(wiringFaults(SRC)).toEqual([])
   })
 
@@ -111,11 +112,11 @@ describe('témoins de la garde', () => {
     })
   }
 
-  it('flash du tir à effets fixes (shotFlash(false)) : rouge', () => {
-    const t = callText(analyse(SRC), 'shoot', 'shotFlash')
-    expect(t, 'shoot n\'appelle pas shotFlash : témoin impossible').toBeTruthy()
-    const next = mutated(SRC.replace(t, 'shotFlash(false)'))
-    expect(wiringFaults(next)).toContain('le flash du tir ne suit pas effectsReduced()')
+  it('lueur du tir à effets fixes (shotGlow(false)) : rouge', () => {
+    const t = callText(analyse(SRC), 'shoot', 'shotGlow')
+    expect(t, 'shoot n\'appelle pas shotGlow : témoin impossible').toBeTruthy()
+    const next = mutated(SRC.replace(t, 'shotGlow(false)'))
+    expect(wiringFaults(next)).toContain('la lueur du tir ne suit pas effectsReduced()')
   })
 
   it('ancien flash à 0,22 remis dans main.js : rouge', () => {

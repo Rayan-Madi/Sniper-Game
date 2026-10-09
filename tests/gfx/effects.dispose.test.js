@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as THREE from 'three'
 
 // Effets de tir et trous d'impact (spec du lot 1 §4.2) : créés en rafale, à chaque tir. Une géométrie de particule
-// partagée, un seul matériau par éclaboussure (son opacité baisse) libéré en fin de vie, le traceur libère ce qu'il
-// possède ; les trous d'impact partagent une géométrie et un matériau, jamais libérés.
+// partagée, un seul matériau par éclaboussure (son opacité baisse) libéré en fin de vie, le sillage de la balle (lot 2,
+// tâche T3 : il remplace le traceur d'impact) libère ce qu'il possède ; les trous d'impact partagent une géométrie et un
+// matériau, jamais libérés.
 vi.mock('../../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
@@ -16,22 +17,23 @@ import { createFakeRenderer, drawnGeometries, trackDisposals } from './fakeRende
 // ressources déjà libérées, qui ne doivent pas passer d'un test à l'autre. Sinon un test ne voit pas une ressource
 // partagée libérée à tort : un test précédent l'a déjà libérée (et retenue comme telle), elle ne l'est plus une
 // seconde fois. Avec les modules gardés, « tir manqué » restait vert sous une libération du partagé.
-let scene, spawnTracer, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole,
+let scene, spawnTrail, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole,
   clearBulletHoles, isShared
 beforeEach(async () => {
   vi.resetModules()
   ;({ scene } = await import('../../src/scene.js'))
-  ;({ spawnTracer, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles }
+  ;({ spawnTrail, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles }
     = await import('../../src/effects.js'))
   ;({ isShared } = await import('../../src/gfx/dispose.js'))
   scene.clear()
 })
 
 const FROM = new THREE.Vector3(0, 9.5, 28), AT = new THREE.Vector3(2, 1.2, -4)
-// Tir touché comme resolveBullet : traceur et éclaboussure de 16 particules. Tir manqué : traceur et poussière.
-const hit = () => { spawnTracer(FROM, AT); spawnImpact(AT, 0xaa2222, 16) }
-const miss = () => { spawnTracer(FROM, AT); spawnDust(AT) }
-const expire = () => updateEffects(1)   // la plus longue vie d'un effet est de 0,7 s
+// Tir touché : sillage pendant les 0,45 s du vol, puis éclaboussure de 16 particules (resolveBullet). Tir manqué :
+// sillage et poussière. Les deux partent ensemble ici : seule compte la libération.
+const hit = () => { spawnTrail(FROM, AT, 0.45); spawnImpact(AT, 0xaa2222, 16) }
+const miss = () => { spawnTrail(FROM, AT, 0.45); spawnDust(AT) }
+const expire = () => { for (let i = 0; i < 3; i++) updateEffects(1) }   // vol et effacement du sillage compris
 const splashes = () => scene.children.filter(o => o.isGroup)
 
 describe('effets de tir, niveau 1 : en fin de vie, tout ce qui est possédé est libéré, rien de partagé', () => {

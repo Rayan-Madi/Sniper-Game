@@ -1,7 +1,8 @@
 import { getStats } from './upgrades.js'
 import { stepTremble, trembleParams, mradToPixels, scopeFov } from './aim.js'
 import { createScopeAnim } from './shot/scopeAnim.js'
-import { LUNETTE } from './shot/tuning.js'
+import { LUNETTE, LUEUR } from './shot/tuning.js'
+import { shotFlashAlpha } from './comfort.js'
 
 const canvas = document.getElementById('scope-canvas')
 const ctx = canvas.getContext('2d')
@@ -18,6 +19,10 @@ let size = { w: 0, h: 0, pr: 0 }
 let tremble = { x: 0, y: 0, vx: 0, vy: 0, phase: 0 }
 let stress = 0
 let steady = 1        // 1 = normal, <1 = apnée (visée stabilisée)
+// Lueur du coup de feu (shotGlow) : opacité de départ et temps écoulé depuis le coup (s).
+let glow = { a: 0, t: 0 }
+// Course de la culasse (setBoltProgress, src/shot/bolt.js) : 0 au coup, 1 quand on peut tirer.
+let boltProgress = 1
 
 const smoothstep = o => o * o * (3 - 2 * o)
 
@@ -39,12 +44,25 @@ export function isVisible() { return anim.opening }
 export function isScopeReady() { return anim.opening && anim.openness >= 1 }
 export function getScopeOpenness() { return anim.openness }
 
-// Un pas de dt secondes (la boucle de main.js, avant de régler la caméra) : ouverture et zoom lissé. Refermée, la
-// lunette quitte l'écran.
+// Un pas de dt secondes (la boucle de main.js, avant de régler la caméra) : ouverture, zoom lissé et lueur du coup de
+// feu. Refermée, la lunette quitte l'écran.
 export function updateScope(dt) {
   anim.update(dt)
+  if (dt > 0) glow.t += dt
   if (!anim.opening && anim.openness === 0) setShown(false)
 }
+
+// Coup de feu (spec du lot 2, §3.3) : une lueur chaude brève sur les bords de la lunette, à 0,12 d'opacité, ou à 0,06
+// en effets atténués (reduced : effectsReduced() du lot 1), pleine 40 ms puis éteinte en 0,1 s comme le voile blanc
+// qui couvrait tout l'écran avant le lot 2 (LUEUR, src/shot/tuning.js).
+export function shotGlow(reduced) { glow = { a: shotFlashAlpha(reduced), t: 0 } }
+const glowAlpha = () => {
+  if (glow.t <= LUEUR.tenueS) return glow.a
+  return glow.a * Math.max(0, 1 - (glow.t - LUEUR.tenueS) / LUEUR.fonduS)
+}
+
+// Course de la culasse, de 0 (le coup) à 1 (on peut tirer) : la jauge sous le réticule (main.js, à chaque image).
+export function setBoltProgress(p) { boltProgress = p }
 
 // Champ de vision de la caméra (main.js, syncFov) : 60° fermée, 60 / zoom affiché ouverte, et entre les deux pendant
 // l'ouverture et la fermeture.
@@ -143,6 +161,20 @@ export function drawScope() {
     ctx.restore()
   }
 
+  // Lueur du coup de feu : un anneau chaud qui culmine sur le bord de la lentille et déborde sur la vignette
+  const ga = glowAlpha() * e
+  if (ga > 0) {
+    const r0 = lens * 0.6, r1 = lens * 1.12
+    const g = ctx.createRadialGradient(cx, cy, r0, cx, cy, r1)
+    g.addColorStop(0, 'rgba(255,170,90,0)')
+    g.addColorStop((lens - r0) / (r1 - r0), `rgba(255,170,90,${ga})`)
+    g.addColorStop(1, 'rgba(255,170,90,0)')
+    ctx.beginPath()
+    ctx.arc(cx, cy, r1, 0, Math.PI * 2)
+    ctx.fillStyle = g
+    ctx.fill()
+  }
+
   // ─── RÉTICULE : suit le tremblement (c'est là que part la balle) ─────
   // Le centre du réticule = centre écran + offset de tremblement
   if (reticle > 0) {
@@ -190,6 +222,17 @@ export function drawScope() {
     ctx.arc(rx, ry, 2.5, 0, Math.PI * 2)
     ctx.fillStyle = reticleCol
     ctx.fill()
+
+    // Jauge de la culasse : un trait discret sous le point central, qui se remplit jusqu'à ce qu'on puisse tirer
+    if (boltProgress < 1) {
+      const gw = 44, gy = ry + 30
+      ctx.fillStyle = reticleCol
+      ctx.globalAlpha = reticle * 0.25
+      ctx.fillRect(rx - gw / 2, gy, gw, 2)
+      ctx.globalAlpha = reticle * 0.55
+      ctx.fillRect(rx - gw / 2, gy, gw * Math.max(0, boltProgress), 2)
+      ctx.globalAlpha = reticle
+    }
 
     // Indicateur de zoom (le zoom choisi à la molette)
     ctx.fillStyle = 'rgba(200,240,200,0.55)'

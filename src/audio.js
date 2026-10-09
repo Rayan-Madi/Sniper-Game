@@ -87,8 +87,24 @@ export function playShot() {
   noise(0.08, 1.2)
   tone(80,  'sawtooth', 0.15, 0.6, 0.001)
   tone(220, 'square',   0.04, 0.3, 0.001)
+  // « Crack » supersonique (spec du lot 2, §3.5) : la balle franchit le mur du son, un claquement sec et aigu de 20 ms
+  noise(0.02, 0.5, 0, 3500, 'highpass')
   // Queue de réverbération simulée
   noise(0.3, 0.15, 0.08)
+}
+
+// Culasse (spec du lot 2, §3.3) : la boucle de main.js joue l'ouverture puis la fermeture aux instants de
+// src/shot/bolt.js. Bruits métalliques brefs, bien sous le niveau du tir.
+export function playBoltOpen() {
+  noise(0.025, 0.22, 0, 3200)                 // levier relevé : clic sec
+  noise(0.09, 0.08, 0.05, 1800)               // culasse tirée : frottement du métal
+  tone(1250, 'square', 0.02, 0.06, 0.001, 0.13)   // butée arrière
+}
+
+export function playBoltClose() {
+  noise(0.08, 0.08, 0, 1600)                  // culasse poussée
+  noise(0.03, 0.25, 0.09, 3600)               // verrouillage : claquement
+  tone(900, 'square', 0.03, 0.08, 0.001, 0.09)
 }
 
 export function playSilencedShot() {

@@ -17,15 +17,11 @@ export function systemReducedMotion(win = globalThis.window) {
   } catch (e) { return false }
 }
 
-// Flash du tir : voile blanc sur tout l'écran, effacé en 0,1 s. Opacité 0,22, ou 0,06 en effets atténués.
-export const SHOT_FLASH = { normal: 0.22, reduced: 0.06 }
-export function shotFlash(reduced, doc = document) {
-  const f = doc.createElement('div')
-  const a = reduced ? SHOT_FLASH.reduced : SHOT_FLASH.normal
-  f.style.cssText = `position:fixed;inset:0;background:rgba(255,255,255,${a});pointer-events:none;z-index:999;transition:opacity 0.1s`
-  doc.body.appendChild(f)
-  setTimeout(() => { f.style.opacity = '0'; setTimeout(() => f.remove(), 120) }, 40)
-  return f
+// Lueur du tir (spec du lot 2, §3.3) : lueur chaude brève sur les bords de la lunette, dessinée par scope.js
+// (shotGlow). Opacité 0,12, ou 0,06 en effets atténués. Au lot 1, c'était un voile blanc sur tout l'écran, à 0,22.
+export const SHOT_FLASH = { normal: 0.12, reduced: 0.06 }
+export function shotFlashAlpha(reduced) {
+  return reduced ? SHOT_FLASH.reduced : SHOT_FLASH.normal
 }
 
 // Plein écran : toute la page (document.documentElement), sous Electron comme dans un navigateur. Le libellé du bouton
