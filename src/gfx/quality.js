@@ -35,7 +35,9 @@ export function npcCastsShadow(mode, role) {
 // push(durée de l'image en ms, instant en ms) → échelle de la densité de pixels, entre min et max (départ à max).
 // - Baisse d'un pas quand la p95 des images des 2 dernières secondes dépasse highMs.
 // - Remonte d'un pas quand cette p95 reste sous le seuil de remontée pendant hold (holdMs au départ). main.js mesure
-//   l'écart entre deux appels de requestAnimationFrame : sur un écran synchronisé, il ne descend jamais sous la période
+//   l'écart entre les horodatages que requestAnimationFrame passe à deux images successives (le début de chaque image,
+//   aligné sur la synchro, sans le retard variable de performance.now() lu dans le rappel) : sur un écran synchronisé,
+//   il ne descend jamais sous la période
 //   de l'écran (16,7 ms à 60 Hz), si légère que soit l'image, et lowMs n'y serait jamais atteint. Le seuil de remontée
 //   est donc lowMs ou, si elle est plus lente, la cadence de l'écran × cadenceTolerance : une image prête à la synchro
 //   compte comme rapide. La cadence est la plus petite médiane d'une fenêtre complète depuis la création du contrôleur.
@@ -44,9 +46,13 @@ export function npcCastsShadow(mode, role) {
 //   ce plafond, sur un écran sans cadence fixe, la « cadence » ne serait que le coût de l'image et l'échelle irait et
 //   viendrait.
 // - Une image à la cadence ne dit pas s'il reste de la marge : sur un écran synchronisé, chaque remontée est un essai.
-//   Si l'échelle retombe moins de windowMs + hold après une remontée, l'essai a échoué et le suivant attendra deux fois
-//   plus longtemps (hold doublé, maxHoldMs au plus, pour toute la vie du contrôleur : main.js en recrée un à chaque
-//   montage de mission).
+//   Si l'échelle retombe moins de windowMs + hold après une remontée et que la fenêtre qui la fait retomber a une
+//   médiane hors cadence (p50 au moins égale au seuil de remontée : la plupart des images manquent leur synchro),
+//   l'essai a échoué et le suivant attendra deux fois plus longtemps (hold doublé, maxHoldMs au plus, pour toute la vie
+//   du contrôleur : main.js en recrée un à chaque montage de mission et à chaque changement de réglage). Un à-coup
+//   passager (explosion, kill-cam : une douzaine d'images lentes) fait baisser sans compter comme un essai manqué, la
+//   médiane de sa fenêtre restant à la cadence : sinon, des à-coups toutes les 15 ou 20 s, tombant chacun peu après la
+//   remontée à 1, doublaient l'attente à chaque fois et bloquaient l'échelle à 0,7 jusqu'à la fin de la mission.
 // - Jamais plus d'un changement par minIntervalMs. Après un changement, la mesure repart de zéro : les images d'avant
 //   ont été rendues à une autre résolution, et il faut 2 s d'images à la nouvelle avant de juger à nouveau (avec les
 //   valeurs par défaut, c'est cette fenêtre qui espace les changements ; minIntervalMs tient la règle d'une seconde
@@ -88,7 +94,8 @@ export function createResolutionController({ min = 0.7, max = 1, step = 0.05, hi
       if (p95 > highMs) {
         lowSince = null
         if (scale > min && canChange) {
-          if (lastUp !== null && nowMs - lastUp < windowMs + hold) hold = Math.min(maxHoldMs, hold * 2)
+          const missedTrial = lastUp !== null && nowMs - lastUp < windowMs + hold && p50 >= fastMs
+          if (missedTrial) hold = Math.min(maxHoldMs, hold * 2)
           lastUp = null
           change(scale - step, nowMs)
         }

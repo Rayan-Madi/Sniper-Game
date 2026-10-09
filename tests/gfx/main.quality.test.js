@@ -59,9 +59,77 @@ function wiringFaults(source) {
   return faults
 }
 
+// Horodatage de la résolution dynamique (relecture de L4, spec §8) : la boucle nourrit feedResolution de l'horodatage
+// que requestAnimationFrame passe à son rappel, pas de performance.now() lu dans le rappel, qui arrive avec un retard
+// variable sur la synchro (autres rappels, tâches) : cette gigue grossit la p95 des écarts et peut empêcher la
+// remontée à la cadence de l'écran. Instant et durée de l'image viennent tous deux de cet horodatage.
+// Le nœud fait-il référence à la variable `name` ? (pas aux propriétés : performance.now n'est pas `now`)
+function refersTo(node, name) {
+  if (Array.isArray(node)) return node.some(n => refersTo(n, name))
+  if (!node || typeof node !== 'object') return false
+  if (node.type === 'Identifier') return node.name === name
+  if (node.type === 'MemberExpression' && !node.computed) return refersTo(node.object, name)
+  if (node.type === 'Property' && !node.computed) return refersTo(node.value, name)
+  for (const k in node) if (k !== 'parent' && k !== 'type' && refersTo(node[k], name)) return true
+  return false
+}
+
+// Déclarations `const x = …` du corps d'une fonction (blocs imbriqués compris) : nom → expression d'initialisation.
+function declarationsIn(fn) {
+  const out = new Map()
+  const walk = node => {
+    if (Array.isArray(node)) return node.forEach(walk)
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) out.set(node.id.name, node.init)
+    for (const k in node) if (k !== 'parent') walk(node[k])
+  }
+  walk(fn.body)
+  return out
+}
+
+function timestampFaults(source) {
+  const a = analyse(source)
+  const loop = a.fns.get('loop')
+  if (!loop) return ['loop absente de main.js']
+  const p = loop.params[0]
+  const param = p && (p.type === 'Identifier' ? p.name : p.type === 'AssignmentPattern' && p.left.type === 'Identifier' ? p.left.name : null)
+  if (!param) return ['loop ne reçoit pas l\'horodatage de requestAnimationFrame']
+  const decl = declarationsIn(loop)
+  // L'expression dérive-t-elle de l'horodatage, directement ou par une déclaration de loop ?
+  const derives = (node, seen = new Set()) => {
+    if (refersTo(node, param)) return true
+    for (const [name, init] of decl) {
+      if (!seen.has(name) && refersTo(node, name)) { seen.add(name); if (derives(init, seen)) return true }
+    }
+    return false
+  }
+  // Une déclaration d'instant lue avant l'appel : l'identifiant passé, ou l'expression elle-même.
+  const call = loop.body && (() => {
+    let found = null
+    const walk = node => {
+      if (found || !node || typeof node !== 'object') return
+      if (Array.isArray(node)) return node.forEach(walk)
+      if (node.type === 'CallExpression' && a.source.slice(node.callee.start, node.callee.end) === 'feedResolution') { found = node; return }
+      for (const k in node) if (k !== 'parent') walk(node[k])
+    }
+    walk(loop.body)
+    return found
+  })()
+  if (!call) return ['loop n\'appelle pas feedResolution()']
+  const faults = []
+  const [duree, instant] = call.arguments
+  if (!instant || !derives(instant)) faults.push('feedResolution n\'est pas nourrie de l\'horodatage de requestAnimationFrame (instant)')
+  if (!duree || !derives(duree)) faults.push('feedResolution n\'est pas nourrie de l\'horodatage de requestAnimationFrame (durée)')
+  return faults
+}
+
 describe('main.js : réglages graphiques branchés', () => {
   it('préréglage, résolution dynamique et ombre des personnages appliqués là où il faut', () => {
     expect(wiringFaults(SRC)).toEqual([])
+  })
+
+  it('la résolution dynamique est nourrie de l\'horodatage de requestAnimationFrame', () => {
+    expect(timestampFaults(SRC)).toEqual([])
   })
 })
 
@@ -102,6 +170,46 @@ describe('témoins de la garde', () => {
     const without = SRC.slice(0, apply.start) + SRC.slice(apply.end)
     const next = mutated(without.slice(0, load.start) + text + '\n' + without.slice(load.start))
     expect(wiringFaults(next)).toContain('applyQuality n\'est pas appelée entre loadSettings et loop')
+  })
+
+  // Arguments de feedResolution dans loop et leurs déclarations : { duree, instant } → expression d'initialisation.
+  const feedArgs = source => {
+    const a = analyse(source)
+    const loop = a.fns.get('loop')
+    const call = loop && callsIn(a, 'loop').find(c => c.callee === 'feedResolution')
+    if (!call) return null
+    const node = (function find(n) {
+      if (!n || typeof n !== 'object') return null
+      if (Array.isArray(n)) { for (const x of n) { const r = find(x); if (r) return r } return null }
+      if (n.type === 'CallExpression' && n.start === call.start) return n
+      for (const k in n) if (k !== 'parent') { const r = find(n[k]); if (r) return r }
+      return null
+    })(loop.body)
+    const decl = declarationsIn(loop)
+    const [d, i] = node.arguments
+    return { loop, duree: d?.type === 'Identifier' && decl.get(d.name), instant: i?.type === 'Identifier' && decl.get(i.name) }
+  }
+
+  it('loop sans paramètre (horodatage de requestAnimationFrame ignoré) : rouge', () => {
+    const loop = analyse(SRC).fns.get('loop')
+    const p = loop && loop.params[0]
+    expect(p, 'loop ne reçoit déjà pas d\'horodatage : témoin impossible').toBeDefined()
+    const next = mutated(SRC.slice(0, p.start) + SRC.slice(p.end))
+    expect(timestampFaults(next)).toContain('loop ne reçoit pas l\'horodatage de requestAnimationFrame')
+  })
+
+  it('instant de l\'image lu par performance.now() : rouge', () => {
+    const f = feedArgs(SRC)
+    expect(f && f.instant, 'instant de feedResolution introuvable : témoin impossible').toBeTruthy()
+    const next = mutated(SRC.slice(0, f.instant.start) + 'performance.now()' + SRC.slice(f.instant.end))
+    expect(timestampFaults(next)).toContain('feedResolution n\'est pas nourrie de l\'horodatage de requestAnimationFrame (instant)')
+  })
+
+  it('durée de l\'image mesurée par performance.now() : rouge', () => {
+    const f = feedArgs(SRC)
+    expect(f && f.duree, 'durée de feedResolution introuvable : témoin impossible').toBeTruthy()
+    const next = mutated(SRC.slice(0, f.duree.start) + 'performance.now() - lastFrameAt' + SRC.slice(f.duree.end))
+    expect(timestampFaults(next)).toContain('feedResolution n\'est pas nourrie de l\'horodatage de requestAnimationFrame (durée)')
   })
 
   for (const fn of READS_SHOW_STATS) {

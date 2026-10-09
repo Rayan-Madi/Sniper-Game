@@ -1332,10 +1332,10 @@ function setGraphics(name) {
 
 // Résolution dynamique (Auto) : nourrie de la durée de chaque image en mission seulement ; la densité de pixels n'est
 // réappliquée que quand l'échelle change (au plus une fois par seconde, voir createResolutionController). La durée est
-// l'écart entre deux appels de requestAnimationFrame : sur un écran à 60 Hz, elle ne descend jamais sous 16,7 ms, et le
-// contrôleur compte une image à la cadence de l'écran comme rapide (sinon une échelle abaissée par un à-coup ne
-// remonterait plus de la mission). applyQuality en recrée un, à l'échelle 1, à chaque montage de mission, au retour au
-// menu et au changement de réglage.
+// l'écart entre les horodatages de deux images, tels que requestAnimationFrame les passe à loop : sur un écran à 60 Hz,
+// elle ne descend jamais sous 16,7 ms, et le contrôleur compte une image à la cadence de l'écran comme rapide (sinon
+// une échelle abaissée par un à-coup ne remonterait plus de la mission). applyQuality en recrée un, à l'échelle 1, à
+// chaque montage de mission, au retour au menu et au changement de réglage.
 function feedResolution(frameMs, t) {
   if (!resolution || gamePhase !== 'playing') return
   const s = resolution.push(frameMs, t)
@@ -1356,10 +1356,15 @@ function syncStatsPanel(frameMs) {
   statsPanel.update(frameMs)
 }
 
-function loop() {
+// rafAt : horodatage que requestAnimationFrame passe au rappel, le début de l'image (aligné sur la synchro de l'écran).
+// Il mesure la durée de l'image pour le panneau et la résolution dynamique : performance.now(), lu dans le rappel,
+// arriverait avec un retard variable sur la synchro (autres rappels, tâches), et cette gigue grossirait la p95 des
+// écarts jusqu'à empêcher la remontée à la cadence de l'écran (relecture de L4, spec §8). Le premier appel, direct, n'a
+// pas d'horodatage : performance.now(). La première image d'après peut commencer avant lui : durée nulle, pas négative.
+function loop(rafAt) {
   requestAnimationFrame(loop)
-  const frameAt = performance.now()
-  const frameMs = frameAt - lastFrameAt
+  const frameAt = Number.isFinite(rafAt) ? rafAt : performance.now()
+  const frameMs = Math.max(0, frameAt - lastFrameAt)
   lastFrameAt = frameAt
   syncStatsPanel(frameMs)
   feedResolution(frameMs, frameAt)

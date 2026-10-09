@@ -188,8 +188,8 @@ describe('résolution dynamique (Auto)', () => {
 })
 
 // ─── Résolution dynamique sur un écran synchronisé ────────────────────────────────────────────────────────────────
-// main.js nourrit le contrôleur de l'écart entre deux appels de requestAnimationFrame. Sur un écran synchronisé, une
-// image prête à temps part à la synchro suivante : l'écart vaut la période de l'écran (16,7 ms à 60 Hz) quel que soit
+// main.js nourrit le contrôleur de l'écart entre les horodatages que requestAnimationFrame passe à deux images
+// successives (main.quality.test.js). Sur un écran synchronisé, une image prête à temps part à la synchro suivante : l'écart vaut la période de l'écran (16,7 ms à 60 Hz) quel que soit
 // le coût de l'image, et une image en retard attend la synchro d'après (33,3 ms). Le seuil de 14 ms n'y est jamais
 // atteint (relecture de L4).
 const HZ60 = 1000 / 60
@@ -204,8 +204,9 @@ function prng(seed) {
     return ((x ^ (x >>> 14)) >>> 0) / 4294967296
   }
 }
-// Écran synchronisé : chaque image coûte cost(échelle) ms et part à la première synchro qui suit ; l'appel de
-// requestAnimationFrame arrive avec un retard de 0 à jitterMs (gigue), donc l'écart mesuré en garde la différence.
+// Écran synchronisé : chaque image coûte cost(échelle) ms et part à la première synchro qui suit ; l'instant mesuré
+// arrive avec un retard de 0 à jitterMs sur la synchro (gigue : celle de performance.now() lu dans le rappel ;
+// l'horodatage de requestAnimationFrame n'en a guère), donc l'écart mesuré en garde la différence.
 function vsyncRun(ctrl, cost, seconds, { periodMs = HZ60, jitterMs = 0, seed = 1, t0 = 0, scale0 = 1 } = {}) {
   const rnd = prng(seed)
   const out = []
@@ -221,23 +222,68 @@ function vsyncRun(ctrl, cost, seconds, { periodMs = HZ60, jitterMs = 0, seed = 1
   return out
 }
 
+// À-coups passagers sur un écran à 60 Hz : une image coûte 9 ms (à la cadence de l'écran, avec de la marge) ; toutes
+// les periodS secondes, un à-coup de 12 images à 40 ms (explosion, kill-cam), pendant totalS secondes, avec une gigue
+// d'appel de 0,8 ms au plus. Rend la trace, l'échelle à la fin de chaque cycle (juste avant l'à-coup suivant) et, pour
+// chaque à-coup, le temps mis à revenir à 1 depuis son début (Infinity s'il n'y revient pas dans son cycle).
+function burstsRun(periodS, totalS) {
+  const ctrl = auto()
+  const trace = []
+  const endOfCycle = []
+  const backToOne = []
+  let t = 0
+  for (let cycle = 0; cycle < Math.round(totalS / periodS); cycle++) {
+    const start = t
+    for (let k = 0; k < 12; k++) { t += 40; trace.push({ t, scale: ctrl.push(40, t) }) }
+    const calm = vsyncRun(ctrl, () => 9, periodS - 0.48, { jitterMs: 0.8, seed: cycle + 1, t0: t, scale0: trace.at(-1).scale })
+    trace.push(...calm)
+    t = calm.at(-1).t
+    endOfCycle.push(calm.at(-1).scale)
+    const cycleTrace = trace.filter(s => s.t > start)
+    const firstDrop = cycleTrace.findIndex(s => s.scale < 1)
+    const back = firstDrop < 0 ? null : cycleTrace.slice(firstDrop).find(s => s.scale === 1)
+    backToOne.push(firstDrop < 0 ? 0 : back ? back.t - start : Infinity)
+  }
+  return { trace, endOfCycle, backToOne }
+}
+
 describe('résolution dynamique sur un écran synchronisé à 60 Hz', () => {
   it('après chaque à-coup passager, l\'échelle revient à 1', () => {
-    // Une image coûte 9 ms (à la cadence de l'écran, avec de la marge) ; toutes les 30 s, un à-coup de 12 images à
-    // 40 ms (explosion, kill-cam), pendant 2 min, avec une gigue d'appel de 0,8 ms au plus.
-    const ctrl = auto()
-    const trace = []
-    let t = 0
-    const endOfCycle = []
-    for (let cycle = 0; cycle < 4; cycle++) {
-      for (let k = 0; k < 12; k++) { t += 40; trace.push({ t, scale: ctrl.push(40, t) }) }
-      const calm = vsyncRun(ctrl, () => 9, 30 - 0.48, { jitterMs: 0.8, seed: cycle + 1, t0: t })
-      trace.push(...calm)
-      t = calm.at(-1).t
-      endOfCycle.push(calm.at(-1).scale)
-    }
+    // Un à-coup toutes les 30 s pendant 2 min.
+    const { trace, endOfCycle } = burstsRun(30, 120)
     expect(Math.min(...trace.map(s => s.scale))).toBeGreaterThanOrEqual(0.9 - 1e-9)   // un à-coup coûte deux pas au plus
     expect(endOfCycle).toEqual([1, 1, 1, 1])
+  })
+
+  // Relecture de L4 (spec §8) : une baisse qui suivait une remontée de moins de 2 s plus l'attente comptait comme un
+  // essai manqué, même pour un à-coup passager, et l'attente ne redescendait plus de la mission. Un à-coup toutes les
+  // 15 ou 20 s tombait donc juste après la remontée à 1 : attente doublée à chaque fois, et l'échelle finissait bloquée
+  // à 0,7 (à 77 s pour 15 s, à 100 s pour 20 s). Un essai ne compte comme manqué que si la fenêtre qui provoque la
+  // baisse a une médiane hors cadence ; celle d'un à-coup passager reste à la cadence.
+  for (const periodS of [20, 15]) {
+    it(`à-coup toutes les ${periodS} s pendant 2 min : retour à 1 moins de 15 s après chacun`, () => {
+      const { trace, endOfCycle, backToOne } = burstsRun(periodS, 120)
+      expect(Math.min(...trace.map(s => s.scale))).toBeGreaterThanOrEqual(0.9 - 1e-9)
+      expect(endOfCycle).toEqual(Array(120 / periodS).fill(1))
+      for (const ms of backToOne) expect(ms).toBeLessThan(15000)
+    })
+  }
+
+  it('gigue d\'appel uniforme de 2 ms : l\'échelle remonte encore jusqu\'à 1', () => {
+    // L'écart mesuré entre deux appels va de 14,7 à 18,7 ms autour de la période (16,7 ms) ; sa p95, vers 18 ms, reste
+    // sous le seuil de remontée (cadence × 1,1 = 18,3 ms), de peu. 10 s lourdes (une synchro sur deux : l'échelle
+    // baisse), puis 90 s légères.
+    const ctrl = auto()
+    const heavy = vsyncRun(ctrl, () => 30, 10, { jitterMs: 2 })
+    const low = heavy.at(-1).scale
+    expect(low).toBeLessThan(1)
+    const light = vsyncRun(ctrl, () => 9, 90, { jitterMs: 2, seed: 7, t0: heavy.at(-1).t, scale0: low })
+    const ch = changes(light, low)
+    // (la fenêtre garde encore des images lourdes au début : un dernier pas de baisse peut tomber)
+    const firstUp = ch.findIndex(c => c.to > c.from)
+    expect(firstUp).toBeGreaterThanOrEqual(0)
+    expect(ch.slice(firstUp).every(c => c.to > c.from)).toBe(true)
+    expect(light.at(-1).scale).toBe(1)
   })
 
   it('qui ne tient pas la cadence à 1 : les essais de remontée s\'espacent', () => {
@@ -253,6 +299,9 @@ describe('résolution dynamique sur un écran synchronisé à 60 Hz', () => {
     const gaps = ups.slice(1).map((u, i) => u - ups[i])
     for (let i = 1; i < gaps.length; i++) expect(gaps[i]).toBeGreaterThanOrEqual(gaps[i - 1] - 50)
     expect(gaps.at(-1)).toBeGreaterThanOrEqual(60000)
+    // Chaque essai manque toute sa fenêtre (33,3 ms, médiane hors cadence) : il compte, essais à la seconde près
+    // (spec §4.3), inchangés par la règle des à-coups passagers.
+    expect(ups.map(u => Math.round(u / 1000))).toEqual([8, 20, 40, 76, 144, 212, 280])
   })
 
   it('écran à 120 Hz tenu à 60 images par seconde : une synchro sur deux n\'est pas la cadence, pas de remontée', () => {
