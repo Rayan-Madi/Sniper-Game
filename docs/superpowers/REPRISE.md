@@ -22,7 +22,7 @@ Ce que j'attends : le résultat le plus « stylé » possible (qualité visuelle
 
 ## Où on en est
 
-Fait, relu et testé (**727 tests verts** avec le lot 1 ; 326 à la fin du lot 0) ; les points 1 à 4 sont fusionnés dans `main`, le lot 1 (point 5) l'est après la relecture finale de sa branche `lot1-socle` :
+Fait, relu et testé (**728 tests verts** avec le lot 1 ; 326 à la fin du lot 0) ; les points 1 à 4 sont fusionnés dans `main`, le lot 1 (point 5) l'est après la relecture finale de sa branche `lot1-socle` :
 1. **Briefings M1-M6 et épilogue** en motion design « dossier du fixeur » (Plan 1) : kit `src/briefing/kit.js`, `playCinematic` dans `src/briefing/index.js`, scènes générées depuis les maquettes par `scripts/port-maquette.mjs` (ne jamais éditer `src/briefing/scenes/*.js` à la main).
 2. **Prologue** en deux cinématiques (Plan 2) : `prologue-a` et `prologue-b`, une fois par campagne (`upgradeState.prologueSeen`).
 3. **Enquête jouable** entre A et B (Plan 3) : `src/prologue/`. Budget gardé par un test (au plus 47 maillages et 16 600 triangles par `stats()` ; mesuré en jeu : 44 appels, 16 446 triangles).
@@ -101,7 +101,7 @@ Questions encore ouvertes :
     { "name": "maquettes", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "docs/superpowers/maquettes/cinematiques", "--port", "5193", "--strictPort"], "port": 5193 }
   ] }
   ```
-  Le serveur des maquettes a son propre cache (`docs/superpowers/maquettes/cinematiques/vite.config.js`) : les deux peuvent tourner ensemble. Tests : `npx vitest run` (727 attendus). Build : `npx vite build`. Routes de dev : `?cine=<id>&freeze=<ms>` (cinématiques), `?enquete=1&cam=x,y,z,lacet,tangage&ouvrir=<indice>&indices=n&stats=1` (enquête), `?stats=1` (panneau de performances, toutes phases), `?memtest=1&qualite=bas` (mesure mémoire, lue par `scripts/memtest.mjs`). Accroches de dev dans la console : `__mem()`, `__aim()`, `__aimAt()`, `__mission()`, `__decor()`.
+  Le serveur des maquettes a son propre cache (`docs/superpowers/maquettes/cinematiques/vite.config.js`) : les deux peuvent tourner ensemble. Tests : `npx vitest run` (728 attendus). Build : `npx vite build`. Routes de dev : `?cine=<id>&freeze=<ms>` (cinématiques), `?enquete=1&cam=x,y,z,lacet,tangage&ouvrir=<indice>&indices=n&stats=1` (enquête), `?stats=1` (panneau de performances, toutes phases), `?memtest=1&qualite=bas` (mesure mémoire, lue par `scripts/memtest.mjs`). Accroches de dev dans la console : `__mem()`, `__aim()`, `__aimAt()`, `__mission()`, `__decor()`.
 - **Captures et pilotage** : `scripts/shots.mjs` (cinématiques), `scripts/verif-mission.mjs` (campagne), `scripts/capture-mission.mjs` (captures déterministes, à comparer à l'octet) et `scripts/memtest.mjs` (mesure mémoire et triangles, seuils du lot 1 avec `--check` ; mode d'emploi dans `docs/superpowers/specs/annexes/README.md`), Chrome sans interface, chemin `--screenshot` absolu, `--user-data-dir` jetable, **jamais de port de débogage fixe** (`--remote-debugging-port=0`, port relu dans `DevToolsActivePort`) : un port fixe a déjà fait piloter par erreur le navigateur d'une autre session. Si le volet du navigateur intégré est caché, `requestAnimationFrame` ne tourne pas : tester le rendu par captures sans interface.
 - **Worktrees** : ne pas mettre `node_modules` en jonction, ou retirer la jonction (`cmd /c rmdir`) avant `git worktree remove`, qui la suit et vide le `node_modules` du dépôt principal.
 - Style « dossier du fixeur » : Anton (le fixeur) n'est jamais vu et ne dit jamais « tu entres » ; Viktor tire toujours de loin et en hauteur.

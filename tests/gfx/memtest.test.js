@@ -176,6 +176,19 @@ describe('checkMemtest : seuils du §6 de la spec', () => {
     expect(failed(checkMemtest(retours(autres, { textures: 48 })))).toEqual(['partie complète'])
   })
 
+  // Les nombres des modèles sont ceux du retour de campagne, l'étape dont on juge le seuil : ceux d'une autre étape
+  // (menu de départ avant tout chargement, ou modèle arrivé plus tard) ne comptent pas.
+  it('partie complète : les nombres des modèles sont lus au retour de campagne, pas à une autre étape', () => {
+    const avant = good().map(e => ({ ...e, geometriesModeles: 0, texturesModeles: 0 }))
+    const charges = set(avant, 'menu-campagne', { geometriesModeles: 38, texturesModeles: 29 })
+    // 500 × 1,02 + 38 = 548 ; 40 + 2 + 29 = 71, alors que les autres étapes donneraient 510 et 42
+    expect(failed(checkMemtest(retours(charges, { geometries: 548, textures: 71 })))).toEqual([])
+    const plusTard = set(good(), 'menu-campagne', { geometriesModeles: 10, texturesModeles: 5 })
+    // 500 × 1,02 + 10 = 520 ; 40 + 2 + 5 = 47, alors que les autres étapes donneraient 548 et 71
+    expect(failed(checkMemtest(retours(plusTard, { geometries: 521 })))).toEqual(['partie complète'])
+    expect(failed(checkMemtest(retours(plusTard, { textures: 48 })))).toEqual(['partie complète'])
+  })
+
   it('partie complète : sans les nombres des modèles, échec (jamais un succès par défaut)', () => {
     const sans = good().map(({ geometriesModeles, texturesModeles, ...e }) => e)
     expect(failed(checkMemtest(sans))).toEqual(['partie complète'])
