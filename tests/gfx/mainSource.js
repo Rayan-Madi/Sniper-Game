@@ -4,7 +4,13 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseSync } from 'vite'
 
-export const MAIN_SRC = readFileSync(resolve(__dirname, '../../src/main.js'), 'utf8')
+// Source lu en fins de ligne LF, comme le dépôt le stocke : sous Windows, Git (core.autocrlf) extrait main.js en CRLF,
+// et une garde qui cherche « \n » à un endroit précis ne le trouverait plus (relecture de L7, mainSource.test.js).
+export function readSource(path) {
+  return readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
+}
+
+export const MAIN_SRC = readSource(resolve(__dirname, '../../src/main.js'))
 
 // Fonctions déclarées au niveau du module, imports (nom local → module source), corps du programme.
 export function analyse(source) {
