@@ -49,13 +49,17 @@ function rms(step, offset, { fps, zoom, secondes = 400 }) {
 }
 
 // scope.js neuf (et upgrades.js neuf) pour chaque mesure : l'état du tremblement ne passe pas d'une mesure à l'autre,
-// et deux mesures à la même graine suivent la même suite d'à-coups.
+// et deux mesures à la même graine suivent la même suite d'à-coups. La lunette est ouverte à 100 % au zoom voulu (tâche
+// T2 : elle s'ouvre en 180 ms et le zoom se lisse, et le réticule suit le champ affiché), l'état dans lequel on tire.
+function ouvrir(S, zoom) {
+  S.setZoom(zoom, { instant: true }); S.showScope(); S.updateScope(1)
+}
 async function mesureScope({ fps = 60, zoom = 4, stress = 0, steady = 1, stabilite = 0, graine = 7, secondes } = {}) {
   vi.resetModules()
   const U = await import('../../src/upgrades.js')
   U.state.levels.stability = stabilite
   const S = await import('../../src/scope.js')
-  S.showScope(); S.setZoom(zoom); S.setStress(stress); S.setSteady(steady)
+  ouvrir(S, zoom); S.setStress(stress); S.setSteady(steady)
   const rand = lcg(graine)
   const spy = vi.spyOn(Math, 'random').mockImplementation(rand)
   try {
@@ -129,7 +133,7 @@ describe('tremblement en angle', () => {
     async function pixels(zoom) {
       vi.resetModules()
       const S = await import('../../src/scope.js')
-      S.showScope(); S.setZoom(zoom); S.setStress(0.5); S.setSteady(1)
+      ouvrir(S, zoom); S.setStress(0.5); S.setSteady(1)
       const spy = vi.spyOn(Math, 'random').mockImplementation(lcg(11))
       let somme = 0, n = 0
       try {

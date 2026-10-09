@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQuality } from './scene.js'
-import { showScope, hideScope, isVisible, setZoom, getZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope } from './scope.js'
+import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope, getScopeFov, getScopeOpenness, setZoom, getZoom, getEffectiveZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope, resizeScope } from './scope.js'
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
@@ -11,7 +11,7 @@ import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, in
 import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
-import { fovFor, aimAngles, stepStress } from './aim.js'
+import { aimAngles, stepStress, clampPitch } from './aim.js'
 import { STRESS, APNEE } from './shot/tuning.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
@@ -577,7 +577,7 @@ function mountLevel(n) {
     yaw = 0; pitch = 0
   }
 
-  setZoom(4)   // le champ de vision suit dans loop() (syncFov)
+  setZoom(4, { instant: true })   // posé d'un coup, pas lissé depuis la mission d'avant ; la caméra suit dans loop() (syncFov)
 
   const b = currentMapInfo.spawnBounds
   const groundY = mapGround()   // les pieds des PNJ sur la dalle du port, le tarmac, la route du convoi
@@ -873,7 +873,8 @@ function triggerConvoyEscaped() {
 
 // ─── Tir ───────────────────────────────────────────────────────────
 function shoot() {
-  if (!isVisible() || bulletInFlight || !canShoot(missionPhase())) return   // ni pendant le ralenti, ni après un civil abattu
+  // Lunette ouverte à 100 % seulement (spec du lot 2, §3.2), ni pendant le ralenti, ni après un civil abattu
+  if (!isScopeReady() || bulletInFlight || !canShoot(missionPhase())) return
   const stats = getStats()
   bulletInFlight = true
   bulletDelay = stats.bulletDelay
@@ -1172,18 +1173,19 @@ document.addEventListener('mousedown', e => {
 
 document.addEventListener('mouseup', e => {
   if (e.button === 2) {
-    hideScope()
+    closeScope()   // la visée s'arrête, l'image se referme en douceur (LUNETTE.fermetureMs)
     stress = Math.max(0, stress - STRESS.fermetureLunette)
   }
 })
 
 document.addEventListener('mousemove', e => {
   if (!isVisible() || gamePhase !== 'playing') return
-  const zoom = getZoom()
+  // Sensibilité sur le zoom affiché (lissé), celui de l'image que le joueur voit
+  const zoom = getEffectiveZoom()
   const s = SENSITIVITY * sensMultiplier() / (zoom * 0.4)
   yaw   -= e.movementX * s
   pitch -= e.movementY * s * invertY()
-  pitch  = Math.max(-1.1, Math.min(0.5, pitch))
+  pitch  = clampPitch(pitch)   // [-1,35 ; 0,5] rad : toute la place de M2 atteignable depuis le toit
   // Pas de limite sur yaw — rotation libre à 360°
 })
 
@@ -1287,9 +1289,10 @@ function renderUpgradeUI() {
 export let campaignPaused = false
 export function setCampaignPaused(v) { campaignPaused = v; if (v) clock.getDelta() }
 
-// Champ de vision de la mission : 60 / zoom lunette ouverte, 60 lunette fermée.
+// Champ de vision de la mission : celui de la lunette (60 / zoom affiché ouverte, 60 fermée, et entre les deux pendant
+// l'ouverture et la fermeture).
 function syncFov() {
-  const f = fovFor(getZoom(), isVisible())
+  const f = getScopeFov()
   if (camera.fov !== f) { camera.fov = f; camera.updateProjectionMatrix() }
 }
 
@@ -1320,9 +1323,13 @@ function applyQuality() {
   resolution = quality.dynamic ? createResolutionController({ min: 0.7, max: 1 }) : null
   resolutionScale = 1
   applyRenderQuality(quality, resolutionScale)
+  resizeScope(innerWidth, innerHeight, quality.pixelRatio)   // réticule net, à la densité du rendu
   setNpcShadows(quality.npcShadows)
   for (const npc of npcs) npc.applyShadows(quality.npcShadows)
 }
+
+// Canevas de la lunette redimensionné avec la fenêtre (et au préréglage, applyQuality), jamais à chaque image.
+window.addEventListener('resize', () => resizeScope(innerWidth, innerHeight, quality.pixelRatio))
 
 // Qualité choisie dans les Paramètres : enregistrée et appliquée tout de suite (en pause aussi).
 function setGraphics(name) {
@@ -1447,6 +1454,8 @@ function loop(rafAt) {
     stressFill.style.width = pct + '%'
     stressFill.style.background = pct < 40 ? '#4eff4e' : pct < 70 ? '#ffd44e' : '#ff4444'
 
+    // Lunette : ouverture, fermeture et zoom lissé, avant que la caméra ne prenne son champ (aimMissionCamera)
+    updateScope(dt)
     // Tremblement scope
     if (isVisible()) updateTremble(dt)
 
@@ -1513,8 +1522,10 @@ if (import.meta.env.DEV) {
   // cadenas, PNJ ou jeeps restés dans la scène).
   window.__decor = () => ({ fond: scene.background && scene.background.getHexString(),
     horsCarte: scene.children.filter(o => !isMapObject(o) && o !== ambient && o !== sun && o !== fill).map(o => o.type) })
-  // Visée (relectures du zoom, du stress et du tremblement en milliradians et en pixels) : __aim() dans la console
-  window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), scoped: isVisible(), stress,
+  // Visée (relectures du zoom choisi et affiché, de l'ouverture de la lunette, du stress et du tremblement en
+  // milliradians et en pixels) : __aim() dans la console ; pret : le clic gauche tire (lunette ouverte à 100 %)
+  window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), zoomAffiche: getEffectiveZoom(), scoped: isVisible(),
+    ouverture: getScopeOpenness(), pret: isScopeReady(), stress,
     trembleMrad: getTrembleMrad(), tremblePx: getTrembleOffset() })
   // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console
   window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,

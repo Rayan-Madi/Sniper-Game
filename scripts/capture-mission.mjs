@@ -5,10 +5,15 @@
 // graphique (GPU=1), deux sessions peuvent différer d'un niveau de couleur sur quelques pixels (shaders compilés par
 // le pilote).
 // Prérequis : npm run dev. Usage : node scripts/capture-mission.mjs <dossier> [menu] [1…6] [retour1…retour6]
+//   [lunette1…lunette6] [mi-lunette1…mi-lunette6]
 //   ex. node scripts/capture-mission.mjs avant-lot1 menu 1 3 5 6   → shots/avant-lot1/m1.png, …
 //   retour<n> : mission n, trois tirs manqués (impacts au sol, poussière, traceurs encore en vie), puis retour au menu
 //   (pause, MENU ; MENU de l'écran d'échec si une cible a fui) → shots/<dossier>/retour-m<n>.png. Le décor de la
 //   scène (__decor() : fond, objets hors carte) est affiché avant et après le retour.
+//   lunette<n> : mission n, vue de départ, puis clic droit et 15 images (250 ms) : lunette ouverte à 100 %
+//   → shots/<dossier>/lunette-m<n>.png. mi-lunette<n> : 5 images seulement (83 ms sur les 180 de l'ouverture, spec du
+//   lot 2 §3.2) : vignette à mi-course, champ de vision entre 60° et 15°, réticule pas encore apparu
+//   → mi-lunette-m<n>.png. L'horloge pilotée fige l'animation à l'image près : pas besoin de route de dev.
 // Variables : CHROME (chemin de Chrome), BASE_URL (défaut http://localhost:5173/), IMAGES (défaut 20),
 // GPU=1 (carte graphique au lieu du rendu logiciel), PARAMS (ajoutés à l'URL, ex. stats=1), QUALITE (préréglage
 // graphique enregistré dans le profil jetable : auto, bas, moyen, haut ; sans elle, celui d'un premier lancement, Auto).
@@ -130,7 +135,8 @@ async function shoot(target) {
     await c.send('Page.navigate', { url: URL_JEU })
     await until(c, `document.readyState === 'complete'`)
     const retour = /^retour(\d)$/.exec(target)
-    const n = target === 'menu' ? 1 : retour ? +retour[1] : +target
+    const lunette = /^(mi-)?lunette(\d)$/.exec(target)
+    const n = target === 'menu' ? 1 : retour ? +retour[1] : lunette ? +lunette[2] : +target
     await js(c, `localStorage.setItem('sniper-save', ${JSON.stringify(JSON.stringify(saveAt(n)))})`)
     if (process.env.QUALITE) await js(c, `localStorage.setItem('sniper-settings', ${JSON.stringify(JSON.stringify({ graphics: process.env.QUALITE }))})`)
     await c.send('Page.enable')
@@ -159,9 +165,17 @@ async function shoot(target) {
     }
     if (retour) await missThenMenu(c)
     await js(c, `__step(${IMAGES})`)
-    await js(c, `__step(1)`)
+    if (lunette) {
+      await js(c, mouse('mousedown', { button: 2 }))
+      await js(c, `__step(${lunette[1] ? 5 : 15})`)
+      console.log('  visée :', JSON.stringify(await js(c,
+        `(({ fov, ouverture, pret }) => ({ fov: +fov.toFixed(2), ouverture: +ouverture.toFixed(3), pret }))(__aim())`)))
+    } else {
+      await js(c, `__step(1)`)
+    }
     const { data } = await c.send('Page.captureScreenshot', { format: 'png' })
-    const out = resolve('shots', dir, target === 'menu' ? 'menu.png' : retour ? `retour-m${n}.png` : `m${n}.png`)
+    const nom = target === 'menu' ? 'menu' : retour ? `retour-m${n}` : lunette ? `${lunette[1] || ''}lunette-m${n}` : `m${n}`
+    const out = resolve('shots', dir, `${nom}.png`)
     mkdirSync(resolve('shots', dir), { recursive: true })
     const buf = Buffer.from(data, 'base64')
     writeFileSync(out, buf)
@@ -179,12 +193,14 @@ async function shoot(target) {
 
 // Lunette ouverte, visée relevée au-dessus des PNJ : la balle passe haut et finit au sol très loin derrière eux (une
 // soixantaine de mètres au port), aucun ne fuit et la mission continue. Trois tirs manqués un peu décalés, puis
-// retour au menu pendant que poussière et traceur sont encore en vie.
+// retour au menu pendant que poussière et traceur sont encore en vie. Le clic gauche ne tire que lunette ouverte à
+// 100 % (180 ms, spec du lot 2 §3.2) : les images avancent jusque-là avant le premier tir.
 const mouse = (type, init) => `document.dispatchEvent(new MouseEvent('${type}', ${JSON.stringify(init)}))`
 const playing = c => js(c, `__mission().phase === 'playing'`)
 async function missThenMenu(c) {
   await js(c, mouse('mousedown', { button: 2 }))
   await js(c, mouse('mousemove', { movementX: 0, movementY: -160 }))
+  for (let k = 0; k < 60 && !await js(c, '__aim().pret'); k++) await js(c, '__step(1)')
   for (let i = 0; i < 3 && await playing(c); i++) {
     if (i) await js(c, mouse('mousemove', { movementX: 40, movementY: 0 }))
     await js(c, mouse('mousedown', { button: 0 }))

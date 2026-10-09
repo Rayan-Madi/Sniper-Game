@@ -134,12 +134,16 @@ async function play(n) {
 // Images du jeu : sous SwiftShader la boucle tourne lentement, et dt est plafonné (le temps du jeu retarde).
 const frames = (c, n) => js(c, `new Promise(r => { let k = ${n}; const f = () => (--k > 0 ? requestAnimationFrame(f) : r()); requestAnimationFrame(f) })`)
 
+// Lunette ouverte à 100 % (le clic gauche ne tire qu'à ce moment-là : 180 ms, spec du lot 2 §3.2) : __aim().pret.
+const scopeOpen = c => until(c, '__aim().pret', 3000)
+
 // Lunette ouverte, souffle retenu, visée sur `what` (voir __aimAt), puis un tir dont on attend l'impact.
 // Faux si la visée n'a rien trouvé.
 async function aimAndShoot(c, what, n = 0) {
   await mouse(c, 'mousedown', 2)
   await key(c, 'keydown', 'Shift', 'ShiftLeft')
   await frames(c, 10)   // le tremblement se calme
+  await scopeOpen(c)
   if (!await js(c, `__aimAt(${JSON.stringify(what)}, ${n})`)) return false
   await frames(c, 2)    // la caméra prend la visée (appliquée par la boucle)
   const tirs = (await mission(c)).tirs
@@ -156,6 +160,7 @@ async function shootAhead(c, what, avance) {
   await mouse(c, 'mousedown', 2)
   await key(c, 'keydown', 'Shift', 'ShiftLeft')
   await frames(c, 10)
+  await scopeOpen(c)
   const tirs = (await mission(c)).tirs
   const ok = await js(c, `new Promise(r => {
     if (!__aimAt(${JSON.stringify(what)}, 0, ${avance})) return r(false)
@@ -354,6 +359,7 @@ const SCENARIOS = {
         await mouse(c, 'mousedown', 2)
         await key(c, 'keydown', 'Shift', 'ShiftLeft')
         await frames(c, 10)
+        await scopeOpen(c)
         check(await js(c, `__aimAt(${JSON.stringify(who)})`), `mission ${n} : un ${who} à viser`, null)
         await frames(c, 3)
         await capture(c, `sol-m${n}`)

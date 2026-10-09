@@ -10,6 +10,24 @@ export function fovFor(zoom, scoped) {
   return scoped ? BASE_FOV / zoom : BASE_FOV
 }
 
+// Champ de vision (degrés) pendant l'ouverture de la lunette (spec du lot 2, §3.2) : il glisse de 60° (openness 0)
+// vers 60 / zoom (openness 1). Le grossissement suit une courbe adoucie aux deux bouts (smoothstep), en échelle
+// logarithmique : chaque instant multiplie le grossissement du même facteur, l'image ne semble ni hésiter ni jaillir.
+export function scopeFov(zoom, openness) {
+  const o = Math.max(0, Math.min(1, openness))
+  return BASE_FOV / zoom ** (o * o * (3 - 2 * o))
+}
+
+// ─── Tangage ───────────────────────────────────────────────────────
+// Bornes du tangage de la visée (radians ; négatif : vers le bas). -1,35 rad (77°) : depuis le toit de M2, toute la
+// place est atteignable (à -1,1, une bande d'environ 3 m au pied de l'immeuble ne l'était pas).
+export const PITCH_MIN = -1.35
+export const PITCH_MAX = 0.5
+
+export function clampPitch(pitch) {
+  return Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch))
+}
+
 // Angles de départ pour regarder de `from` vers `to` (tableaux [x, y, z], format des cartes).
 // Euler(pitch, yaw, 0, 'YXZ') appliqué à (0, 0, -1) donne (-sin yaw · cos pitch, sin pitch, -cos yaw · cos pitch).
 export function aimAngles(from, to) {
