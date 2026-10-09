@@ -23,6 +23,7 @@ import { missImpact } from './campaign/impact.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
+import { onPixelRatioChange } from './gfx/pixelRatio.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
 import { prepareDuringBriefing, afterPaint } from './campaign/prepare.js'
 import { shotFlash, bindFullscreenButton } from './comfort.js'
@@ -889,7 +890,7 @@ function shoot() {
   const aimX =  (t.x / innerWidth)  * 2.0
   const aimY = -(t.y / innerHeight) * 2.0
   const ray = new THREE.Raycaster()
-  syncFov()   // lunette ouverte et tir dans la même image : le rayon suit déjà le zoom
+  syncFov()   // la caméra prend le champ affiché, celui que getTrembleOffset utilise : réticule et rayon cohérents
   ray.setFromCamera(new THREE.Vector2(aimX, aimY), camera)
   pendingShotRay = ray
 }
@@ -1330,6 +1331,10 @@ function applyQuality() {
 
 // Canevas de la lunette redimensionné avec la fenêtre (et au préréglage, applyQuality), jamais à chaque image.
 window.addEventListener('resize', () => resizeScope(innerWidth, innerHeight, quality.pixelRatio))
+// Densité d'écran changée (zoom du navigateur, fenêtre passée sur un écran d'une autre densité, ce qui ne déclenche pas
+// toujours resize) : le préréglage est réappliqué pour le nouvel écran, au rendu comme au canevas de la lunette, et la
+// résolution dynamique d'Auto repart de 1 (la cadence de l'écran a pu changer).
+onPixelRatioChange(window, () => applyQuality())
 
 // Qualité choisie dans les Paramètres : enregistrée et appliquée tout de suite (en pause aussi).
 function setGraphics(name) {

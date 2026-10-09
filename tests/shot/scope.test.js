@@ -187,6 +187,21 @@ describe('canevas de la lunette', () => {
     expect(vignette()).toBeCloseTo(R_FINAL, 6)   // en pixels CSS : la mise à l'échelle est celle du contexte
   })
 
+  // Relecture de T2 : au préréglage Bas, le rendu est à 0,75. Un canevas à cette densité, agrandi par le CSS, rendait
+  // les traits de 0,9 px du réticule et les mil-dots plus flous qu'avant le lot 2 (canevas à la densité 1). Témoin : le
+  // commit 71578af dimensionnait le canevas à 960 × 540.
+  it('jamais sous la densité 1 : au préréglage Bas (rendu à 0,75), canevas de 1280 × 720, réticule aussi net qu\'avant', () => {
+    const transforms = []
+    ctx.setTransform = (...m) => { transforms.push(m) }
+    S.resizeScope?.(W, H, 1.25)
+    S.resizeScope?.(W, H, 0.75)
+    S.showScope()
+    images(12)
+    expect([canvas.width, canvas.height]).toEqual([W, H])
+    expect(transforms.at(-1)).toEqual([1, 0, 0, 1, 0, 0])
+    expect(vignette()).toBeCloseTo(R_FINAL, 6)
+  })
+
   it('redimensionner la fenêtre recentre la lunette', () => {
     S.resizeScope?.(1920, 1080, 1)
     S.showScope()
@@ -258,6 +273,22 @@ describe('branchement dans main.js', () => {
     const r = ecouteur('window', 'resize')
     expect(r, 'écouteur resize dans main.js').not.toBe(null)
     expect(appels(r)).toContain('resizeScope')
+  })
+
+  // Relecture de T2 : une densité d'écran changée laissait rendu et lunette à l'ancienne densité (mesuré dans Chrome sans
+  // interface au commit 71578af : densité passée de 1 à 2 en Moyen, les deux canevas restés à la densité 1), et une
+  // fenêtre passée sur un autre écran peut garder sa taille en pixels CSS, sans resize. La densité est suivie à part
+  // (onPixelRatioChange, testée dans tests/gfx/pixelRatio.test.js) et réapplique le préréglage au nouvel écran.
+  it('densité d\'écran changée (zoom du navigateur, autre écran, même sans resize) : préréglage réappliqué', () => {
+    expect(a.imports.get('onPixelRatioChange')?.from).toBe('./gfx/pixelRatio.js')
+    const appel = a.program.body.find(n => n.type === 'ExpressionStatement' && n.expression.type === 'CallExpression'
+      && texte(n.expression.callee) === 'onPixelRatioChange')
+    expect(appel, 'onPixelRatioChange(window, …) au chargement de main.js').toBeDefined()
+    const [cible, rappel] = appel.expression.arguments
+    expect(texte(cible)).toBe('window')
+    // Rappel : applyQuality elle-même, ou une fonction qui l'appelle.
+    const reapplique = rappel.type === 'Identifier' ? rappel.name === 'applyQuality' : appels(rappel).includes('applyQuality')
+    expect(reapplique, `rappel : ${texte(rappel)}`).toBe(true)
   })
 
   it('au montage d\'une mission, le zoom est posé à ×4 d\'un coup (pas lissé depuis la mission d\'avant)', () => {

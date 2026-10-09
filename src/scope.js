@@ -59,14 +59,16 @@ export function getEffectiveZoom() { return anim.zoom }
 export function setStress(s) { stress = s }
 export function setSteady(s) { steady = s }
 
-// Taille du canevas (pixels CSS) et densité de pixels, celle du rendu : au démarrage, au changement de préréglage et au
-// redimensionnement de la fenêtre seulement (main.js). Écrire canvas.width réalloue le canevas : rien n'est refait
-// quand rien ne change.
+// Taille du canevas (pixels CSS) et densité de pixels, celle du rendu mais jamais sous 1 : au préréglage Bas (rendu à
+// 0,75), un canevas agrandi par le CSS rendrait le réticule flou. Au démarrage, au changement de préréglage ou de
+// densité d'écran et au redimensionnement de la fenêtre seulement (main.js). Écrire canvas.width réalloue le canevas :
+// rien n'est refait quand rien ne change.
 export function resizeScope(w, h, pixelRatio = 1) {
-  if (size.w === w && size.h === h && size.pr === pixelRatio) return
-  size = { w, h, pr: pixelRatio }
-  canvas.width = Math.round(w * pixelRatio)
-  canvas.height = Math.round(h * pixelRatio)
+  const pr = Math.max(1, pixelRatio)
+  if (size.w === w && size.h === h && size.pr === pr) return
+  size = { w, h, pr }
+  canvas.width = Math.round(w * pr)
+  canvas.height = Math.round(h * pr)
 }
 resizeScope(innerWidth, innerHeight, 1)
 
