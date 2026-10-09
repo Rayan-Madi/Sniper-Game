@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { scene, camera, renderer } from './scene.js'
 import { buildPvpArena, clearPvpMap, getPvpColliders } from './pvpMap.js'
 import { MAP_BUILDERS } from './maps.js'
-import { spawnCharacter } from './characters.js'
+import { spawnCharacter, charactersReady, charactersProgress, charactersSettled } from './characters.js'
 import { NPC, STATES, npcShadowMode } from './npc.js'
 import { playPvpIntro, isPvpIntroActive, stopPvpIntro } from './pvpIntro.js'
 import * as net from './net.js'
@@ -12,6 +12,7 @@ import { setCampaignPaused } from './main.js'
 import { audioContext, masterNode } from './audio.js'
 import { disposeObject } from './gfx/dispose.js'
 import { npcCastsShadow } from './gfx/quality.js'
+import { startWhenReady, waitForCharacters, createLoadingScreen } from './campaign/loading.js'
 
 // ─── Mode PvP : Sniper vs Contre-tueur ───────────────────────────────
 // Réseau : relais WebSocket pur (voir net.js + server/index.js). Chaque
@@ -45,6 +46,12 @@ let clingerNpc = null, clingerUntil = 0
 let phoneShakeUntil = 0, alarmUntil = 0
 let crowdPanicUntil = 0     // la foule fuit (alarme du sniper)
 let speedMultiplier = 1
+
+// Départ de manche en attente des modèles (spec du lot 1 §4.4) : son écran PRÉPARATION DU DOSSIER, et un jeton
+// incrémenté à chaque départ reçu ou annulé (adversaire parti, relais perdu, QUITTER) : seul le dernier départ monte
+// sa manche.
+let pendingStart = null   // { screen } pendant l'attente
+let startToken = 0
 
 // Sniper
 let sniperYaw = 0, sniperPitch = 0
@@ -222,18 +229,20 @@ export function initMultiplayerMenu() {
   // dans les deux cas la manche ne peut plus continuer. Un seul écran de fin
   // (endRound ne fait rien si la manche est déjà close).
   const onPeerLost = (reason) => {
+    // Manche encore en attente des modèles : annulée, rien n'est monté ; endRound affiche l'écran de fin
+    if (cancelPendingStart()) roundActive = true
     if (isPvpIntroActive()) { stopPvpIntro(); roundActive = true /* pour laisser endRound nettoyer normalement */ }
     if (roundActive) endRound(null, reason)
   }
   // Départ de l'adversaire sur l'écran de fin : le relais a fermé la partie, la manche suivante ne viendra plus.
   net.on('peer_left', () => {
-    if (roundActive || isPvpIntroActive()) return onPeerLost('peer_left')
+    if (roundActive || isPvpIntroActive() || pendingStart) return onPeerLost('peer_left')
     if (mpResult.style.display === 'flex') { rematchBtn.disabled = true; rematchBtn.textContent = 'ADVERSAIRE PARTI.' }
   })
   // Relais perdu hors manche : l'attente en cours (partie créée, partie rejointe, manche suivante) ne peut plus
   // aboutir. Un message la remplace ; ANNULER et QUITTER restent utilisables.
   net.on('disconnected', () => {
-    if (roundActive || isPvpIntroActive()) return onPeerLost('disconnected')
+    if (roundActive || isPvpIntroActive() || pendingStart) return onPeerLost('disconnected')
     if (mpCreate.style.display === 'flex') { codeDisplay.textContent = '----'; createStatus.textContent = 'Relais perdu.' }
     if (mpJoin.style.display === 'flex') joinError.textContent = 'Relais perdu.'
     if (mpResult.style.display === 'flex') { rematchBtn.disabled = true; rematchBtn.textContent = 'RELAIS PERDU.' }
@@ -293,6 +302,10 @@ export function initMultiplayerMenu() {
 }
 
 // ─── Démarrage d'une manche ──────────────────────────────────────────
+// Départ reçu du relais (aussi après une revanche votée à deux). Les modèles encore en chargement (partie lancée juste
+// après l'ouverture du jeu) : la manche attend derrière l'écran PRÉPARATION DU DOSSIER, 20 s au plus, sinon la foule
+// et l'avatar seraient procéduraux, et l'avatar du contre-tueur invisible. Modèles prêts : départ dans le même message,
+// comme avant. L'intro de rôle et le chrono sont locaux : l'attente d'un joueur ne retire rien au temps de l'autre.
 function onMatchStart(msg) {
   myRole = msg.role
   hideAllMpScreens()
@@ -301,6 +314,32 @@ function onMatchStart(msg) {
   const instr = el('instruction'); if (instr) instr.style.display = 'none'
 
   setCampaignPaused(true)
+  cancelPendingStart()   // un départ précédent encore en attente : seul celui-ci compte
+  const token = ++startToken
+  const isCurrent = () => token === startToken
+  startWhenReady({
+    settled: charactersSettled,
+    wait: () => {
+      const screen = createLoadingScreen(el('loading-screen'))
+      pendingStart = { screen }
+      return waitForCharacters({ ready: charactersReady, progress: charactersProgress, show: screen.show, hide: screen.hide, isCurrent })
+    },
+    start: () => { pendingStart = null; beginRound(msg) },
+    isCurrent,
+  })
+}
+
+// Annule un départ en attente des modèles (l'écran disparaît, la manche ne montera pas). Vrai s'il y en avait un.
+function cancelPendingStart() {
+  if (!pendingStart) return false
+  pendingStart.screen.hide()
+  pendingStart = null
+  startToken++
+  return true
+}
+
+// Manche montée et lancée (modèles prêts) : décor du seed partagé, rôle, intro, puis la boucle.
+function beginRound(msg) {
   partsCollected = 0; oppPartsCount = 0
   pistolMesh = null
   emoteUntil = 0; pnjAiming = false
@@ -1026,6 +1065,7 @@ function endRound(winnerRole, reason) {
 }
 
 function quitToMenu() {
+  cancelPendingStart()
   net.disconnect()
   stopPvpAmbience()
   myRole = null; roundActive = false

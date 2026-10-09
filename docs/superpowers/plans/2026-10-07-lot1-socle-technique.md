@@ -94,9 +94,9 @@ export function createResolutionController({ min, max, step, highMs, lowMs })   
 
 **Fichiers :** modifier `src/characters.js`, `src/main.js`, `src/pvp.js`, `index.html` ; créer `src/campaign/loading.js`, `tests/campaign/loading.test.js`.
 
-- [ ] `charactersReady()` et `charactersProgress()` ; `waitForCharacters({ ready, progress, show, hide, timeoutMs })` (pur, dans `loading.js`) qui affiche l'écran seulement si l'attente dépasse 150 ms, le cache à la fin, et abandonne l'attente à 20 s. Tests avec horloge factice : modèles déjà prêts, aucun écran ; chargement long, écran puis disparition ; échec, on part quand même ; 20 s, on part. Témoin : le lancement actuel n'attend rien.
-- [ ] `launchLevel` et le départ de manche PvP passent par `waitForCharacters`. Écran « PRÉPARATION DU DOSSIER · n % » dans le style des cartes de l'enquête.
-- [ ] `webglcontextlost` / `webglcontextrestored` (§4.4 de la spec).
+- [ ] `charactersReady()` et `charactersProgress()` ; `waitForCharacters({ ready, progress, show, hide, timeoutMs })` (pur, dans `loading.js`) qui affiche l'écran seulement si l'attente dépasse 150 ms, le cache à la fin, et abandonne l'attente à 20 s. Tests avec horloge factice : modèles déjà prêts, aucun écran ; chargement long, écran puis disparition ; échec, on part quand même ; 20 s, on part. Témoin : le lancement actuel n'attend rien. (fait, avec en plus : `charactersSettled()`, synchrone, pour partir dans le même appel quand les modèles sont prêts, comme avant le lot ; `startWhenReady`, le « launchLevel extrait » du §6 de la spec, dans `loading.js` ; avancement plafonné à 0,99 jusqu'à la fin et jamais en recul à l'écran ; `isCurrent` pour un lancement abandonné pendant l'attente)
+- [ ] `launchLevel` et le départ de manche PvP passent par `waitForCharacters`. Écran « PRÉPARATION DU DOSSIER · n % » dans le style des cartes de l'enquête. (fait : `launchLevel` passe par `enterLevel`, seule à appeler `startLevel`, garde du câblage sur le source de `main.js` ; pendant l'attente, phase `loading` sans rendu WebGL ni nappe ; en PvP, un départ en attente est annulé, avec l'écran de fin habituel, si l'adversaire part ou si le relais tombe, et remplacé par un autre départ reçu entre-temps)
+- [ ] `webglcontextlost` / `webglcontextrestored` (§4.4 de la spec). (fait : partie en pause si elle est en cours, pointeur rendu, focus sur RECHARGER)
 - [ ] Commit : `feat(chargement): les modèles sont attendus avant une mission ou une manche, contexte WebGL perdu rattrapé`
 
 ### Tâche L6 : effets atténués et plein écran

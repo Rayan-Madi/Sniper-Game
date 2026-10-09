@@ -340,6 +340,45 @@
     #perf-stats .perf-dim { color: rgba(200,240,200,0.45); }
     #perf-stats [data-lent] { color: #ffd44e; }   /* p95 au-delà de 22 ms */
 
+    /* CHARGEMENT DES MODÈLES et CONTEXTE WEBGL PERDU (src/campaign/loading.js) : style des cartes de l'enquête
+       (src/prologue/enquete.css) : voile sombre et lignes de balayage, Courier New à la frange chromatique, trait
+       rouge, ici la barre d'avancement. Le chargement passe au-dessus des menus et de la pause ; le contexte perdu
+       au-dessus de tout, panneau de performances compris. */
+    #loading-screen, #context-lost {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.2vh;
+      background: rgba(3,4,7,.82); color: #f1f4ea;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    #loading-screen[hidden], #context-lost[hidden] { display: none; }
+    #loading-screen::before, #context-lost::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px),
+        radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,.7) 100%);
+    }
+    #loading-screen { z-index: 180; cursor: progress; opacity: 0; transition: opacity .35s ease; }
+    #loading-screen.on { opacity: 1; }
+    #context-lost { z-index: 1100; background: rgba(3,4,7,.94); }
+    .ld-label {
+      position: relative; white-space: nowrap;
+      font-size: clamp(14px, 1.6vw, 22px); letter-spacing: .32em; padding-left: .32em;
+      text-shadow: .09vw 0 rgba(255,40,60,.35), -.09vw 0 rgba(0,210,255,.35);
+    }
+    .ld-bar { position: relative; width: 22vw; min-width: 200px; height: 2px; background: rgba(215,220,207,.16); }
+    .ld-fill { height: 100%; width: 0; background: #e04848; transition: width .25s linear; }
+    .ld-sub {
+      position: relative; max-width: min(560px, calc(100vw - 32px)); text-align: center;
+      font-size: clamp(11px, .95vw, 14px); line-height: 1.7; letter-spacing: .12em; color: rgba(215,220,207,.7);
+    }
+    #btn-context-reload {
+      position: relative; margin-top: 1.6vh;
+      font: inherit; font-size: clamp(12px, 1.15vw, 16px); letter-spacing: .3em; padding: 1.4vh 2.4vw;
+      background: transparent; color: #d7dccf; border: 1px solid rgba(215,220,207,.4); cursor: pointer;
+    }
+    #btn-context-reload:hover { border-color: #f0c040; color: #f0c040; }
+    #btn-context-reload:focus-visible { outline: 2px solid #f0c040; outline-offset: 3px; }
+    @media (prefers-reduced-motion: reduce) { .ld-fill { transition: none; } }
+
     /* INSTRUCTION */
     #instruction {
       position: fixed; bottom: 60px; left: 50%;
@@ -563,6 +602,19 @@
     <button class="btn" id="btn-retry">RECOMMENCER</button>
     <button class="btn" id="btn-rebrief">REVOIR LE BRIEFING</button>
     <button class="btn btn-danger" id="btn-menu">MENU PRINCIPAL</button>
+  </div>
+
+  <!-- Modèles encore en chargement au départ d'une mission ou d'une manche (src/campaign/loading.js) -->
+  <div id="loading-screen" hidden>
+    <div class="ld-label">PRÉPARATION DU DOSSIER · 0&nbsp;%</div>
+    <div class="ld-bar" role="progressbar" aria-label="Préparation du dossier" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="ld-fill"></div></div>
+  </div>
+
+  <!-- Contexte WebGL perdu (src/campaign/loading.js, watchContextLoss) -->
+  <div id="context-lost" role="alertdialog" aria-labelledby="context-lost-title" aria-describedby="context-lost-text" hidden>
+    <div class="ld-label" id="context-lost-title">LE RENDU A ÉTÉ INTERROMPU</div>
+    <div class="ld-sub" id="context-lost-text">La carte graphique a cessé de répondre. Votre progression est enregistrée à chaque mission réussie.</div>
+    <button type="button" id="btn-context-reload">RECHARGER</button>
   </div>
 
   <script type="module" src="/src/main.js"></script>

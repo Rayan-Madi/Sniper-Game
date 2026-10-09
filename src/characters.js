@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { markShared } from './gfx/dispose.js'
+import { progressOf } from './campaign/loading.js'
 
 // ─── Chargement de personnages 3D (.glb) ────────────────────────────
 // Chaque type de PNJ peut avoir un modèle (url) OU plusieurs (urls: [...])
@@ -69,26 +70,51 @@ function variantsFor(type, cfg) {
   return cfg.url ? [{ ...base }] : []
 }
 
-export async function preloadCharacters() {
+// Chargement en cours ou fini (spec du lot 1 §4.4) : sa promesse, s'il est terminé, et un { loaded, total, done } par
+// fichier pour l'avancement. main.js le lance au démarrage ; une mission ou une manche lancée avant sa fin attend
+// derrière l'écran PRÉPARATION DU DOSSIER (campaign/loading.js), sinon ses PNJ seraient procéduraux.
+let loading = null
+let settled = true
+let files = []
+
+// Promesse tenue quand chaque modèle est chargé ou en échec (jamais rejetée). Sans chargement lancé : déjà tenue.
+export function charactersReady() { return loading || Promise.resolve() }
+
+// Vrai quand rien n'est en cours de chargement : départ immédiat, sans écran ni attente.
+export function charactersSettled() { return settled }
+
+// Avancement de 0 à 1 : par octets reçus si chaque réponse donne sa taille, sinon par fichiers (progressOf). 1
+// seulement quand tout est fini ; 1 aussi sans chargement lancé.
+export function charactersProgress() { return settled ? 1 : progressOf(files) }
+
+export function preloadCharacters() {
   const entries = Object.entries(MODELS)
-  if (entries.length === 0) return
-  await Promise.all(entries.map(async ([type, cfg]) => {
+  if (entries.length === 0) return Promise.resolve()
+  settled = false
+  files = []
+  loading = Promise.all(entries.map(async ([type, cfg]) => {
     // Promise.all garde l'ordre des variantes, pas celui d'arrivée des fichiers :
     // en PvP, les deux machines tirent leurs modèles avec la même graine et
     // doivent donc avoir des pools rangés pareil.
     const loaded = await Promise.all(variantsFor(type, cfg).map(async (vcfg) => {
+      const f = { loaded: 0, total: 0, done: false }
+      files.push(f)
       try {
-        const gltf = await loader.loadAsync(vcfg.url)
+        // Avancement du FileLoader de three : total vaut 0 quand la réponse ne donne pas sa taille
+        const gltf = await loader.loadAsync(vcfg.url, e => { f.loaded = e.loaded; f.total = e.lengthComputable ? e.total : 0 })
         console.log('[characters] chargé:', type, vcfg.url)
         return { scene: prepareModel(gltf.scene), animations: gltf.animations, cfg: vcfg }
       } catch (e) {
         console.warn('[characters] échec', vcfg.url, e)
         return null
+      } finally {
+        f.done = true
       }
     }))
     const pool = loaded.filter(Boolean)
     if (pool.length) cache[type] = pool
-  }))
+  })).then(() => { settled = true })
+  return loading
 }
 
 // Modèle chargé, une fois pour toutes. Certains .glb (ex : gangster_man_02) exportent le matériau du CORPS en

@@ -8,7 +8,7 @@ import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject } from './maps.js
 import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
 import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys } from './settings.js'
-import { preloadCharacters } from './characters.js'
+import { preloadCharacters, charactersReady, charactersProgress, charactersSettled } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
 import { fovFor, aimAngles } from './aim.js'
@@ -22,6 +22,7 @@ import { missImpact } from './campaign/impact.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
+import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss } from './campaign/loading.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -100,6 +101,7 @@ const hudScore     = document.getElementById('hud-score')
 const hudLevel     = document.getElementById('hud-level')
 const killFeed     = document.getElementById('kill-feed')
 const instruction  = document.getElementById('instruction')
+const loadingScreen = createLoadingScreen(document.getElementById('loading-screen'))   // PRÉPARATION DU DOSSIER
 
 // ─── Init ──────────────────────────────────────────────────────────
 initScene()
@@ -408,13 +410,32 @@ function launchLevel(n, { forceBriefing = false } = {}) {
   clearEntities()
 
   const idx = (n - 1) % 6
-  if (!forceBriefing && upgradeState.briefingSeen[idx]) { startLevel(n); return }
+  if (!forceBriefing && upgradeState.briefingSeen[idx]) { enterLevel(n); return }
   stopMissionAmbience()   // jamais la nappe d'une mission sous un briefing
   gamePhase = 'briefing'
   clock.getDelta()
   cinematic('m' + (idx + 1), {
     audio: cinematicAudio(),
-    onDone: () => { markBriefingSeen(idx); saveProgress(); clock.getDelta(); startLevel(n) },
+    onDone: () => { markBriefingSeen(idx); saveProgress(); clock.getDelta(); enterLevel(n) },
+  })
+}
+
+// Départ de la mission n une fois les modèles chargés (spec du lot 1 §4.4) : tout de suite s'ils le sont, le cas
+// ordinaire (rien ne change alors), sinon derrière l'écran PRÉPARATION DU DOSSIER, 20 s au plus, sans rendu WebGL ni
+// nappe de mission. Sans cette attente, une mission lancée juste après l'ouverture du jeu (REPRENDRE, briefing déjà vu)
+// partait avec des PNJ procéduraux. Une mission relancée ou quittée pendant l'attente ne démarre pas (jeton de mission).
+function enterLevel(n) {
+  const token = missionToken
+  const isCurrent = () => token === missionToken
+  startWhenReady({
+    settled: charactersSettled,
+    wait: () => {
+      gamePhase = 'loading'
+      stopMissionAmbience()
+      return waitForCharacters({ ready: charactersReady, progress: charactersProgress, show: loadingScreen.show, hide: loadingScreen.hide, isCurrent })
+    },
+    start: () => startLevel(n),
+    isCurrent,
   })
 }
 
@@ -1322,7 +1343,9 @@ function loop() {
     }
     return
   }
-  if (gamePhase === 'briefing') return   // cinématique en motion design : pas de rendu WebGL
+  // Cinématique en motion design, attente des modèles (écran PRÉPARATION DU DOSSIER) : pas de rendu WebGL, le canevas
+  // garde sa dernière image
+  if (gamePhase === 'briefing' || gamePhase === 'loading') return
 
   if (gamePhase === 'playing') {
     updateMapAmbient(dt)   // météo de la map (pluie du port…)
@@ -1420,6 +1443,22 @@ function loop() {
 }
 
 loop()
+
+// ─── Contexte WebGL perdu (spec du lot 1 §4.4) ─────────────────────
+// Pilote graphique réinitialisé, mise en veille, carte saturée : plus rien ne s'affiche. La partie se met en pause
+// derrière l'écran « Le rendu a été interrompu » et le pointeur revient. Contexte rendu par le navigateur, ou
+// RECHARGER : la page se recharge (la sauvegarde est faite à chaque réussite). Pendant la kill-cam ou un échec en
+// attente, la pause est refusée (canPause) : la fin de mission tombe sous l'écran, et la réussite est enregistrée.
+const contextLostEl = document.getElementById('context-lost')
+function onRenderLost() {
+  if (gamePhase === 'playing') pauseGame()
+  hideScope()
+  releaseMouse()
+  contextLostEl.hidden = false
+  document.getElementById('btn-context-reload').focus()
+}
+watchContextLoss(renderer.domElement, { onLost: onRenderLost, onRestored: () => location.reload() })
+document.getElementById('btn-context-reload').onclick = () => location.reload()
 
 // Le menu principal s'affiche directement au chargement.
 // Le prologue se joue après le clic sur COMMENCER, une fois par campagne (voir playPrologue).
