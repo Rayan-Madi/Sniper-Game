@@ -223,19 +223,27 @@ function vsyncRun(ctrl, cost, seconds, { periodMs = HZ60, jitterMs = 0, seed = 1
 }
 
 // À-coups passagers sur un écran à 60 Hz : une image coûte 9 ms (à la cadence de l'écran, avec de la marge) ; toutes
-// les periodS secondes, un à-coup de 12 images à 40 ms (explosion, kill-cam), pendant totalS secondes, avec une gigue
-// d'appel de 0,8 ms au plus. Rend la trace, l'échelle à la fin de chaque cycle (juste avant l'à-coup suivant) et, pour
-// chaque à-coup, le temps mis à revenir à 1 depuis son début (Infinity s'il n'y revient pas dans son cycle).
-function burstsRun(periodS, totalS) {
+// les periodS secondes, un à-coup de `frames` images à frameMs (par défaut 12 à 40 ms : explosion, kill-cam), pendant
+// totalS secondes, avec une gigue d'appel de jitterMs au plus (0,8 ms par défaut). phaseS : secondes calmes avant le
+// premier à-coup (la phase des à-coups par rapport aux remontées) ; seed : tirage de la gigue. Rend la trace, l'échelle
+// à la fin de chaque cycle (juste avant l'à-coup suivant) et, pour chaque à-coup, le temps mis à revenir à 1 depuis son
+// début (Infinity s'il n'y revient pas dans son cycle).
+function burstsRun(periodS, totalS, { frames = 12, frameMs = 40, jitterMs = 0.8, phaseS = 0, seed = 0 } = {}) {
   const ctrl = auto()
   const trace = []
   const endOfCycle = []
   const backToOne = []
   let t = 0
+  if (phaseS > 0) {
+    const before = vsyncRun(ctrl, () => 9, phaseS, { jitterMs, seed: 1000 + seed })
+    trace.push(...before)
+    t = before.at(-1).t
+  }
   for (let cycle = 0; cycle < Math.round(totalS / periodS); cycle++) {
     const start = t
-    for (let k = 0; k < 12; k++) { t += 40; trace.push({ t, scale: ctrl.push(40, t) }) }
-    const calm = vsyncRun(ctrl, () => 9, periodS - 0.48, { jitterMs: 0.8, seed: cycle + 1, t0: t, scale0: trace.at(-1).scale })
+    for (let k = 0; k < frames; k++) { t += frameMs; trace.push({ t, scale: ctrl.push(frameMs, t) }) }
+    const calm = vsyncRun(ctrl, () => 9, periodS - frames * frameMs / 1000,
+      { jitterMs, seed: seed * 100 + cycle + 1, t0: t, scale0: trace.at(-1).scale })
     trace.push(...calm)
     t = calm.at(-1).t
     endOfCycle.push(calm.at(-1).scale)
@@ -266,6 +274,20 @@ describe('résolution dynamique sur un écran synchronisé à 60 Hz', () => {
       expect(Math.min(...trace.map(s => s.scale))).toBeGreaterThanOrEqual(0.9 - 1e-9)
       expect(endOfCycle).toEqual(Array(120 / periodS).fill(1))
       for (const ms of backToOne) expect(ms).toBeLessThan(15000)
+    })
+  }
+
+  // Limite connue (spec §4.3 et §8) : les retours à 1 supposent une gigue d'appel faible. Jusqu'à 1,5 ms, l'écart
+  // mesuré entre deux images d'une période calme reste sous le seuil de remontée (cadence × 1,1, 18,3 ms) : aucune de
+  // ses images ne compte comme hors cadence, et la fenêtre d'un à-coup n'a d'images hors cadence que dans un ou deux de
+  // ses quarts.
+  for (const periodS of [20, 15]) {
+    it(`gigue d'appel de 1,5 ms, à-coup toutes les ${periodS} s pendant 2 min : l'échelle finit à 1 (20 phases)`, () => {
+      const ends = []
+      for (let k = 0; k < 20; k++) {
+        ends.push(burstsRun(periodS, 120, { jitterMs: 1.5, phaseS: k * periodS / 20, seed: k + 1 }).endOfCycle.at(-1))
+      }
+      expect(ends).toEqual(Array(20).fill(1))
     })
   }
 
@@ -300,7 +322,7 @@ describe('résolution dynamique sur un écran synchronisé à 60 Hz', () => {
     for (let i = 1; i < gaps.length; i++) expect(gaps[i]).toBeGreaterThanOrEqual(gaps[i - 1] - 50)
     expect(gaps.at(-1)).toBeGreaterThanOrEqual(60000)
     // Chaque essai manque toute sa fenêtre (33,3 ms, médiane hors cadence) : il compte, essais à la seconde près
-    // (spec §4.3), inchangés par la règle des à-coups passagers.
+    // (spec §4.3), inchangés par la règle des à-coups passagers et par celle des images étalées.
     expect(ups.map(u => Math.round(u / 1000))).toEqual([8, 20, 40, 76, 144, 212, 280])
   })
 
@@ -326,4 +348,66 @@ describe('résolution dynamique sur un écran synchronisé à 60 Hz', () => {
     expect(ch.every(c => c.to < c.from)).toBe(true)
     expect(ch.at(-1).to).toBeCloseTo(0.7, 10)
   })
+})
+
+// ─── Essai manqué : images hors cadence étalées (spec §8, relecture de la correction de L4) ──────────────────────────
+// Un essai de remontée dont une partie seulement des images manque la synchro (médiane à la cadence) ne comptait pas
+// comme manqué : une machine juste à la limite à l'échelle 1, la cible même d'Auto, réessayait toutes les 8 s avec 2 s
+// de saccades à chaque fois. Règle retenue le 9 octobre 2026 : l'essai est aussi manqué si la fenêtre qui fait
+// retomber l'échelle a au moins une image hors cadence dans chacun de ses quatre quarts (500 ms), ce qu'un à-coup de
+// moins d'une seconde ne peut pas faire, quel que soit le coût de ses images.
+
+// Machine dont une part `part` des images manque la synchro à l'échelle 1 : coût tiré uniformément entre 15 ms et la
+// borne qui donne cette part au-dessus de la période (17,5 ms pour un tiers), proportionnel aux pixels. À 0,95, chaque
+// image tient la synchro jusqu'à une part de 50 %.
+function edgeMachine(part, seed) {
+  const rnd = prng(seed * 7919)
+  const top = (HZ60 - 15 * part) / (1 - part)
+  return s => (15 + (top - 15) * rnd()) * s * s
+}
+const trialsOf = trace => changes(trace).filter(c => c.to > c.from).map(c => c.t)
+const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length
+
+describe('essai manqué : images hors cadence étalées sur toute la fenêtre', () => {
+  it('machine juste à la limite à l\'échelle 1 (un tiers des images hors synchro) : 7 essais en 5 min, pas 37', () => {
+    const traces = []
+    for (let seed = 1; seed <= 8; seed++) traces.push(vsyncRun(auto(), edgeMachine(1 / 3, seed), 300))
+    const trials = traces.map(trialsOf)
+    // 37 essais par tirage avant la règle (un toutes les 8 s), 7 avec : à 8, 20, 40, 76, 144, 212 et 280 s.
+    for (const ups of trials) expect(ups.length).toBeLessThanOrEqual(8)
+    // Environ 1 150 images à 33,3 ms (synchro manquée) en 5 min avant la règle, environ 240 avec (moyenne des tirages).
+    expect(mean(traces.map(trace => trace.filter(s => s.ms > 25).length))).toBeLessThan(300)
+    for (const trace of traces) {
+      for (const c of changes(trace)) expect(Math.min(c.from, c.to)).toBeCloseTo(0.95, 10)   // entre 0,95 et 1
+    }
+    for (const ups of trials) {
+      const gaps = ups.slice(1).map((u, i) => u - ups[i])
+      for (let i = 1; i < gaps.length; i++) expect(gaps[i]).toBeGreaterThanOrEqual(gaps[i - 1] - 50)   // s'espacent
+      expect(gaps.at(-1)).toBeGreaterThanOrEqual(60000)
+    }
+  })
+
+  // La part des images hors cadence (au moins 20 ou 25 % de la fenêtre, proposition de la relecture) ne règle pas ces
+  // machines : 34, 37 et 28 essais en moyenne pour 5, 10 et 15 % avec un seuil de 20 % (spec §4.3).
+  for (const part of [0.05, 0.10, 0.15]) {
+    it(`machine dont ${Math.round(part * 100)} % des images manquent la synchro à 1 : essais espacés aussi`, () => {
+      const counts = []
+      for (let seed = 1; seed <= 8; seed++) counts.push(trialsOf(vsyncRun(auto(), edgeMachine(part, seed), 300)).length)
+      expect(mean(counts)).toBeLessThanOrEqual(11)   // de 33 à 37 avant la règle
+      for (const n of counts) expect(n).toBeLessThanOrEqual(14)
+    })
+  }
+
+  // Un à-coup de moins d'une seconde n'a d'images hors cadence que dans trois quarts au plus : retour à 1 à chaque
+  // fois, quelle que soit sa phase. Avec la part des images (seuil de 20 %), un tel à-coup tombé dans les 2 s qui
+  // suivent une remontée compterait comme un essai manqué, et l'échelle finirait à 0,75 après 2 min.
+  for (const [frames, frameMs] of [[24, 40], [16, 60]]) {
+    it(`à-coup d'une seconde (${frames} images à ${frameMs} ms) toutes les 15 s, 2 min : retour à 1 (20 phases)`, () => {
+      for (let k = 0; k < 20; k++) {
+        const { trace, endOfCycle } = burstsRun(15, 120, { frames, frameMs, phaseS: k * 15 / 20, seed: k + 1 })
+        expect(endOfCycle, `phase ${k}`).toEqual(Array(8).fill(1))
+        expect(Math.min(...trace.map(s => s.scale))).toBeGreaterThanOrEqual(0.9 - 1e-9)
+      }
+    })
+  }
 })

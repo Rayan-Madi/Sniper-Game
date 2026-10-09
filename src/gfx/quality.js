@@ -46,12 +46,16 @@ export function npcCastsShadow(mode, role) {
 //   serait que le coût de l'image et l'échelle irait et viendrait.
 // - Une image à la cadence ne dit pas s'il reste de la marge : sur un écran synchronisé, chaque remontée est un essai.
 //   Si l'échelle retombe moins de windowMs + hold après une remontée et que la fenêtre qui la fait retomber a une
-//   médiane hors cadence (p50 au moins égale au seuil de remontée : la plupart des images manquent leur synchro),
-//   l'essai a échoué et le suivant attendra deux fois plus longtemps (hold doublé, maxHoldMs au plus, pour toute la vie
-//   du contrôleur : main.js en recrée un à chaque montage de mission et à chaque changement de réglage). Un à-coup
-//   passager (explosion, kill-cam : une douzaine d'images lentes) fait baisser sans compter comme un essai manqué, la
-//   médiane de sa fenêtre restant à la cadence : sinon, des à-coups toutes les 15 ou 20 s, tombant chacun peu après la
-//   remontée à 1, doublaient l'attente à chaque fois et bloquaient l'échelle à 0,7 jusqu'à la fin de la mission.
+//   médiane hors cadence (p50 au moins égale au seuil de remontée : la plupart des images manquent leur synchro) ou
+//   des images hors cadence étalées (au moins une image au moins égale au seuil de remontée dans chacun des quatre
+//   quarts de la fenêtre), l'essai a échoué et le suivant attendra deux fois plus longtemps (hold doublé, maxHoldMs au
+//   plus, pour toute la vie du contrôleur : main.js en recrée un à chaque montage de mission et à chaque changement de
+//   réglage). Un à-coup passager (explosion, kill-cam : une douzaine d'images lentes, moins d'une seconde) fait baisser
+//   sans compter comme un essai manqué : la médiane de sa fenêtre reste à la cadence, et ses images lentes ne touchent
+//   pas plus de trois quarts. Sinon, des à-coups toutes les 15 ou 20 s, tombant chacun peu après la remontée à 1,
+//   doublaient l'attente à chaque fois et bloquaient l'échelle à 0,7 jusqu'à la fin de la mission. Une machine juste
+//   à la limite à l'échelle 1 (un tiers des images hors synchro, médiane à la cadence) en manque dans chaque quart :
+//   sans les quarts, elle réessayait toutes les 8 s, avec 2 s de saccades à chaque fois (spec du lot 1 §4.3 et §8).
 // - Jamais plus d'un changement par minIntervalMs. Après un changement, la mesure repart de zéro : les images d'avant
 //   ont été rendues à une autre résolution, et il faut 2 s d'images à la nouvelle avant de juger à nouveau (avec les
 //   valeurs par défaut, c'est cette fenêtre qui espace les changements ; minIntervalMs tient la règle d'une seconde
@@ -74,6 +78,13 @@ export function createResolutionController({ min = 0.7, max = 1, step = 0.05, hi
   const round = v => Math.round(v * 1000) / 1000
   const restart = t => { samples = []; since = t; lowSince = null }
   const change = (next, t) => { scale = round(Math.min(max, Math.max(min, next))); lastChange = t; restart(t) }
+  // Au moins une image hors cadence (au moins égale au seuil de remontée) dans chacun des quatre quarts de la fenêtre ?
+  const offInEveryQuarter = (fastMs, nowMs) => {
+    const start = nowMs - windowMs, quarter = windowMs / 4
+    const hit = new Set()
+    for (const s of samples) if (s.ms >= fastMs) hit.add(Math.min(3, Math.floor((s.t - start) / quarter)))
+    return hit.size === 4
+  }
 
   return {
     get scale() { return scale },
@@ -93,7 +104,8 @@ export function createResolutionController({ min = 0.7, max = 1, step = 0.05, hi
       if (p95 > highMs) {
         lowSince = null
         if (scale > min && canChange) {
-          const missedTrial = lastUp !== null && nowMs - lastUp < windowMs + hold && p50 >= fastMs
+          const missedTrial = lastUp !== null && nowMs - lastUp < windowMs + hold
+            && (p50 >= fastMs || offInEveryQuarter(fastMs, nowMs))
           if (missedTrial) hold = Math.min(maxHoldMs, hold * 2)
           lastUp = null
           change(scale - step, nowMs)
