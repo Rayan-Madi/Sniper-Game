@@ -189,9 +189,9 @@ describe('résolution dynamique (Auto)', () => {
 
 // ─── Résolution dynamique sur un écran synchronisé ────────────────────────────────────────────────────────────────
 // main.js nourrit le contrôleur de l'écart entre les horodatages que requestAnimationFrame passe à deux images
-// successives (main.quality.test.js). Sur un écran synchronisé, une image prête à temps part à la synchro suivante : l'écart vaut la période de l'écran (16,7 ms à 60 Hz) quel que soit
-// le coût de l'image, et une image en retard attend la synchro d'après (33,3 ms). Le seuil de 14 ms n'y est jamais
-// atteint (relecture de L4).
+// successives (main.quality.test.js). Sur un écran synchronisé, une image prête à temps part à la synchro suivante :
+// l'écart vaut la période de l'écran (16,7 ms à 60 Hz) quel que soit le coût de l'image, et une image en retard attend
+// la synchro d'après (33,3 ms). Le seuil de 14 ms n'y est jamais atteint (relecture de L4).
 const HZ60 = 1000 / 60
 // Hasard à graine (mulberry32) pour la gigue.
 function prng(seed) {

@@ -37,14 +37,13 @@ export function npcCastsShadow(mode, role) {
 // - Remonte d'un pas quand cette p95 reste sous le seuil de remontée pendant hold (holdMs au départ). main.js mesure
 //   l'écart entre les horodatages que requestAnimationFrame passe à deux images successives (le début de chaque image,
 //   aligné sur la synchro, sans le retard variable de performance.now() lu dans le rappel) : sur un écran synchronisé,
-//   il ne descend jamais sous la période
-//   de l'écran (16,7 ms à 60 Hz), si légère que soit l'image, et lowMs n'y serait jamais atteint. Le seuil de remontée
-//   est donc lowMs ou, si elle est plus lente, la cadence de l'écran × cadenceTolerance : une image prête à la synchro
-//   compte comme rapide. La cadence est la plus petite médiane d'une fenêtre complète depuis la création du contrôleur.
-//   Le seuil ne dépasse jamais highMs × (min / (min + step))² (19,2 ms) : une image qui le tient tient encore highMs
-//   après un pas de plus si son coût suit le nombre de pixels (le plus grand pas, de 0,7 à 0,75, en ajoute 15 %). Sans
-//   ce plafond, sur un écran sans cadence fixe, la « cadence » ne serait que le coût de l'image et l'échelle irait et
-//   viendrait.
+//   il ne descend jamais sous la période de l'écran (16,7 ms à 60 Hz), si légère que soit l'image, et lowMs n'y serait
+//   jamais atteint. Le seuil de remontée est donc lowMs ou, si elle est plus lente, la cadence de l'écran ×
+//   cadenceTolerance : une image prête à la synchro compte comme rapide. La cadence est la plus petite médiane d'une
+//   fenêtre complète depuis la création du contrôleur. Le seuil ne dépasse jamais highMs × (min / (min + step))²
+//   (19,2 ms) : une image qui le tient tient encore highMs après un pas de plus si son coût suit le nombre de pixels (le
+//   plus grand pas, de 0,7 à 0,75, en ajoute 15 %). Sans ce plafond, sur un écran sans cadence fixe, la « cadence » ne
+//   serait que le coût de l'image et l'échelle irait et viendrait.
 // - Une image à la cadence ne dit pas s'il reste de la marge : sur un écran synchronisé, chaque remontée est un essai.
 //   Si l'échelle retombe moins de windowMs + hold après une remontée et que la fenêtre qui la fait retomber a une
 //   médiane hors cadence (p50 au moins égale au seuil de remontée : la plupart des images manquent leur synchro),
