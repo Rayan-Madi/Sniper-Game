@@ -1280,9 +1280,10 @@ function setGraphics(name) {
 
 // Résolution dynamique (Auto) : nourrie de la durée de chaque image en mission seulement ; la densité de pixels n'est
 // réappliquée que quand l'échelle change (au plus une fois par seconde, voir createResolutionController). La durée est
-// l'écart entre deux appels de requestAnimationFrame : sur un écran à 60 Hz, elle ne descend jamais sous 16,7 ms, donc
-// jamais sous le seuil de remontée (14 ms). Une échelle abaissée y reste jusqu'au prochain montage de mission ou au
-// retour au menu (applyQuality la remet à 1) ; elle remonte en cours de mission sur un écran plus rapide.
+// l'écart entre deux appels de requestAnimationFrame : sur un écran à 60 Hz, elle ne descend jamais sous 16,7 ms, et le
+// contrôleur compte une image à la cadence de l'écran comme rapide (sinon une échelle abaissée par un à-coup ne
+// remonterait plus de la mission). applyQuality en recrée un, à l'échelle 1, à chaque montage de mission, au retour au
+// menu et au changement de réglage.
 function feedResolution(frameMs, t) {
   if (!resolution || gamePhase !== 'playing') return
   const s = resolution.push(frameMs, t)

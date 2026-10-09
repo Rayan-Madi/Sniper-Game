@@ -162,6 +162,14 @@ describe('résolution dynamique (Auto)', () => {
     expect(reversals(ch)).toBe(0)
   })
 
+  it('au plus un changement par seconde, même avec une fenêtre de mesure plus courte', () => {
+    // La fenêtre de 2 s qui suit un changement espace déjà les changements ; minIntervalMs garde la règle d'une seconde
+    // quand la fenêtre est plus courte.
+    const ch = changes(feed(createResolutionController({ min: 0.7, max: 1, windowMs: 500 }), steady(30, 10)))
+    expect(ch.length).toBeGreaterThan(1)
+    for (let i = 1; i < ch.length; i++) expect(ch[i].t - ch[i - 1].t).toBeGreaterThanOrEqual(1000)
+  })
+
   it('charge proportionnelle aux pixels : se pose sans osciller', () => {
     // Durée d'image proportionnelle au nombre de pixels (échelle²) : 30 ms à 1, 21,7 ms à 0,85 (sous le seuil de baisse).
     const ctrl = auto()
@@ -176,5 +184,97 @@ describe('résolution dynamique (Auto)', () => {
     const ch = changes(trace)
     expect(reversals(ch)).toBe(0)
     expect(trace.at(-1).scale).toBeCloseTo(0.85, 10)
+  })
+})
+
+// ─── Résolution dynamique sur un écran synchronisé ────────────────────────────────────────────────────────────────
+// main.js nourrit le contrôleur de l'écart entre deux appels de requestAnimationFrame. Sur un écran synchronisé, une
+// image prête à temps part à la synchro suivante : l'écart vaut la période de l'écran (16,7 ms à 60 Hz) quel que soit
+// le coût de l'image, et une image en retard attend la synchro d'après (33,3 ms). Le seuil de 14 ms n'y est jamais
+// atteint (relecture de L4).
+const HZ60 = 1000 / 60
+// Hasard à graine (mulberry32) pour la gigue.
+function prng(seed) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let x = a
+    x = Math.imul(x ^ (x >>> 15), x | 1)
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61)
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296
+  }
+}
+// Écran synchronisé : chaque image coûte cost(échelle) ms et part à la première synchro qui suit ; l'appel de
+// requestAnimationFrame arrive avec un retard de 0 à jitterMs (gigue), donc l'écart mesuré en garde la différence.
+function vsyncRun(ctrl, cost, seconds, { periodMs = HZ60, jitterMs = 0, seed = 1, t0 = 0, scale0 = 1 } = {}) {
+  const rnd = prng(seed)
+  const out = []
+  let vsync = t0, t = t0, scale = scale0
+  while (vsync - t0 < seconds * 1000) {
+    vsync += Math.max(1, Math.ceil(cost(scale) / periodMs - 1e-9)) * periodMs
+    const now = vsync + rnd() * jitterMs
+    const ms = now - t
+    t = now
+    scale = ctrl.push(ms, t)
+    out.push({ t, ms, scale })
+  }
+  return out
+}
+
+describe('résolution dynamique sur un écran synchronisé à 60 Hz', () => {
+  it('après chaque à-coup passager, l\'échelle revient à 1', () => {
+    // Une image coûte 9 ms (à la cadence de l'écran, avec de la marge) ; toutes les 30 s, un à-coup de 12 images à
+    // 40 ms (explosion, kill-cam), pendant 2 min, avec une gigue d'appel de 0,8 ms au plus.
+    const ctrl = auto()
+    const trace = []
+    let t = 0
+    const endOfCycle = []
+    for (let cycle = 0; cycle < 4; cycle++) {
+      for (let k = 0; k < 12; k++) { t += 40; trace.push({ t, scale: ctrl.push(40, t) }) }
+      const calm = vsyncRun(ctrl, () => 9, 30 - 0.48, { jitterMs: 0.8, seed: cycle + 1, t0: t })
+      trace.push(...calm)
+      t = calm.at(-1).t
+      endOfCycle.push(calm.at(-1).scale)
+    }
+    expect(Math.min(...trace.map(s => s.scale))).toBeGreaterThanOrEqual(0.9 - 1e-9)   // un à-coup coûte deux pas au plus
+    expect(endOfCycle).toEqual([1, 1, 1, 1])
+  })
+
+  it('qui ne tient pas la cadence à 1 : les essais de remontée s\'espacent', () => {
+    // Coût proportionnel aux pixels : 17,5 ms à 1 (chaque image manque sa synchro : 33,3 ms), 15,8 ms à 0,95 (à la
+    // cadence). Sans essayer, rien ne dit que 1 ne tient pas : le contrôleur essaie, puis attend deux fois plus
+    // longtemps avant chaque nouvel essai, 64 s au plus.
+    const trace = vsyncRun(auto(), s => 17.5 * s * s, 300)
+    const ch = changes(trace)
+    for (const c of ch) expect(Math.min(c.from, c.to)).toBeCloseTo(0.95, 10)   // seulement entre 0,95 et 1
+    const ups = ch.filter(c => c.to > c.from).map(c => c.t)
+    expect(ups.length).toBeGreaterThanOrEqual(3)          // il réessaie
+    expect(ups.length).toBeLessThanOrEqual(8)             // de moins en moins souvent
+    const gaps = ups.slice(1).map((u, i) => u - ups[i])
+    for (let i = 1; i < gaps.length; i++) expect(gaps[i]).toBeGreaterThanOrEqual(gaps[i - 1] - 50)
+    expect(gaps.at(-1)).toBeGreaterThanOrEqual(60000)
+  })
+
+  it('écran à 120 Hz tenu à 60 images par seconde : une synchro sur deux n\'est pas la cadence, pas de remontée', () => {
+    // 3 s légères (8,3 ms, la cadence), 10 s lourdes (33,3 ms : l'échelle baisse), puis 30 s à 16,7 ms : au-dessus du
+    // seuil de 14 ms, et pas à la cadence de cet écran. La cadence est la plus petite médiane vue, pas la médiane du
+    // moment (sinon toute suite régulière sous 19,2 ms ferait remonter).
+    const ctrl = auto()
+    const p = 1000 / 120
+    const light = vsyncRun(ctrl, () => 5, 3, { periodMs: p })
+    const heavy = vsyncRun(ctrl, () => 30, 10, { periodMs: p, t0: light.at(-1).t })
+    const before = heavy.at(-1).scale
+    expect(before).toBeLessThan(1)
+    const mid = vsyncRun(ctrl, () => 12, 30, { periodMs: p, t0: heavy.at(-1).t })
+    // (la fenêtre garde encore des images lourdes au début : un dernier pas de baisse peut tomber)
+    expect(changes(mid, before).filter(c => c.to > c.from)).toEqual([])
+  })
+
+  it('une image à 30 images par seconde n\'est pas à la cadence : pas de remontée', () => {
+    // Coût de 20 ms à toute échelle (le processeur, pas les pixels) : une synchro sur deux, 33,3 ms, l'échelle descend
+    // jusqu'à 0,7 et y reste.
+    const ch = changes(vsyncRun(auto(), () => 20, 60))
+    expect(ch.every(c => c.to < c.from)).toBe(true)
+    expect(ch.at(-1).to).toBeCloseTo(0.7, 10)
   })
 })
