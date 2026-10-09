@@ -246,6 +246,78 @@ describe('kit des cinématiques', () => {
     })
   })
 
+  // Effets atténués (spec du lot 1 §4.5, tâche L6) : createKit({ reducedMotion: true }), transmis par playCinematic.
+  // Aucune secousse, glitchs demandés par la scène à un tiers de leur puissance (donc jamais d'image noire, réservée
+  // aux glitchs de plus de 0,7), aucun glitch d'ambiance ; le son des glitchs demandés et les fondus sont gardés.
+  describe('effets atténués', () => {
+    const st = root => root.querySelector('#st')
+
+    it('K.shake ne secoue pas la scène (sans l\'option, elle est secouée : garde-fou)', () => {
+      const calm = mountScene()
+      createKit({ root: calm, reducedMotion: true }).shake()
+      expect(st(calm).classList.contains('shake')).toBe(false)
+      const normal = mountScene()
+      createKit({ root: normal }).shake()
+      expect(st(normal).classList.contains('shake')).toBe(true)
+    })
+
+    it('aucun glitch d\'ambiance, au lancement ni après « rejouer » (appels comptés sur 20 s)', async () => {
+      const root = mountScene()
+      const K = createKit({ root, reducedMotion: true })
+      const glitch = vi.spyOn(K.snd, 'glitch')
+      const visuel = vi.spyOn(root.querySelector('#k-gld'), 'setAttribute')
+      K.run({ beats: [{ min: 30000 }] })
+      await vi.advanceTimersByTimeAsync(10000); await flush()
+      root.querySelector('#k-replay').click()
+      await vi.advanceTimersByTimeAsync(10000); await flush()
+      expect(glitch).not.toHaveBeenCalled()
+      expect(visuel.mock.calls.filter(([k, v]) => k === 'scale' && +v > 0)).toHaveLength(0)
+      expect(root.querySelector('#scene').style.filter).toBe('')
+    })
+
+    // Puissance lue sur l'effet lui-même : déplacement du filtre = hasard × 70 × puissance.
+    const scaleAfterGlitch = async (reducedMotion, pow) => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.5)
+      try {
+        const root = mountScene()
+        const K = createKit({ root, reducedMotion })
+        K.glitch(1000, pow)
+        await vi.advanceTimersByTimeAsync(45); await flush()
+        return +root.querySelector('#k-gld').getAttribute('scale')
+      } finally { Math.random.mockRestore() }
+    }
+
+    it('un glitch de la scène joue à un tiers de sa puissance (0,9 devient 0,3)', async () => {
+      expect(await scaleAfterGlitch(false, 0.9)).toBeCloseTo(0.5 * 70 * 0.9, 1)
+      expect(await scaleAfterGlitch(true, 0.9)).toBeCloseTo(0.5 * 70 * 0.3, 1)
+    })
+
+    it('jamais d\'image noire, même sur un glitch de pleine puissance (K.lost, K.title)', async () => {
+      const blackFrames = async reducedMotion => {
+        vi.spyOn(Math, 'random').mockReturnValue(0)   // le hasard le plus défavorable : image noire à chaque pas
+        try {
+          const root = mountScene()
+          const K = createKit({ root, reducedMotion })
+          const bf = root.querySelector('#k-bf')
+          let on = 0
+          new MutationObserver(() => { if (bf.classList.contains('on')) on++ }).observe(bf, { attributes: true })
+          K.lost(400)
+          await vi.advanceTimersByTimeAsync(700); await flush()
+          return on
+        } finally { Math.random.mockRestore() }
+      }
+      expect(await blackFrames(false)).toBeGreaterThan(0)   // garde-fou : sans l'option, le signal perdu a ses images noires
+      expect(await blackFrames(true)).toBe(0)
+    })
+
+    it('le son d\'un glitch demandé garde sa puissance : seul l\'effet visuel est atténué', () => {
+      const K = createKit({ root: mountScene(), reducedMotion: true })
+      const glitch = vi.spyOn(K.snd, 'glitch')
+      K.glitch(300, 0.9)
+      expect(glitch).toHaveBeenCalledWith(300, 0.9)
+    })
+  })
+
   it('reste muet et sans erreur quand aucun contexte audio n\'est fourni', () => {
     const K = createKit({ root: mountScene() })
     expect(() => { K.snd.boom(); K.snd.stamp(); K.music('tense'); K.music(null) }).not.toThrow()

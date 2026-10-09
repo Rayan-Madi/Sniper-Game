@@ -2,6 +2,8 @@
 // Une cinématique est une suite de TEMPS : chaque temps peut faire parler quelqu'un (bips synthétiques
 // + sous-titre tapé) et déclencher des effets à des instants relatifs à son début. Un temps dure le temps
 // de sa réplique. freeze = ms : sans glitch, tout se fige à cet instant (captures de contrôle).
+// reducedMotion (effets atténués, spec du lot 1 §4.5) : aucune secousse, glitchs à un tiers de leur puissance visuelle
+// (donc jamais d'image noire, réservée aux glitchs de plus de 0,7), aucun glitch d'ambiance ; le son et les fondus restent.
 import { createSound } from './sound.js'
 
 export const estimate = text => 350 + text.length * 62
@@ -21,7 +23,7 @@ const GLITCH_FILTER = `<svg width="0" height="0" style="position:absolute"><filt
   <feBlend in="r2" in2="gb2" mode="screen"/></filter></svg>`
 const RADIO_DEFAULT = '<span class="dot">●</span><span>CANAL SÉCURISÉ · ANTON, FIXEUR</span><span class="eq"><i></i><i></i><i></i><i></i><i></i></span>'
 
-export function createKit({ root, audio = null, freeze = null } = {}) {
+export function createKit({ root, audio = null, freeze = null, reducedMotion = false } = {}) {
   const K = { errors: [], frozen: false }
   const fail = msg => { K.errors.push(String(msg)); console.error('[briefing]', msg) }
   const $ = id => root.querySelector('#' + id)
@@ -82,6 +84,7 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
   K.glitch = (ms, pow) => {
     if (freeze !== null || destroyed) return
     S.glitch(ms, pow)
+    if (reducedMotion) pow /= 3
     glitchUntil = Math.max(glitchUntil, performance.now() + ms); glitchPow = Math.max(glitchPow, pow)
     if (glitchIv) return
     scene.style.filter = 'url(#k-glf)'; st.classList.add('gl')
@@ -98,11 +101,12 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
     })
   }
   const idleGlitch = () => at(1100 + Math.random() * 2600, () => { K.glitch(70 + Math.random() * 110, 0.22 + Math.random() * 0.3); idleGlitch() })
-  if (freeze === null) idleGlitch()
+  const ambient = freeze === null && !reducedMotion   // parasites au repos
+  if (ambient) idleGlitch()
 
   // ── petits outils de mise en scène ──
   K.music = mode => S.music(mode)
-  K.shake = () => { st.classList.remove('shake'); void st.offsetWidth; st.classList.add('shake') }
+  K.shake = () => { if (reducedMotion) return; st.classList.remove('shake'); void st.offsetWidth; st.classList.add('shake') }
   K.crt = () => { K.on('k-crt'); S.crt() }
   K.lost = (ms = 400) => { S.lost(); K.glitch(ms + 250, 1); K.on('k-lost'); at(ms, () => K.off('k-lost')) }
   K.title = () => { K.on('title'); S.boom(); K.glitch(200, 0.7) }
@@ -155,7 +159,7 @@ export function createKit({ root, audio = null, freeze = null } = {}) {
     // Son séquenceur reste suspendu sur une attente sans minuteur : plus rien ne le tient, il est ramassé. Le réveiller
     // serait pire : la suite de K.speak (stopVoice) couperait la voix du nouveau passage.
     clearAll(); calm(); preload()
-    if (freeze === null) idleGlitch()
+    if (ambient) idleGlitch()
     K.frozen = false; st.classList.remove('k-frozen'); counters.clear()
     S.stopVoice(); S.music(null); K.wave(false)
     const cls = [...STATE_CLASSES, ...((cfg && cfg.stateClasses) || [])]

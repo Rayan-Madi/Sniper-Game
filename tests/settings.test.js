@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Réglages persistés (spec du lot 1 §4.3, tâche L4) : trois champs neufs, graphics ('auto' | 'bas' | 'moyen' |
 // 'haut'), showStats (booléen) et reducedMotion ('auto' | 'oui' | 'non'). Une sauvegarde d'avant le lot 1 ne les a
@@ -70,5 +70,39 @@ describe('réglages graphiques et de confort', () => {
     mod.loadSettings()
     s = mod.settings
     expect([s.graphics, s.showStats, s.reducedMotion]).toEqual(['bas', true, 'non'])
+  })
+})
+
+// Effets atténués en vigueur (spec du lot 1 §4.5, tâche L6) : effectsReduced() combine le réglage et la préférence du
+// système, relue à chaque appel (flash du tir, lancement d'une cinématique).
+describe('effets atténués en vigueur', () => {
+  let system = false
+  const asked = []
+  beforeEach(() => {
+    system = false; asked.length = 0
+    window.matchMedia = q => { asked.push(q); return { matches: q === '(prefers-reduced-motion: reduce)' && system } }
+  })
+  afterEach(() => { delete window.matchMedia })
+
+  it('Auto suit le système, relu à chaque appel', async () => {
+    const s = await load()
+    expect(s.reducedMotion).toBe('auto')
+    expect(mod.effectsReduced()).toBe(false)
+    system = true
+    expect(mod.effectsReduced()).toBe(true)
+    expect(asked).toContain('(prefers-reduced-motion: reduce)')
+  })
+
+  it('Oui force les effets atténués, Non les effets normaux, quel que soit le système', async () => {
+    const s = await load({ ...OLD_SAVE, reducedMotion: 'oui' })
+    expect(mod.effectsReduced()).toBe(true)
+    s.reducedMotion = 'non'; system = true
+    expect(mod.effectsReduced()).toBe(false)
+  })
+
+  it('navigateur sans matchMedia : Auto donne des effets normaux', async () => {
+    delete window.matchMedia
+    await load()
+    expect(mod.effectsReduced()).toBe(false)
   })
 })

@@ -103,9 +103,9 @@ export function createResolutionController({ min, max, step, highMs, lowMs })   
 
 **Fichiers :** créer `src/comfort.js`, `tests/comfort.test.js` ; modifier `src/main.js` (flash), `src/briefing/index.js` et `src/briefing/kit.js` (option `reducedMotion`), `src/settings.js`, `index.html`.
 
-- [ ] `reducedMotionActive(setting, mediaMatches)` pur (Auto suit le système, Oui et Non forcent) ; tests.
-- [ ] Flash du tir à 0,06 quand actif ; `playCinematic(id, { reducedMotion })` : `K.shake` sans effet, `K.glitch` à un tiers d'intensité, pas de glitch d'ambiance ; tests sur le kit (appels comptés) et sur `playCinematic`.
-- [ ] Plein écran : bouton des Paramètres, libellé à jour sur `fullscreenchange` ; test du libellé avec un faux `document.fullscreenElement`.
+- [ ] `reducedMotionActive(setting, mediaMatches)` pur (Auto suit le système, Oui et Non forcent) ; tests. (fait, avec `systemReducedMotion()` qui lit `prefers-reduced-motion` par `matchMedia`, effets normaux sans lui, et `effectsReduced()` dans `settings.js`, relu à chaque tir et à chaque lancement de cinématique)
+- [ ] Flash du tir à 0,06 quand actif ; `playCinematic(id, { reducedMotion })` : `K.shake` sans effet, `K.glitch` à un tiers d'intensité, pas de glitch d'ambiance ; tests sur le kit (appels comptés) et sur `playCinematic`. (fait : flash dans `comfort.js`, `shotFlash` ; toute cinématique passe par `cinematic()`, qui transmet `effectsReduced()`, garde du câblage sur le source de `main.js` ; le tiers porte sur l'effet visuel, le son du glitch garde sa puissance, et aucune image noire en effets atténués, réservées aux glitchs de plus de 0,7)
+- [ ] Plein écran : bouton des Paramètres, libellé à jour sur `fullscreenchange` ; test du libellé avec un faux `document.fullscreenElement`. (fait : `bindFullscreenButton`, ACTIVER ou QUITTER, sortie par Échap suivie)
 - [ ] Commit : `feat(confort): effets atténués selon le système ou le réglage, plein écran`
 
 ### Tâche L7 : précompilation pendant le briefing

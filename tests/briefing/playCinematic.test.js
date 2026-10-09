@@ -147,6 +147,29 @@ describe('playCinematic', () => {
     expect(seen).toEqual(['?port=libres'])
   })
 
+  // Effets atténués (spec du lot 1 §4.5, tâche L6) : l'option reducedMotion arrive au kit, sans toucher aux scènes.
+  describe('effets atténués', () => {
+    const shakeAndIdle = async opts => {
+      const handle = await playCinematic('longue', opts)
+      const st = document.querySelector('#briefing-root #st')
+      handle.kit.shake()
+      const shaken = st.classList.contains('shake')
+      const glitch = vi.spyOn(handle.kit.snd, 'glitch')
+      await vi.advanceTimersByTimeAsync(4000); await flush()   // un glitch d'ambiance toutes les 1,1 à 3,7 s
+      return { shaken, idle: glitch.mock.calls.length }
+    }
+
+    it('reducedMotion: true : ni secousse ni glitch d\'ambiance', async () => {
+      expect(await shakeAndIdle({ reducedMotion: true })).toEqual({ shaken: false, idle: 0 })
+    })
+
+    it('sans l\'option : la scène est secouée et les glitchs d\'ambiance tournent (garde-fou)', async () => {
+      const r = await shakeAndIdle({})
+      expect(r.shaken).toBe(true)
+      expect(r.idle).toBeGreaterThan(0)
+    })
+  })
+
   it('refuse une cinématique inconnue', async () => {
     await expect(playCinematic('nope', {})).rejects.toThrow(/inconnue/)
   })

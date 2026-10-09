@@ -7,7 +7,7 @@ import { getLevel } from './levels.js'
 import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject } from './maps.js'
 import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
 import { spawnTracer, spawnImpact, spawnDust, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
-import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys } from './settings.js'
+import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
 import { preloadCharacters, charactersReady, charactersProgress, charactersSettled } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
@@ -23,6 +23,7 @@ import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
+import { shotFlash, bindFullscreenButton } from './comfort.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -265,8 +266,9 @@ sensSlider.oninput = () => {
 invertChk.onchange = () => { settings.invertY = invertChk.checked; saveSettings() }
 
 // ── Affichage (spec du lot 1 §4.3 et §4.5) ──
-// Qualité (appliquée tout de suite, setGraphics), panneau de performances, effets atténués (réglage enregistré ; le
-// flash, les secousses et les glitchs le suivront avec la tâche L6, qui ajoute aussi le plein écran).
+// Qualité (appliquée tout de suite, setGraphics), panneau de performances, effets atténués (enregistrés ; le flash du
+// tir et chaque cinématique relisent effectsReduced() à leur lancement), plein écran (libellé à jour sur
+// fullscreenchange, sortie par Échap comprise).
 const choiceGroups = document.querySelectorAll('#settings-display [data-setting]')
 const showStatsChk = document.getElementById('set-showstats')
 function syncDisplayUI() {
@@ -285,6 +287,7 @@ for (const g of choiceGroups) {
   })
 }
 showStatsChk.onchange = () => { settings.showStats = showStatsChk.checked; saveSettings() }
+bindFullscreenButton(document.getElementById('set-fullscreen'))
 
 // ── Remappage des touches PvP ──
 // Code physique (e.code) → étiquette lisible. 'Key*'/'Digit*' sont les seuls
@@ -344,8 +347,9 @@ function closeSettings() {
 
 // ─── Flow ──────────────────────────────────────────────────────────
 // playCinematic ne doit jamais bloquer la partie : si la scène ne se charge pas, on enchaîne quand même.
+// Toute cinématique passe par ici : elle suit les effets atténués du moment (réglage, ou système en Auto).
 function cinematic(id, opts) {
-  playCinematic(id, opts).catch(err => { console.error('[cinématique]', err); opts.onDone() })
+  playCinematic(id, { ...opts, reducedMotion: effectsReduced() }).catch(err => { console.error('[cinématique]', err); opts.onDone() })
 }
 
 function cinematicAudio() {
@@ -845,7 +849,7 @@ function shoot() {
   bulletInFlight = true
   bulletDelay = stats.bulletDelay
   statShots++
-  flashScreen()
+  shotFlash(effectsReduced())   // 0,22 d'opacité, 0,06 en effets atténués
   stats.silenced ? playSilencedShot() : playShot()
   stress = Math.min(1, stress + 0.12)
 
@@ -858,13 +862,6 @@ function shoot() {
   syncFov()   // lunette ouverte et tir dans la même image : le rayon suit déjà le zoom
   ray.setFromCamera(new THREE.Vector2(aimX, aimY), camera)
   pendingShotRay = ray
-}
-
-function flashScreen() {
-  const f = document.createElement('div')
-  f.style.cssText = 'position:fixed;inset:0;background:rgba(255,255,255,0.22);pointer-events:none;z-index:999;transition:opacity 0.1s'
-  document.body.appendChild(f)
-  setTimeout(() => { f.style.opacity = '0'; setTimeout(() => f.remove(), 120) }, 40)
 }
 
 function resolveBullet() {

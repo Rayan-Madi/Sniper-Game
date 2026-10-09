@@ -1,6 +1,7 @@
 // Paramètres du jeu — persistés dans localStorage
 import { setMasterVolume } from './audio.js'
 import { PRESETS } from './gfx/quality.js'
+import { reducedMotionActive, systemReducedMotion } from './comfort.js'
 
 // Touches PvP par défaut — codes PHYSIQUES (indépendants du layout clavier,
 // donc valables aussi bien en AZERTY qu'en QWERTY).
@@ -68,4 +69,10 @@ export function sensMultiplier() {
 
 export function invertY() {
   return settings.invertY ? -1 : 1
+}
+
+// Effets atténués en vigueur (spec du lot 1 §4.5) : le réglage, ou en Auto la préférence du système, relue à chaque
+// appel. Lu au tir (flash) et au lancement de chaque cinématique (secousses et glitchs).
+export function effectsReduced() {
+  return reducedMotionActive(settings.reducedMotion, systemReducedMotion())
 }

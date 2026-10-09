@@ -29,7 +29,8 @@ function ensureKitStyle() {
   document.head.appendChild(s)
 }
 
-export async function playCinematic(id, { onDone = () => {}, params = null, freeze = null, audio = null, root = document.getElementById('briefing-root') } = {}) {
+// reducedMotion : effets atténués (spec du lot 1 §4.5), transmis au kit ; main.js le lit dans les réglages et le système.
+export async function playCinematic(id, { onDone = () => {}, params = null, freeze = null, audio = null, reducedMotion = false, root = document.getElementById('briefing-root') } = {}) {
   const load = SCENES[id]
   if (!load) throw new Error('cinématique inconnue : ' + id)
   const ticket = ++generation
@@ -88,7 +89,7 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
     root.classList.remove('k-leaving')
     root.innerHTML = `<div class="${mod.stClass}" id="st">${mod.html}</div><div class="k-skip">ÉCHAP · ENTRÉE · ESPACE : PASSER</div>`
     root.hidden = false
-    K = handle.kit = createKit({ root, audio, freeze })
+    K = handle.kit = createKit({ root, audio, freeze, reducedMotion })
     document.addEventListener('keydown', onKey, true)
     root.addEventListener('click', onClick)
     current = handle
