@@ -103,3 +103,27 @@ export function watchContextLoss(canvas, { onLost, onRestored }) {
     canvas.removeEventListener('webglcontextrestored', restored)
   }
 }
+
+// Écran vraiment modal : tout le reste de son parent devient inerte (attribut inert : ni focus, ni clic, ni
+// activation au clavier), y compris ce qui s'y ajoute ensuite (journal, calques des cinématiques et du PvP). Sans
+// cela, le menu pause affiché sous « Le rendu a été interrompu » restait atteignable au clavier depuis RECHARGER
+// (relecture de L5). Pas de <dialog> ouvert par showModal : Échap le fermerait (Chrome n'honore pas toujours
+// l'annulation de son événement cancel). Renvoie la fonction qui rend la page (elle n'enlève l'attribut qu'aux
+// éléments qu'elle a rendus inertes).
+export function makeModal(el) {
+  const parent = el.parentElement
+  const made = new Set()
+  const hold = node => {
+    if (node === el || node.nodeType !== 1 || node.hasAttribute('inert')) return
+    node.setAttribute('inert', '')
+    made.add(node)
+  }
+  for (const node of parent.children) hold(node)
+  const observer = new MutationObserver(records => { for (const r of records) r.addedNodes.forEach(hold) })
+  observer.observe(parent, { childList: true })
+  return () => {
+    observer.disconnect()
+    for (const node of made) node.removeAttribute('inert')
+    made.clear()
+  }
+}

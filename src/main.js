@@ -22,7 +22,7 @@ import { missImpact } from './campaign/impact.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
-import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss } from './campaign/loading.js'
+import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
 
 // ─── État ──────────────────────────────────────────────────────────
 let npcs = [], targets = [], guards = [], civilians = []
@@ -693,6 +693,7 @@ function pauseGame() {
 }
 
 function resumeGame() {
+  if (renderLost) return   // seul chemin de la reprise (Échap, REPRENDRE) : jamais sous « Le rendu a été interrompu »
   if (gamePhase !== 'paused') return
   pauseEl.style.display = 'none'
   settingsEl.style.display = 'none'
@@ -1451,8 +1452,9 @@ loop()
 
 // ─── Contexte WebGL perdu (spec du lot 1 §4.4) ─────────────────────
 // Pilote graphique réinitialisé, mise en veille, carte saturée : plus rien ne s'affiche. La partie se met en pause
-// derrière l'écran « Le rendu a été interrompu » et le pointeur revient ; elle y reste (renderLost : Échap ne la
-// reprend pas, une mission en attente des modèles ou en briefing ne démarre pas). Contexte rendu par le navigateur, ou
+// derrière l'écran « Le rendu a été interrompu » et le pointeur revient ; elle y reste (renderLost : ni Échap ni
+// REPRENDRE ne la reprennent, une mission en attente des modèles ou en briefing ne démarre pas ; makeModal : le reste
+// de la page est inerte, le menu pause dessous n'est plus atteignable au clavier). Contexte rendu par le navigateur, ou
 // RECHARGER : la page se recharge (la sauvegarde est faite à chaque réussite). Pendant la kill-cam ou un échec en
 // attente, la pause est refusée (canPause) : la fin de mission tombe sous l'écran, et la réussite est enregistrée.
 const contextLostEl = document.getElementById('context-lost')
@@ -1462,6 +1464,7 @@ function onRenderLost() {
   hideScope()
   releaseMouse()
   contextLostEl.hidden = false
+  makeModal(contextLostEl)
   document.getElementById('btn-context-reload').focus()
 }
 watchContextLoss(renderer.domElement, { onLost: onRenderLost, onRestored: () => location.reload() })

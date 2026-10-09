@@ -12,6 +12,7 @@ const IMPORTS = {
   waitForCharacters: './campaign/loading.js',
   createLoadingScreen: './campaign/loading.js',
   watchContextLoss: './campaign/loading.js',
+  makeModal: './campaign/loading.js',
   charactersReady: './characters.js',
   charactersProgress: './characters.js',
   charactersSettled: './characters.js',
@@ -25,6 +26,7 @@ const CALLS = [
   ['enterLevel', 'startLevel'],
   ['onRenderLost', 'pauseGame'],      // la partie s'arrête derrière l'écran « Le rendu a été interrompu »
   ['onRenderLost', 'releaseMouse'],   // le pointeur revient pour cliquer RECHARGER
+  ['onRenderLost', 'makeModal'],      // le reste de la page devient inerte : ni clic ni clavier sous l'écran
 ]
 
 // Identifiants que enterLevel doit passer à startWhenReady et waitForCharacters (sans les appeler elle-même)
@@ -56,16 +58,23 @@ function escapeListener(a) {
 
 // Rendu interrompu (relecture de L5) : la pause de la spec §4.4 tient jusqu'au rechargement. onRenderLost pose le
 // drapeau renderLost ; Échap ne reprend pas la partie sous l'écran (le focus est sur RECHARGER, mais la touche remonte
-// au document) ; une mission en attente des modèles ou au bout de son briefing ne démarre pas dessous.
+// au document) ; une mission en attente des modèles ou au bout de son briefing ne démarre pas dessous ; resumeGame,
+// seul chemin vers la reprise (Échap, bouton REPRENDRE), refuse de reprendre, même si un bouton du menu pause était
+// activé sous l'écran (la page est rendue inerte, makeModal, mais la garde ne dépend pas d'elle).
+const RENDER_LOST_GUARD = /if \([^)]*\brenderLost\b[^)]*\) return\b/
 function renderLostFaults(a) {
   const faults = []
   const body = name => { const fn = a.fns.get(name); return fn ? a.source.slice(fn.body.start, fn.body.end) : '' }
   if (!/\brenderLost = true\b/.test(body('onRenderLost'))) faults.push('onRenderLost ne pose pas renderLost')
   if (!/isCurrent = \(\) => [^\n]*\brenderLost\b/.test(body('enterLevel'))) faults.push('enterLevel démarre une mission sous le rendu interrompu')
+  const resume = body('resumeGame')
+  const resumeGuard = RENDER_LOST_GUARD.exec(resume)
+  if (!resumeGuard || resumeGuard.index > resume.indexOf("gamePhase = 'playing'")) faults.push('resumeGame reprend la partie sous le rendu interrompu')
+  if (!/makeModal\(contextLostEl\)/.test(body('onRenderLost'))) faults.push('onRenderLost ne rend pas son écran modal')
   const esc = escapeListener(a)
   if (!esc) faults.push('Échap n\'est plus géré au clavier')
   else {
-    const guard = /if \([^)]*\brenderLost\b[^)]*\) return\b/.exec(esc)
+    const guard = RENDER_LOST_GUARD.exec(esc)
     if (!guard || guard.index > esc.indexOf('resumeGame()')) faults.push('Échap reprend la partie sous le rendu interrompu')
   }
   return faults
@@ -188,6 +197,33 @@ describe('témoins de la garde', () => {
     expect(esc, 'Échap n\'est déjà plus géré : témoin impossible').not.toBeNull()
     const next = mutated(SRC.replace(esc, esc.replace(/\n[^\n]*if \([^)]*\brenderLost\b[^)]*\) return\b[^\n]*/, '')))
     expect(wiringFaults(next)).toContain('Échap reprend la partie sous le rendu interrompu')
+  })
+
+  // Relecture de L5 : depuis RECHARGER, Maj+Tab jusqu'à REPRENDRE puis Entrée reprenait la partie sous l'écran.
+  it('resumeGame sans garde du rendu interrompu, comme dans le commit de relecture de L5 : rouge', () => {
+    const fn = a.fns.get('resumeGame')
+    const body = SRC.slice(fn.body.start, fn.body.end)
+    expect(body, 'resumeGame n\'a déjà plus de garde : témoin impossible').toMatch(RENDER_LOST_GUARD)
+    const next = mutated(SRC.slice(0, fn.body.start) + body.replace(/\n[^\n]*if \([^)]*\brenderLost\b[^)]*\) return\b[^\n]*/, '') + SRC.slice(fn.body.end))
+    expect(wiringFaults(next)).toContain('resumeGame reprend la partie sous le rendu interrompu')
+  })
+
+  it('garde de resumeGame placée après la reprise : rouge', () => {
+    const fn = a.fns.get('resumeGame')
+    const body = SRC.slice(fn.body.start, fn.body.end)
+    const guard = /\n[^\n]*if \([^)]*\brenderLost\b[^)]*\) return\b[^\n]*/.exec(body)
+    expect(guard, 'resumeGame n\'a déjà plus de garde : témoin impossible').not.toBeNull()
+    const moved = body.replace(guard[0], '').replace(/\n\}$/, guard[0] + '\n}')
+    const next = mutated(SRC.slice(0, fn.body.start) + moved + SRC.slice(fn.body.end))
+    expect(wiringFaults(next)).toContain('resumeGame reprend la partie sous le rendu interrompu')
+  })
+
+  it('écran modal posé sur un autre élément que celui du rendu interrompu : rouge', () => {
+    const fn = a.fns.get('onRenderLost')
+    const body = SRC.slice(fn.body.start, fn.body.end)
+    expect(body, 'onRenderLost ne rend déjà plus son écran modal : témoin impossible').toContain('makeModal(contextLostEl)')
+    const next = mutated(SRC.slice(0, fn.body.start) + body.replace('makeModal(contextLostEl)', 'makeModal(pauseEl)') + SRC.slice(fn.body.end))
+    expect(wiringFaults(next)).toContain('onRenderLost ne rend pas son écran modal')
   })
 
   it('RECHARGER sans rechargement : rouge', () => {

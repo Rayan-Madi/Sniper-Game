@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { progressOf, waitForCharacters, startWhenReady, createLoadingScreen, watchContextLoss } from '../../src/campaign/loading.js'
+import { progressOf, waitForCharacters, startWhenReady, createLoadingScreen, watchContextLoss, makeModal } from '../../src/campaign/loading.js'
 
 // Chargement des modèles avant une mission ou une manche, et contexte WebGL perdu (spec du lot 1 §4.4).
 // Horloge factice (vi.useFakeTimers) : l'écran ne s'affiche qu'au-delà de 150 ms d'attente et l'attente s'arrête à 20 s.
@@ -283,5 +283,50 @@ describe('contexte WebGL perdu', () => {
     expect(ev.defaultPrevented).toBe(false)
     expect(onLost).not.toHaveBeenCalled()
     expect(onRestored).not.toHaveBeenCalled()
+  })
+})
+
+// Écran « Le rendu a été interrompu » vraiment modal (relecture de L5) : sans cela, le menu pause resté affiché
+// dessous était atteignable au clavier depuis RECHARGER (Maj+Tab puis Entrée : REPRENDRE, MENU PRINCIPAL), la garde
+// de l'écouteur clavier n'empêchant pas l'activation d'un bouton. jsdom pose l'attribut sans en appliquer l'effet ;
+// l'effet (le focus ne sort plus de l'écran, aucun bouton dessous ne s'active) se vérifie dans Chrome sans interface.
+describe('makeModal : le reste de la page devient inerte', () => {
+  let el, release
+  beforeEach(() => {
+    const html = readFileSync(resolve(__dirname, '../../index.html'), 'utf8')
+    document.body.innerHTML = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>')).replace(/^<body[^>]*>/, '')
+    el = document.getElementById('context-lost')
+    release = null
+  })
+  afterEach(() => { if (release) release() })
+
+  const others = () => [...document.body.children].filter(e => e !== el)
+
+  it('tout sauf l\'écran : menu pause, paramètres, canevas, menus du PvP', () => {
+    release = makeModal(el)
+    expect(others().length).toBeGreaterThan(10)
+    for (const e of others()) expect(e.hasAttribute('inert'), `#${e.id || e.tagName} reste atteignable`).toBe(true)
+    expect(el.hasAttribute('inert')).toBe(false)
+    expect(el.querySelector('#btn-context-reload').closest('[inert]')).toBeNull()
+  })
+
+  it('un calque ajouté ensuite (journal, intro de rôle du PvP) est inerte lui aussi', async () => {
+    release = makeModal(el)
+    const ov = document.createElement('div')
+    ov.innerHTML = '<button>CONTINUER</button>'
+    document.body.appendChild(ov)
+    await Promise.resolve()   // l'observateur de mutations passe en microtâche
+    expect(ov.hasAttribute('inert')).toBe(true)
+  })
+
+  it('la fonction rendue rend la page, sans toucher à ce qui était déjà inerte', async () => {
+    const before = document.getElementById('menu')
+    before.setAttribute('inert', '')
+    makeModal(el)()
+    expect(before.hasAttribute('inert')).toBe(true)
+    expect(others().filter(e => e !== before).every(e => !e.hasAttribute('inert'))).toBe(true)
+    const late = document.body.appendChild(document.createElement('div'))
+    await Promise.resolve()
+    expect(late.hasAttribute('inert')).toBe(false)
   })
 })
