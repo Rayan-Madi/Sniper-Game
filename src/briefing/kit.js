@@ -3,7 +3,8 @@
 // + sous-titre tapé) et déclencher des effets à des instants relatifs à son début. Un temps dure le temps
 // de sa réplique. freeze = ms : sans glitch, tout se fige à cet instant (captures de contrôle).
 // reducedMotion (effets atténués, spec du lot 1 §4.5) : aucune secousse, glitchs à un tiers de leur puissance visuelle
-// (donc jamais d'image noire, réservée aux glitchs de plus de 0,7), aucun glitch d'ambiance ; le son et les fondus restent.
+// (donc jamais d'image noire, réservée aux glitchs de plus de 0,7 ; grain monté au tiers), aucun glitch d'ambiance, carton
+// SIGNAL PERDU sans clignotement ; le son et les fondus restent.
 import { createSound } from './sound.js'
 
 export const estimate = text => 350 + text.length * 62
@@ -61,6 +62,9 @@ export function createKit({ root, audio = null, freeze = null, reducedMotion = f
   // ── habillage injecté ──
   const st = $('st'), scene = $('scene')
   if (!st || !scene) throw new Error('la scène doit contenir #st et #scene')
+  // effets atténués : la feuille du kit s'y règle (carton SIGNAL PERDU sans clignotement, grain d'un glitch au tiers) ;
+  // hors des classes d'état, la remise à zéro de « rejouer » la garde
+  if (reducedMotion) st.classList.add('k-reduced')
   // préchargement : transitions coupées le temps de poser l'état de départ, rétablies deux images plus tard
   const preload = () => { st.classList.add('k-preload'); raf(() => raf(() => st.classList.remove('k-preload'))) }
   preload()

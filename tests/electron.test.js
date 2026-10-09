@@ -49,6 +49,15 @@ describe('Electron', () => {
     expect(script.split(/\s+/)).toContain('--dev')
   })
 
+  // Le bouton Plein écran des Paramètres (spec du lot 1 §4.5) appelle requestFullscreen, « qui marche aussi sous
+  // Electron ». Sous macOS, fullscreen: false passé explicitement rend la fenêtre non fullscreenable (bouton du système
+  // masqué ou grisé, d'après la documentation d'Electron) ; fullscreenable vaut true par défaut, fullscreen false.
+  it('aucune option ne retire à la fenêtre le droit de passer en plein écran (ni fullscreen: false explicite, ni fullscreenable: false)', () => {
+    const [win] = runMain().windows
+    expect(win.opts.fullscreen).not.toBe(false)
+    expect(win.opts.fullscreenable).not.toBe(false)
+  })
+
   it('aucune icône référencée ne manque (fenêtre et installeur)', () => {
     const [win] = runMain().windows
     const icons = [

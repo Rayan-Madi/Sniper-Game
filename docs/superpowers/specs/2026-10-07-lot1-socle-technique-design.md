@@ -118,6 +118,11 @@ Même simulation : retour à 1 moins de 15 s après chaque à-coup (un à-coup d
 - **Effets atténués** : `reducedMotionActive()` (pur sur `settings.reducedMotion` et `matchMedia('(prefers-reduced-motion: reduce)')`). Actif : flash du tir à 0,06 d'opacité au lieu de 0,22, aucune secousse (`K.shake` sans effet), glitchs des cinématiques à un tiers d'intensité et sans glitchs d'ambiance, fondus gardés. Le kit reçoit l'option par `playCinematic(id, { reducedMotion })`, sans édition des scènes générées.
 - **Plein écran** : bouton dans les Paramètres (`requestFullscreen` sur `document.documentElement`, `exitFullscreen` sinon), qui marche aussi sous Electron ; libellé à jour selon `fullscreenchange`.
 
+Relecture de L6, à acter par le porteur de la spec :
+- le tiers d'intensité porte sur l'effet visuel des glitchs (déchirure, séparation des couleurs, déplacement, grain, qui ne monte plus que d'un tiers) ; leur son garde sa puissance, les effets atténués ne touchant pas au son ;
+- le carton SIGNAL PERDU d'un signal perdu (`K.lost`) clignotait à 5,5 Hz, au-delà de 3 flashs par seconde (WCAG 2.3.1), et M6 le tient 1,3 s : en effets atténués, il reste affiché sans clignoter, le temps prévu par la scène ;
+- hors du périmètre de cette section, le flash rouge de l'alarme PvP (environ 2,7 Hz pendant 2,5 s) et la secousse de caméra du téléphone et de l'alarme en PvP ne suivent pas le réglage : leur atténuation touche au jeu (gêne voulue par la capacité adverse), suite à prévoir.
+
 ### 4.6 Précompilation
 
 Quand un briefing se joue avant une mission, la carte de la mission est montée **pendant** le briefing (le rendu WebGL est déjà arrêté pendant les cinématiques), puis `renderer.compile(scene, camera)` est appelé. `startLevel` réutilise la carte montée au lieu d'en construire une autre. Sans briefing (réessai), le comportement reste celui d'aujourd'hui. Mesure : durée de la première image de la mission dans `?memtest`, avant et après.

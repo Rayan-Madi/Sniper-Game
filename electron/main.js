@@ -8,11 +8,12 @@ const isDev = process.argv.includes('--dev')
 
 function createWindow() {
   // Pas de propriété icon : Electron garde son icône par défaut tant que le
-  // jeu n'en a pas.
+  // jeu n'en a pas. Pas de fullscreen: false non plus : c'est déjà la valeur
+  // par défaut, et passé explicitement il interdit le plein écran sous macOS
+  // (bouton Plein écran des Paramètres compris).
   const win = new BrowserWindow({
     width: 1280,
     height: 720,
-    fullscreen: false,
     resizable: true,
     title: 'Sniper',
     backgroundColor: '#000000',

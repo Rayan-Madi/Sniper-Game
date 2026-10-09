@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createKit, estimate } from '../../src/briefing/kit.js'
 
 function mountScene(inner = '') {
@@ -315,6 +317,62 @@ describe('kit des cinématiques', () => {
       const glitch = vi.spyOn(K.snd, 'glitch')
       K.glitch(300, 0.9)
       expect(glitch).toHaveBeenCalledWith(300, 0.9)
+    })
+
+    // Habillage réglé par la feuille du kit (injectée par playCinematic) : jsdom calcule ses règles sans les animer.
+    // Relecture de L6 : le carton SIGNAL PERDU clignotait à 5,5 Hz (k-blink .18s), au-dessus de 3 flashs par seconde
+    // (WCAG 2.3.1), M6 le tenant 1,3 s ; et le grain d'un glitch montait à pleine valeur, seul effet visuel non atténué.
+    describe('feuille du kit', () => {
+      let css
+      beforeEach(() => {
+        css = document.createElement('style')
+        css.textContent = readFileSync(resolve(__dirname, '../../src/briefing/kit.css'), 'utf8')
+        document.head.appendChild(css)
+      })
+      afterEach(() => css.remove())
+
+      // Animation du carton pendant un K.lost, au premier passage puis après « rejouer » (remise à zéro de la scène).
+      const lostAnimation = async reducedMotion => {
+        const root = mountScene()
+        const K = createKit({ root, reducedMotion })
+        const lost = root.querySelector('#k-lost')
+        K.run({ beats: [{ min: 30000 }] })
+        K.lost(1300)
+        const first = [getComputedStyle(lost).opacity, getComputedStyle(lost).animation]
+        await vi.advanceTimersByTimeAsync(2000); await flush()
+        root.querySelector('#k-replay').click(); await flush()
+        K.lost(1300)
+        return [first, [getComputedStyle(lost).opacity, getComputedStyle(lost).animation]]
+      }
+
+      it('le carton SIGNAL PERDU s\'affiche sans clignoter, après « rejouer » aussi (sans l\'option, il clignote : garde-fou)', async () => {
+        for (const [opacity, animation] of await lostAnimation(false)) {
+          expect(opacity).toBe('1')
+          expect(animation).toMatch(/k-blink/)
+        }
+        for (const [opacity, animation] of await lostAnimation(true)) {
+          expect(opacity).toBe('1')   // le carton reste lisible le temps demandé
+          expect(animation).not.toMatch(/k-blink/)
+        }
+      })
+
+      // Opacité du grain au repos, puis pendant un glitch.
+      const grainOpacity = reducedMotion => {
+        const root = mountScene()
+        const K = createKit({ root, reducedMotion })
+        const grain = root.querySelector('.grain')
+        const rest = +getComputedStyle(grain).opacity
+        K.glitch(1000, 0.9)
+        return [rest, +getComputedStyle(grain).opacity]
+      }
+
+      it('le grain d\'un glitch ne monte que d\'un tiers de sa hausse (0,09 au repos, 0,32 sans l\'option)', () => {
+        const [rest, full] = grainOpacity(false)
+        expect([rest, full]).toEqual([0.09, 0.32])   // garde-fou : les valeurs de la feuille
+        const [calmRest, calm] = grainOpacity(true)
+        expect(calmRest).toBe(rest)
+        expect(calm).toBeCloseTo(rest + (full - rest) / 3, 2)
+      })
     })
   })
 
