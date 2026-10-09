@@ -373,17 +373,15 @@ describe('essai manqué : images hors cadence étalées sur toute la fenêtre', 
     const traces = []
     for (let seed = 1; seed <= 8; seed++) traces.push(vsyncRun(auto(), edgeMachine(1 / 3, seed), 300))
     const trials = traces.map(trialsOf)
-    // 37 essais par tirage avant la règle (un toutes les 8 s), 7 avec : à 8, 20, 40, 76, 144, 212 et 280 s.
-    for (const ups of trials) expect(ups.length).toBeLessThanOrEqual(8)
+    // 37 essais par tirage avant la règle (un toutes les 8 s) ; avec, dans chaque tirage, les mêmes que le cas
+    // « 17,5 ms à l'échelle 1 », à la seconde près : chaque essai compte comme manqué.
+    for (const [i, ups] of trials.entries()) {
+      expect(ups.map(u => Math.round(u / 1000)), `tirage ${i + 1}`).toEqual([8, 20, 40, 76, 144, 212, 280])
+    }
     // Environ 1 150 images à 33,3 ms (synchro manquée) en 5 min avant la règle, environ 240 avec (moyenne des tirages).
     expect(mean(traces.map(trace => trace.filter(s => s.ms > 25).length))).toBeLessThan(300)
     for (const trace of traces) {
       for (const c of changes(trace)) expect(Math.min(c.from, c.to)).toBeCloseTo(0.95, 10)   // entre 0,95 et 1
-    }
-    for (const ups of trials) {
-      const gaps = ups.slice(1).map((u, i) => u - ups[i])
-      for (let i = 1; i < gaps.length; i++) expect(gaps[i]).toBeGreaterThanOrEqual(gaps[i - 1] - 50)   // s'espacent
-      expect(gaps.at(-1)).toBeGreaterThanOrEqual(60000)
     }
   })
 
