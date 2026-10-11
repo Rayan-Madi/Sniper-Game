@@ -110,3 +110,50 @@ describe('trait d\'impact supprimé', () => {
     expect(E.spawnTracer).toBeUndefined()
   })
 })
+
+// Relecture de T3, faite à la tâche T5 (spec du lot 2, §3.3) : au coup, le bout du sillage est ce que la balle rencontre
+// sur son rayon (resolveImpact : un PNJ qui marche, le décor, sinon un point au loin). À la fin du vol, la résolution
+// peut trouver autre chose (le PNJ est sorti de la ligne : le mur derrière lui) ; main.js recale alors le bout du
+// sillage sur le point résolu (retargetTrail), et la tête du sillage y arrive.
+// Témoin : sans retargetTrail, le sillage finissait là où le PNJ était au coup (vu rouge).
+describe('bout du sillage recalé à la résolution', () => {
+  const recaler = (trail, to) => { if (E.retargetTrail) E.retargetTrail(trail, to) }
+  // Le PNJ visé au coup était en TO ; à la fin du vol, la balle va plus loin sur le rayon du tir, jusqu'au mur. Ce rayon
+  // part de l'œil, 0,4 m au-dessus du canon (FROM, départ du sillage) : le mur n'est pas sur la ligne du canon à TO.
+  const OEIL = FROM.clone().add(new THREE.Vector3(-0.15, 0.4, 0))
+  const MUR = TO.clone().add(TO.clone().sub(OEIL).multiplyScalar(0.4))
+
+  it('la tête du sillage arrive au point résolu à la fin du vol, puis le sillage s\'efface', () => {
+    const trail = E.spawnTrail(FROM, TO, VOL)
+    for (let i = 0; i < 26; i++) E.updateEffects(1 / 60)   // 0,433 s : la balle vole encore
+    recaler(trail, MUR)                                   // image de la résolution (main.js : resolveBullet)
+    E.updateEffects(1 / 60)                               // 0,45 s : arrivée
+    const [l] = lignes()
+    const p = l.geometry.attributes.position
+    const tete = new THREE.Vector3().fromBufferAttribute(p, 1)
+    expect(tete.distanceTo(MUR), `tête en ${tete.toArray()}`).toBeLessThan(1e-4)
+    for (let i = 0; i < 30; i++) E.updateEffects(1 / 60)
+    expect(lignes()).toEqual([])
+  })
+
+  it('pendant le vol, le sillage recalé reste sur la ligne du départ au point résolu', () => {
+    const trail = E.spawnTrail(FROM, TO, VOL)
+    recaler(trail, MUR)
+    E.updateEffects(0.2)
+    const [l] = lignes()
+    const p = l.geometry.attributes.position
+    const dir = MUR.clone().sub(FROM).normalize()
+    for (let i = 0; i < 2; i++) {
+      const q = new THREE.Vector3().fromBufferAttribute(p, i).sub(FROM)
+      expect(q.clone().addScaledVector(dir, -q.dot(dir)).length()).toBeLessThan(1e-4)
+    }
+  })
+
+  it('un sillage déjà effacé ou retiré (relance de la mission) : sans effet ni erreur', () => {
+    const trail = E.spawnTrail(FROM, TO, VOL)
+    E.clearEffects()
+    expect(() => recaler(trail, MUR)).not.toThrow()
+    expect(() => recaler(null, MUR)).not.toThrow()
+    expect(lignes()).toEqual([])
+  })
+})

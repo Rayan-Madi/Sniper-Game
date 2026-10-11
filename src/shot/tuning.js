@@ -97,6 +97,12 @@ export const ZONES = {
   prefiltre: 0.3,       // marge ajoutée de chaque côté de la boîte grossière d'un PNJ avant le test des zones
 }
 
+// ─── Ce que la balle traverse (src/shot/occlusion.js) ──────────────
+export const OCCLUSION = {
+  departM: 0.5,         // le décor à moins de 50 cm de l'œil n'arrête pas la balle : l'appui du poste (rebord, muret)
+  loinM: 1000,          // une balle qui ne rencontre rien part au loin : son point sur le rayon (bout du sillage), à 1 km
+}
+
 // ─── Son ───────────────────────────────────────────────────────────
 export const SON = {
   vitesse: 343,         // vitesse du son (m/s) : le son de l'impact arrive distance / 343 s après la balle

@@ -5,6 +5,7 @@ import { disposeObject } from './gfx/dispose.js'
 let mapObjects = []
 let obstacles = []   // AABB XZ des objets solides — les PNJ ne les traversent pas
 let ambientFn = null // animation d'ambiance de la map (pluie, etc.)
+let solids = null    // maillages qui arrêtent la balle, relevés à la demande (solidMeshes), oubliés quand la carte change
 
 // Retire la carte courante et libère ses ressources GPU (géométries, matériaux, carte d'ombre des lumières ; la
 // géométrie de la pluie du port est dans mapObjects comme le reste). Sans cela, chaque lancement de mission laissait
@@ -14,6 +15,56 @@ function clear() {
   mapObjects = []
   obstacles = []
   ambientFn = null
+  solids = null
+}
+
+// ─── Ce qui arrête une balle (spec du lot 2, §3.4) ──────────────────
+// Un maillage solide porte userData.solid = true et sa matière, userData.surface : 'pierre' (défaut des box et
+// cylinder), 'metal' (conteneurs, véhicules, grue, tonneaux, poteaux), 'bois' (bancs, tables, meubles, troncs,
+// portes), 'sol' (défaut des plane : sols, dalles, chaussées). La matière règle la gerbe et la marque de l'impact
+// (effects.js), et plus tard son son. Le tir les cherche sur son rayon (src/shot/occlusion.js).
+// Jamais solides : la pluie, les lumières, ce qui brille de lui-même (MeshBasicMaterial : lampes, phares, néons,
+// fenêtres éclairées, peinture au sol, soleil couchant), les vitres, le verre, le tissu et le feuillage : la balle les
+// traverse.
+
+// Rend solides les maillages de obj (lui compris), avec leur matière ; jamais ce qui brille de lui-même.
+function solide(obj, surface = 'pierre') {
+  obj.traverse(o => {
+    if (o.isMesh && !o.material.isMeshBasicMaterial) { o.userData.solid = true; o.userData.surface = surface }
+  })
+  solids = null
+  return obj
+}
+
+// La balle traverse obj (vitre, verre, tissu) : ses maillages ne sont plus solides.
+function traversable(obj) {
+  obj.traverse(o => { if (o.isMesh) { delete o.userData.solid; delete o.userData.surface } })
+  solids = null
+  return obj
+}
+
+// Maillages solides de la carte affichée (ni les jeeps du convoi, ni le cadenas du port : ils sont à la mission).
+// Vide après clearMap().
+export function solidMeshes() {
+  if (!solids) {
+    solids = []
+    for (const o of mapObjects) o.traverse(m => { if (m.isMesh && m.userData.solid) solids.push(m) })
+  }
+  return solids
+}
+
+// Vérification à l'œil (route de développement ?solides=1 de main.js) : chaque maillage solide prend la couleur de sa
+// matière, la carte affichée tout de suite, puis chaque carte construite et chaque jeep.
+export const SOLID_TINTS = { pierre: 0xdcdcdc, metal: 0x2f8fff, bois: 0xe08a2a, sol: 0x3cc860 }
+let tintSolids = false
+function tint(m) {
+  const c = SOLID_TINTS[m.userData.surface]
+  m.material.color.setHex(c)
+  if (m.material.emissive) m.material.emissive.setHex(c).multiplyScalar(0.3)   // lisible aussi sur les cartes de nuit
+}
+export function setSolidTint(on) {
+  tintSolids = !!on
+  if (tintSolids) for (const m of solidMeshes()) tint(m)
 }
 
 // Appelé chaque frame par le jeu : anime la météo/ambiance de la map courante
@@ -31,9 +82,11 @@ export function getObstacles() { return obstacles }
 function add(obj) {
   scene.add(obj)
   mapObjects.push(obj)
+  solids = null
   return obj
 }
 
+// Primitives : solides, en pierre (box, cylinder) ou en sol (plane) ; solide(…, matière) en change.
 function box(w, h, d, color, x, y, z, shadow = true) {
   const m = new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
@@ -46,7 +99,7 @@ function box(w, h, d, color, x, y, z, shadow = true) {
   if (h >= 1.1 && (y - h / 2) < 1.5) {
     obstacles.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 })
   }
-  return add(m)
+  return add(solide(m))
 }
 
 function plane(w, d, color, y = 0) {
@@ -57,7 +110,7 @@ function plane(w, d, color, y = 0) {
   m.rotation.x = -Math.PI / 2
   m.position.y = y
   m.receiveShadow = true
-  return add(m)
+  return add(solide(m, 'sol'))
 }
 
 function cylinder(rt, rb, h, color, x, y, z) {
@@ -67,11 +120,12 @@ function cylinder(rt, rb, h, color, x, y, z) {
   )
   m.position.set(x, y, z)
   m.castShadow = true
-  return add(m)
+  return add(solide(m))
 }
 
+// Arbre : tronc en bois ; la balle traverse le feuillage.
 function tree(x, z) {
-  cylinder(0.2, 0.3, 2, 0x5a3a1a, x, 1, z)
+  solide(cylinder(0.2, 0.3, 2, 0x5a3a1a, x, 1, z), 'bois')
   const f = new THREE.Mesh(
     new THREE.SphereGeometry(1.6 + Math.random() * 0.6, 7, 6),
     new THREE.MeshLambertMaterial({ color: 0x2d5a1a })
@@ -82,7 +136,7 @@ function tree(x, z) {
 }
 
 // Voiture détaillée : carrosserie profilée, capot/coffre, cabine vitrée,
-// roues à jantes, phares/feux, calandre, pare-chocs. Enregistrée comme obstacle.
+// roues à jantes, phares/feux, calandre, pare-chocs. Enregistrée comme obstacle. En métal, sauf ses vitres.
 function car(x, z, color, rotY = 0) {
   const g = new THREE.Group()
   const mat = (c, r = 0.6, m = 0.25) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m })
@@ -95,7 +149,7 @@ function car(x, z, color, rotY = 0) {
   part(1.82, 0.26, 1.15, bodyM, 0, 0.9, 1.55)       // capot
   part(1.82, 0.3, 0.95, bodyM, 0, 0.92, -1.68)      // coffre
   part(1.66, 0.52, 2.05, bodyM, 0, 1.12, -0.12)     // cabine
-  part(1.5, 0.42, 1.9, mat(0x101720, 0.12, 0.85), 0, 1.2, -0.12)   // vitres teintées
+  const vitres = part(1.5, 0.42, 1.9, mat(0x101720, 0.12, 0.85), 0, 1.2, -0.12)   // vitres teintées
   // roues + jantes
   for (const [wx, wz] of [[0.88, 1.4], [-0.88, 1.4], [0.88, -1.45], [-0.88, -1.45]]) {
     const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.24, 14), mat(0x121212, 0.92, 0))
@@ -114,6 +168,7 @@ function car(x, z, color, rotY = 0) {
   part(1.92, 0.18, 0.14, mat(0x22262b, 0.6, 0.4), 0, 0.4, 2.22)  // pare-chocs avant
   part(1.92, 0.18, 0.14, mat(0x22262b, 0.6, 0.4), 0, 0.4, -2.2)  // pare-chocs arrière
   g.position.set(x, 0, z); g.rotation.y = rotY
+  solide(g, 'metal'); traversable(vitres)
   add(g)
   // obstacle (extents échangés si la voiture est tournée à ~90°)
   const swap = Math.abs(Math.sin(rotY)) > 0.5
@@ -123,7 +178,8 @@ function car(x, z, color, rotY = 0) {
 }
 
 // ─── Jeep militaire détaillée (convoi de la mission 5) ──
-// Le groupe N'est PAS ajouté à la scène ni aux obstacles (véhicule mobile).
+// Le groupe N'est PAS ajouté à la scène ni aux obstacles (véhicule mobile). Solide, en métal, sauf son pare-brise
+// vitré : main.js l'ajoute aux solides de la mission (le décor de la carte n'en sait rien).
 export function makeJeep(color = 0x3a4a2a) {
   const g = new THREE.Group()
   const bodyMat = new THREE.MeshLambertMaterial({ color })
@@ -169,6 +225,8 @@ export function makeJeep(color = 0x3a4a2a) {
   spare.position.set(-2.75, 1.0, 0); g.add(spare)    // roue de secours
   part(0.08, 0.7, 1.9, darkMat, 3.05, 0.85, 0)       // pare-buffle
   part(0.4, 0.08, 1.9, darkMat, 2.9, 0.55, 0)
+  solide(g, 'metal'); traversable(wsGlass)
+  if (tintSolids) g.traverse(o => { if (o.userData.solid) tint(o) })
   return g
 }
 
@@ -203,7 +261,7 @@ function building(w, h, d, color, x, z) {
           const ledge = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 0.1),
             new THREE.MeshLambertMaterial({ color: shade(color, -0.2) }))
           ledge.position.set(win.position.x, win.position.y + 0.78, z + side * (d / 2 + 0.05))
-          add(ledge)
+          add(solide(ledge))
         }
       }
     }
@@ -212,7 +270,7 @@ function building(w, h, d, color, x, z) {
       new THREE.MeshLambertMaterial({ color: 0x1c1a20 }))
     door.position.set(x, 1.1, z + side * (d / 2 + 0.02))
     if (side === -1) door.rotation.y = Math.PI
-    add(door)
+    add(solide(door, 'bois'))
     // petite lampe au-dessus de la porte
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6),
       new THREE.MeshBasicMaterial({ color: 0xffeebb }))
@@ -258,22 +316,22 @@ export function buildMapStreet() {
   const cols = [0xcc2222, 0x2244cc, 0x888888, 0x224422, 0xccaa22]
   for (let i = 0; i < 5; i++) car(-6 + i * 0.3, -8 + i * 4, cols[i])
 
-  // Kiosque marché avec auvent
-  box(4, 0.1, 3, 0xcc8844, 6, 2.4, 5)
-  box(0.1, 2.4, 0.1, 0x885522, 4, 1.2, 3.5)
-  box(0.1, 2.4, 0.1, 0x885522, 8, 1.2, 3.5)
-  box(0.1, 2.4, 0.1, 0x885522, 4, 1.2, 6.5)
-  box(0.1, 2.4, 0.1, 0x885522, 8, 1.2, 6.5)
+  // Kiosque marché avec auvent (bois)
+  solide(box(4, 0.1, 3, 0xcc8844, 6, 2.4, 5), 'bois')
+  solide(box(0.1, 2.4, 0.1, 0x885522, 4, 1.2, 3.5), 'bois')
+  solide(box(0.1, 2.4, 0.1, 0x885522, 8, 1.2, 3.5), 'bois')
+  solide(box(0.1, 2.4, 0.1, 0x885522, 4, 1.2, 6.5), 'bois')
+  solide(box(0.1, 2.4, 0.1, 0x885522, 8, 1.2, 6.5), 'bois')
 
   // Lampadaires rue
   for (let lz = -10; lz <= 10; lz += 8) {
-    cylinder(0.08, 0.1, 7, 0x666666, 12, 3.5, lz)
+    solide(cylinder(0.08, 0.1, 7, 0x666666, 12, 3.5, lz), 'metal')
     const lp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xffffbb }))
     lp.position.set(12, 7.3, lz); add(lp)
     const pl = new THREE.PointLight(0xffdd88, 1.2, 15)
     pl.position.set(12, 7, lz); add(pl)
-    cylinder(0.08, 0.1, 7, 0x666666, -12, 3.5, lz)
+    solide(cylinder(0.08, 0.1, 7, 0x666666, -12, 3.5, lz), 'metal')
     const lp2 = lp.clone(); lp2.position.set(-12, 7.3, lz); add(lp2)
     const pl2 = new THREE.PointLight(0xffdd88, 1.2, 15)
     pl2.position.set(-12, 7, lz); add(pl2)
@@ -289,7 +347,7 @@ export function buildMapStreet() {
 
   // Poubelles
   for (let i = 0; i < 3; i++) {
-    cylinder(0.28, 0.32, 0.75, 0x445544, -4 + i * 6, 0.37, 14)
+    solide(cylinder(0.28, 0.32, 0.75, 0x445544, -4 + i * 6, 0.37, 14), 'metal')
   }
 
   // groundY : hauteur du dessus du sol dans la zone d'apparition (pieds des PNJ, impacts des tirs manqués)
@@ -332,8 +390,8 @@ export function buildMapWarehouse() {
     const angle = (i / 4) * Math.PI * 2
     const bx = Math.cos(angle) * 10
     const bz = Math.sin(angle) * 10
-    box(1.8, 0.35, 0.5, 0x5a4a3a, bx, 0.17, bz)   // banc
-    cylinder(0.08, 0.08, 5, 0x888888, bx + 2, 2.5, bz) // lampadaire
+    solide(box(1.8, 0.35, 0.5, 0x5a4a3a, bx, 0.17, bz), 'bois')   // banc
+    solide(cylinder(0.08, 0.08, 5, 0x888888, bx + 2, 2.5, bz), 'metal') // lampadaire
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xffffbb }))
     lamp.position.set(bx + 2, 5.15, bz)
@@ -403,7 +461,7 @@ export function buildMapDocks() {
   // ── SOL ──────────────────────────────────────────────────────────────
   plane(200, 200, 0x252520)
   // Dalle béton quai (zone de spawn uniquement — aucun obstacle dedans)
-  box(34, 0.35, 26, 0x2e2e28, 0, 0.17, -2)
+  solide(box(34, 0.35, 26, 0x2e2e28, 0, 0.17, -2), 'sol')
 
   // ── EAU (derrière, hors zone de spawn) ───────────────────────────────
   const water = new THREE.Mesh(
@@ -418,9 +476,9 @@ export function buildMapDocks() {
   // Entrepôt de fond
   box(40, 11, 8, 0x1e1e1a, 0, 5.5, -24)
   // Grandes portes métalliques entrepôt
-  box(7, 8, 0.3, 0x2a2a25, -9, 4, -20.1)
-  box(7, 8, 0.3, 0x2a2a25,  9, 4, -20.1)
-  box(2, 8, 0.3, 0x333330,  0, 4, -20.1)
+  solide(box(7, 8, 0.3, 0x2a2a25, -9, 4, -20.1), 'metal')
+  solide(box(7, 8, 0.3, 0x2a2a25,  9, 4, -20.1), 'metal')
+  solide(box(2, 8, 0.3, 0x333330,  0, 4, -20.1), 'metal')
   // Fenêtres entrepôt allumées
   for (let wx = -14; wx <= 14; wx += 7) {
     const ww = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 2.2),
@@ -430,20 +488,20 @@ export function buildMapDocks() {
     pl.position.set(wx, 8.5, -19); add(pl)
   }
 
-  // Bateau amarré à gauche (décor, loin de la zone spawn)
-  box(24, 4, 9, 0x1a2535, -28, 2, -18)
-  box(22, 0.8, 7, 0x243040, -28, 4.5, -18)
-  box(7, 5, 5, 0x1e3045, -28, 7, -14)
-  cylinder(0.25, 0.3, 6, 0x222222, -26, 10, -14)
+  // Bateau amarré à gauche (décor, loin de la zone spawn), coque et mât en acier
+  solide(box(24, 4, 9, 0x1a2535, -28, 2, -18), 'metal')
+  solide(box(22, 0.8, 7, 0x243040, -28, 4.5, -18), 'metal')
+  solide(box(7, 5, 5, 0x1e3045, -28, 7, -14), 'metal')
+  solide(cylinder(0.25, 0.3, 6, 0x222222, -26, 10, -14), 'metal')
   // Lumières bateau
   const bLight = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 6),
     new THREE.MeshBasicMaterial({ color: 0xffffff }))
   bLight.position.set(-28, 12, -14); add(bLight)
 
   // Grue (décor, à droite hors spawn)
-  box(0.9, 22, 0.9, 0xdd8800, 28, 11, -10)
-  box(18, 0.7, 0.7, 0xdd8800, 19, 22, -10)
-  box(0.08, 10, 0.08, 0x888888, 22, 17, -10)
+  solide(box(0.9, 22, 0.9, 0xdd8800, 28, 11, -10), 'metal')
+  solide(box(18, 0.7, 0.7, 0xdd8800, 19, 22, -10), 'metal')
+  solide(box(0.08, 10, 0.08, 0x888888, 22, 17, -10), 'metal')
   // Lumière rouge grue
   const grl = new THREE.Mesh(new THREE.SphereGeometry(0.2, 6, 6),
     new THREE.MeshBasicMaterial({ color: 0xff2200 }))
@@ -455,16 +513,16 @@ export function buildMapDocks() {
   const cCols = [0xcc3322, 0x2244cc, 0x228833, 0x886622, 0x553388]
   for (let col = 0; col < 3; col++) {
     for (let row = 0; row < 2; row++) {
-      box(2.4, 2.8, 5.5, cCols[(col + row * 3) % cCols.length],
-        -20 + col * 0.2, row * 2.8 + 1.4, -6 + col * 0.5)
-      box(2.4, 2.8, 5.5, cCols[(col + row * 2) % cCols.length],
-         20 - col * 0.2, row * 2.8 + 1.4, -6 + col * 0.5)
+      solide(box(2.4, 2.8, 5.5, cCols[(col + row * 3) % cCols.length],
+        -20 + col * 0.2, row * 2.8 + 1.4, -6 + col * 0.5), 'metal')
+      solide(box(2.4, 2.8, 5.5, cCols[(col + row * 2) % cCols.length],
+         20 - col * 0.2, row * 2.8 + 1.4, -6 + col * 0.5), 'metal')
     }
   }
 
   // ── LAMPADAIRES sur la dalle (bord, n'obstruent pas le spawn) ────────
   for (const lx of [-15, 0, 15]) {
-    cylinder(0.08, 0.1, 7, 0x666666, lx, 3.5, 12)
+    solide(cylinder(0.08, 0.1, 7, 0x666666, lx, 3.5, 12), 'metal')
     const lp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.4),
       new THREE.MeshBasicMaterial({ color: 0xffffaa }))
     lp.position.set(lx, 7.2, 12); add(lp)
@@ -474,23 +532,23 @@ export function buildMapDocks() {
 
   // ── POSTE SNIPER — toit conteneurs empilés côté droit de l'écran ─────
   // Caméra à [0, 10, 28] — donc derrière la caméra il y a le "mur" suivant
-  box(14, 6, 5, 0x333330, 0, 3, 30)     // conteneurs empilés (derrière sniper)
-  box(14, 0.3, 5, 0x2a2a25, 0, 6.15, 30) // toit / plateforme
-  box(12, 0.8, 0.2, 0x444440, 0, 6.6, 27.6) // muret appui sniper
+  solide(box(14, 6, 5, 0x333330, 0, 3, 30), 'metal')     // conteneurs empilés (derrière sniper)
+  solide(box(14, 0.3, 5, 0x2a2a25, 0, 6.15, 30), 'metal') // toit / plateforme
+  solide(box(12, 0.8, 0.2, 0x444440, 0, 6.6, 27.6), 'metal') // muret appui sniper
 
   // ── BOLLARDS jaunes bord du quai ─────────────────────────────────────
   for (let bx = -14; bx <= 14; bx += 7) {
-    cylinder(0.16, 0.19, 1.0, 0xddcc00, bx, 0.5, 11.5)
+    solide(cylinder(0.16, 0.19, 1.0, 0xddcc00, bx, 0.5, 11.5), 'metal')
   }
 
   // ── CONTENEUR VERROUILLÉ (choix moral) — bien visible, face au sniper ──
-  box(2.6, 3, 6, 0x8a1f1f, -16.5, 1.5, 2)              // conteneur rouge sombre
+  solide(box(2.6, 3, 6, 0x8a1f1f, -16.5, 1.5, 2), 'metal')              // conteneur rouge sombre
   // chaînes en croix sur la porte avant
   const chainMat = new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.8, roughness: 0.35 })
   const ch1 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.09, 0.06), chainMat)
-  ch1.position.set(-16.5, 1.5, 5.06); ch1.rotation.z = 0.5; add(ch1)
+  ch1.position.set(-16.5, 1.5, 5.06); ch1.rotation.z = 0.5; add(solide(ch1, 'metal'))
   const ch2 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.09, 0.06), chainMat)
-  ch2.position.set(-16.5, 1.5, 5.06); ch2.rotation.z = -0.5; add(ch2)
+  ch2.position.set(-16.5, 1.5, 5.06); ch2.rotation.z = -0.5; add(solide(ch2, 'metal'))
 
   // ── LUNE / AMBIANCE ──────────────────────────────────────────────────
   const moonLight = new THREE.PointLight(0x3355aa, 0.5, 300)
@@ -550,7 +608,7 @@ export function buildMapMilitary() {
   // Sol béton clair (cour de manœuvre)
   plane(200, 200, 0x8a8a7a)
   // Tarmac central (zone de spawn)
-  box(40, 0.2, 36, 0x6a6a60, 0, 0.1, -4)
+  solide(box(40, 0.2, 36, 0x6a6a60, 0, 0.1, -4), 'sol')
 
   // Marquages au sol (cercle hélipad au centre)
   const heli = new THREE.Mesh(
@@ -559,18 +617,18 @@ export function buildMapMilitary() {
   )
   heli.rotation.x = -Math.PI / 2
   heli.position.set(0, 0.22, -4); add(heli)
-  // H au centre
-  box(0.4, 0.05, 3, 0xffffff, -1, 0.23, -4)
-  box(0.4, 0.05, 3, 0xffffff,  1, 0.23, -4)
-  box(2.4, 0.05, 0.4, 0xffffff, 0, 0.23, -4)
+  // H au centre (peinture épaisse sur le tarmac : du sol)
+  solide(box(0.4, 0.05, 3, 0xffffff, -1, 0.23, -4), 'sol')
+  solide(box(0.4, 0.05, 3, 0xffffff,  1, 0.23, -4), 'sol')
+  solide(box(2.4, 0.05, 0.4, 0xffffff, 0, 0.23, -4), 'sol')
 
   // ── CLÔTURE périmètre (loin, z=-30 et côtés) ─────────────────────────
   for (let i = -16; i <= 16; i += 2) {
-    box(0.12, 3.5, 0.12, 0x999988, i * 2, 1.75, -32)
+    solide(box(0.12, 3.5, 0.12, 0x999988, i * 2, 1.75, -32), 'metal')
   }
-  box(68, 0.1, 0.1, 0xaaaa99, 0, 3.4, -32)
-  box(68, 0.1, 0.1, 0xaaaa99, 0, 2.4, -32)
-  box(68, 0.1, 0.1, 0xaaaa99, 0, 1.4, -32)
+  solide(box(68, 0.1, 0.1, 0xaaaa99, 0, 3.4, -32), 'metal')
+  solide(box(68, 0.1, 0.1, 0xaaaa99, 0, 2.4, -32), 'metal')
+  solide(box(68, 0.1, 0.1, 0xaaaa99, 0, 1.4, -32), 'metal')
 
   // ── BÂTIMENTS sur les CÔTÉS (hors zone de spawn x±18) ────────────────
   // Baraquement gauche
@@ -594,9 +652,9 @@ export function buildMapMilitary() {
   box(28, 10, 8, 0x6a7a5a, 0, 5, -28)
   box(28, 1, 8, 0x4a5a3a, 0, 10, -28)
   // Grande porte hangar
-  box(12, 8, 0.3, 0x3a4a2a, 0, 4, -23.9)
-  box(0.3, 8, 0.3, 0x556644, -6, 4, -23.9)
-  box(0.3, 8, 0.3, 0x556644,  6, 4, -23.9)
+  solide(box(12, 8, 0.3, 0x3a4a2a, 0, 4, -23.9), 'metal')
+  solide(box(0.3, 8, 0.3, 0x556644, -6, 4, -23.9), 'metal')
+  solide(box(0.3, 8, 0.3, 0x556644,  6, 4, -23.9), 'metal')
 
   // ── TOUR DE GARDE (position sniper) ──────────────────────────────────
   // IMPORTANT : toute la structure est DERRIÈRE la caméra (z >= 24)
@@ -612,28 +670,28 @@ export function buildMapMilitary() {
 
   // ── VÉHICULES militaires (sur les bords, hors spawn) ─────────────────
   // Camions à gauche/droite du tarmac
-  box(3, 2.4, 7, 0x4a5a3a, -15, 1.2, 6)
-  box(3, 1.4, 3, 0x3a4a2a, -15, 2.8, 8)    // cabine
-  box(3, 2.4, 7, 0x4a5a3a,  15, 1.2, 6)
-  box(3, 1.4, 3, 0x3a4a2a,  15, 2.8, 8)
+  solide(box(3, 2.4, 7, 0x4a5a3a, -15, 1.2, 6), 'metal')
+  solide(box(3, 1.4, 3, 0x3a4a2a, -15, 2.8, 8), 'metal')    // cabine
+  solide(box(3, 2.4, 7, 0x4a5a3a,  15, 1.2, 6), 'metal')
+  solide(box(3, 1.4, 3, 0x3a4a2a,  15, 2.8, 8), 'metal')
   // Jeep au fond
-  box(2.4, 1.4, 4, 0x5a6a4a, -10, 0.7, -16)
-  box(2.4, 1.4, 4, 0x5a6a4a,  10, 0.7, -16)
+  solide(box(2.4, 1.4, 4, 0x5a6a4a, -10, 0.7, -16), 'metal')
+  solide(box(2.4, 1.4, 4, 0x5a6a4a,  10, 0.7, -16), 'metal')
 
   // ── TONNEAUX / caisses sur les bords ─────────────────────────────────
   for (let i = 0; i < 5; i++) {
-    cylinder(0.5, 0.5, 1.2, 0x4a6a3a, -19 + Math.random() * 2, 0.6, -2 + i * 3)
-    cylinder(0.5, 0.5, 1.2, 0x6a5a2a,  19 - Math.random() * 2, 0.6, -2 + i * 3)
+    solide(cylinder(0.5, 0.5, 1.2, 0x4a6a3a, -19 + Math.random() * 2, 0.6, -2 + i * 3), 'metal')
+    solide(cylinder(0.5, 0.5, 1.2, 0x6a5a2a,  19 - Math.random() * 2, 0.6, -2 + i * 3), 'metal')
   }
 
   // ── TOUR RADAR (décor, au fond gauche) ───────────────────────────────
-  cylinder(0.3, 0.4, 12, 0x888888, -26, 6, -26)
+  solide(cylinder(0.3, 0.4, 12, 0x888888, -26, 6, -26), 'metal')
   const dish = new THREE.Mesh(new THREE.SphereGeometry(2, 12, 8, 0, Math.PI),
     new THREE.MeshLambertMaterial({ color: 0xcccccc, side: THREE.DoubleSide }))
-  dish.position.set(-26, 12, -26); dish.rotation.z = 0.5; add(dish)
+  dish.position.set(-26, 12, -26); dish.rotation.z = 0.5; add(solide(dish, 'metal'))
 
-  // ── DRAPEAU au centre-fond ───────────────────────────────────────────
-  cylinder(0.1, 0.1, 8, 0xaaaaaa, -8, 4, 4)
+  // ── DRAPEAU au centre-fond (la balle traverse le tissu) ──────────────
+  solide(cylinder(0.1, 0.1, 8, 0xaaaaaa, -8, 4, 4), 'metal')
   const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.5),
     new THREE.MeshBasicMaterial({ color: 0x335533, side: THREE.DoubleSide }))
   flag.position.set(-6.7, 7, 4); add(flag)
@@ -662,7 +720,7 @@ export function buildMapConvoy() {
   plane(300, 300, 0xa89878)
 
   // ── ROUTE le long de X (est-ouest) ───────────────────────────────────
-  box(90, 0.2, 9, 0x3a3a3a, 0, 0.1, -4)
+  solide(box(90, 0.2, 9, 0x3a3a3a, 0, 0.1, -4), 'sol')
   // Bandes centrales
   for (let x = -42; x <= 42; x += 7) {
     const line = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.4),
@@ -671,8 +729,8 @@ export function buildMapConvoy() {
     line.position.set(x, 0.22, -4); add(line)
   }
   // Bas-côtés sableux
-  box(90, 0.05, 2, 0x8a7a55, 0, 0.12, -8.5)
-  box(90, 0.05, 2, 0x8a7a55, 0, 0.12, 0.5)
+  solide(box(90, 0.05, 2, 0x8a7a55, 0, 0.12, -8.5), 'sol')
+  solide(box(90, 0.05, 2, 0x8a7a55, 0, 0.12, 0.5), 'sol')
 
   // ── VRAIS ROCHERS (formes irrégulières, fini les cubes) ──────────────
   const rockCols = [0x8d7c5f, 0x9a8a68, 0x7d6f57]
@@ -685,42 +743,42 @@ export function buildMapConvoy() {
     rock.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3)
     rock.scale.y = 0.55 + Math.random() * 0.5
     rock.castShadow = true; rock.receiveShadow = true
-    add(rock)
+    add(solide(rock))
   }
 
   // ── MESAS à l'horizon (silhouettes de canyon, profondeur western) ────
   for (const [mx, mz, mw, mh] of [[-70, -60, 26, 16], [55, -70, 34, 20], [0, -88, 42, 14], [82, -42, 20, 12]]) {
     const mesa = new THREE.Mesh(new THREE.CylinderGeometry(mw * 0.42, mw * 0.55, mh, 7),
       new THREE.MeshLambertMaterial({ color: 0x8a6f52 }))
-    mesa.position.set(mx, mh / 2, mz); add(mesa)
+    mesa.position.set(mx, mh / 2, mz); add(solide(mesa))
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(mw * 0.44, mw * 0.42, mh * 0.12, 7),
       new THREE.MeshLambertMaterial({ color: 0x9d8262 }))
-    cap.position.set(mx, mh + mh * 0.06, mz); add(cap)
+    cap.position.set(mx, mh + mh * 0.06, mz); add(solide(cap))
   }
 
   // ── GLISSIÈRES de sécurité le long de la route ───────────────────────
   for (const gz of [-8.7, 0.7]) {
-    box(88, 0.22, 0.08, 0x9aa0a4, 0, 0.72, gz, false)
-    for (let px = -42; px <= 42; px += 6) box(0.12, 0.72, 0.12, 0x6d7276, px, 0.36, gz, false)
+    solide(box(88, 0.22, 0.08, 0x9aa0a4, 0, 0.72, gz, false), 'metal')
+    for (let px = -42; px <= 42; px += 6) solide(box(0.12, 0.72, 0.12, 0x6d7276, px, 0.36, gz, false), 'metal')
   }
 
   // ── ÉPAVES / véhicules du convoi déjà arrêtés (décor, HORS de la chaussée) ──
   // La route (avec bas-côtés) couvre z=[-8.5, 0.5] — les jeeps roulent à z=-4.
   // Ces épaves sont posées bien au-delà, dans le sable, pour ne jamais être traversées.
   // Camion en panne à gauche
-  box(5, 2.6, 3, 0x6a6a4a, -34, 1.3, -13)
-  box(3, 2, 3, 0x5a5a3a, -36, 1, -13)
-  cylinder(0.6, 0.6, 0.4, 0x222222, -34, 0.4, -11)   // roue
+  solide(box(5, 2.6, 3, 0x6a6a4a, -34, 1.3, -13), 'metal')
+  solide(box(3, 2, 3, 0x5a5a3a, -36, 1, -13), 'metal')
+  solide(cylinder(0.6, 0.6, 0.4, 0x222222, -34, 0.4, -11), 'metal')   // roue
   // Blindé à droite
-  box(6, 2.4, 3.4, 0x4a5a3a, 34, 1.2, 6)
-  cylinder(1, 1.2, 0.7, 0x3a4a2a, 34, 2.6, 6)         // tourelle
-  box(4, 0.3, 0.3, 0x2a3a1a, 37, 2.6, 6)              // canon
+  solide(box(6, 2.4, 3.4, 0x4a5a3a, 34, 1.2, 6), 'metal')
+  solide(cylinder(1, 1.2, 0.7, 0x3a4a2a, 34, 2.6, 6), 'metal')         // tourelle
+  solide(box(4, 0.3, 0.3, 0x2a3a1a, 37, 2.6, 6), 'metal')              // canon
 
   // ── ARBRES MORTS désertiques (en arrière-plan) ───────────────────────
   for (let i = 0; i < 8; i++) {
     const x = (Math.random() - 0.5) * 90
     const z = -18 - Math.random() * 22
-    cylinder(0.15, 0.25, 2.5 + Math.random() * 2, 0x6a5a45, x, 1.5, z)
+    solide(cylinder(0.15, 0.25, 2.5 + Math.random() * 2, 0x6a5a45, x, 1.5, z), 'bois')
   }
 
   // ── PROMONTOIRE SNIPER (rocher surélevé, derrière la caméra) ─────────
@@ -729,9 +787,9 @@ export function buildMapConvoy() {
 
   // ── PYLÔNES électriques le long de la route (profondeur) ─────────────
   for (const px of [-30, 0, 30]) {
-    cylinder(0.2, 0.3, 10, 0x777777, px, 5, -22)
-    box(4, 0.3, 0.3, 0x777777, px, 9, -22)
-    box(4, 0.3, 0.3, 0x777777, px, 8, -22)
+    solide(cylinder(0.2, 0.3, 10, 0x777777, px, 5, -22), 'metal')
+    solide(box(4, 0.3, 0.3, 0x777777, px, 9, -22), 'metal')
+    solide(box(4, 0.3, 0.3, 0x777777, px, 8, -22), 'metal')
   }
 
   // ── COUCHER DE SOLEIL (carte postale du convoi) ──────────────────────
@@ -772,7 +830,7 @@ export function buildMapParty() {
   // ── SALLE DE FÊTE — pièce OUVERTE côté caméra (sinon on ne voit rien) ──
   // Sol parquet : SURFACE à y=0 (les PNJ ont les pieds à 0). Auparavant la
   // surface était à 0,3 → tout le monde (et les meubles) semblait enfoncé.
-  box(30, 0.2, 9, 0x4a3520, 0, -0.1, -20.5)
+  solide(box(30, 0.2, 9, 0x4a3520, 0, -0.1, -20.5), 'sol')
   // Plafond
   box(30, 0.3, 9, 0x15101e, 0, 8, -20.5)
   // Mur du fond
@@ -791,18 +849,18 @@ export function buildMapParty() {
   }
   // Montants verticaux de la baie (fins, n'occultent presque pas)
   for (const px of [-15, -5, 5, 15]) {
-    box(0.3, 8, 0.3, 0x0a0a12, px, 4, -16)
+    solide(box(0.3, 8, 0.3, 0x0a0a12, px, 4, -16), 'metal')
   }
   // Rambarde basse de la baie vitrée
-  box(30, 0.6, 0.2, 0x2a2a3a, 0, 1, -16)
+  solide(box(30, 0.6, 0.2, 0x2a2a3a, 0, 1, -16), 'metal')
 
-  // ── MOBILIER intérieur (décor de fête) ───────────────────────────────
+  // ── MOBILIER intérieur (décor de fête), en bois ──────────────────────
   // Table DJ (fond)
-  box(5, 1.1, 1.2, 0x1a1a1a, 0, 0.55, -24)
-  box(4.6, 0.15, 0.9, 0x222222, 0, 1.18, -24)  // plateau
+  solide(box(5, 1.1, 1.2, 0x1a1a1a, 0, 0.55, -24), 'bois')
+  solide(box(4.6, 0.15, 0.9, 0x222222, 0, 1.18, -24), 'bois')  // plateau
   // Enceintes DJ
-  box(1.0, 1.8, 0.8, 0x111111, -3.2, 0.9, -24)
-  box(1.0, 1.8, 0.8, 0x111111,  3.2, 0.9, -24)
+  solide(box(1.0, 1.8, 0.8, 0x111111, -3.2, 0.9, -24), 'bois')
+  solide(box(1.0, 1.8, 0.8, 0x111111,  3.2, 0.9, -24), 'bois')
   // Leds enceintes
   for (let i = 0; i < 3; i++) {
     const led = new THREE.Mesh(new THREE.CircleGeometry(0.12, 8),
@@ -811,14 +869,14 @@ export function buildMapParty() {
   }
 
   // Canapés
-  box(4, 0.55, 1.2, 0x3a1a2a, -8, 0.27, -22)
-  box(4, 0.8, 0.5, 0x3a1a2a, -8, 0.6, -22.6)   // dossier
-  box(4, 0.55, 1.2, 0x1a2a3a,  8, 0.27, -22)
-  box(4, 0.8, 0.5, 0x1a2a3a,  8, 0.6, -22.6)
+  solide(box(4, 0.55, 1.2, 0x3a1a2a, -8, 0.27, -22), 'bois')
+  solide(box(4, 0.8, 0.5, 0x3a1a2a, -8, 0.6, -22.6), 'bois')   // dossier
+  solide(box(4, 0.55, 1.2, 0x1a2a3a,  8, 0.27, -22), 'bois')
+  solide(box(4, 0.8, 0.5, 0x1a2a3a,  8, 0.6, -22.6), 'bois')
 
   // Tables basses
-  box(1.8, 0.35, 0.9, 0x2a2a2a, -8, 0.17, -20.5)
-  box(1.8, 0.35, 0.9, 0x2a2a2a,  8, 0.17, -20.5)
+  solide(box(1.8, 0.35, 0.9, 0x2a2a2a, -8, 0.17, -20.5), 'bois')
+  solide(box(1.8, 0.35, 0.9, 0x2a2a2a,  8, 0.17, -20.5), 'bois')
 
   // Meubles BAS (canapés + dossiers, tables) : trop bas pour être détectés
   // automatiquement par box() (seuil h ≥ 1,1) → on les déclare explicitement
@@ -831,12 +889,12 @@ export function buildMapParty() {
   }
 
   // Bar côté gauche
-  box(5, 1.2, 1.2, 0x2a1a10, -10, 0.6, -19)
-  box(5.2, 0.1, 1.3, 0x3a2810, -10, 1.26, -19) // comptoir
-  // Bouteilles sur le bar
+  solide(box(5, 1.2, 1.2, 0x2a1a10, -10, 0.6, -19), 'bois')
+  solide(box(5.2, 0.1, 1.3, 0x3a2810, -10, 1.26, -19), 'bois') // comptoir
+  // Bouteilles sur le bar (verre : la balle les traverse)
   for (let i = 0; i < 4; i++) {
-    cylinder(0.12, 0.12, 0.55, [0x228800, 0xaa4400, 0x8800aa, 0x884400][i],
-      -12 + i * 0.6, 1.55, -18.45)
+    traversable(cylinder(0.12, 0.12, 0.55, [0x228800, 0xaa4400, 0x8800aa, 0x884400][i],
+      -12 + i * 0.6, 1.55, -18.45))
   }
 
   // Boule à facettes (disco ball)
@@ -844,9 +902,9 @@ export function buildMapParty() {
     new THREE.SphereGeometry(0.55, 12, 12),
     new THREE.MeshLambertMaterial({ color: 0xdddddd, wireframe: false })
   )
-  discoBall.position.set(0, 6.5, -20); add(discoBall)
+  discoBall.position.set(0, 6.5, -20); add(solide(discoBall, 'metal'))
   // Fil de suspension
-  box(0.04, 1.2, 0.04, 0x888888, 0, 7.1, -20)
+  solide(box(0.04, 1.2, 0.04, 0x888888, 0, 7.1, -20), 'metal')
 
   // ── ÉCLAIRAGE PRINCIPAL de la salle (pour voir les PNJ) ───────────────
   // Plusieurs point lights blanc-chaud répartis dans l'appartement
@@ -909,14 +967,14 @@ export function buildMapParty() {
 
   // Rue entre les deux immeubles (déchets, poubelles)
   for (let i = -3; i <= 3; i++) {
-    cylinder(0.35, 0.4, 0.9, 0x333322, i * 4, 0.45, -5)  // poubelle
-    cylinder(0.38, 0.38, 0.05, 0x222211, i * 4, 0.92, -5) // couvercle
+    solide(cylinder(0.35, 0.4, 0.9, 0x333322, i * 4, 0.45, -5), 'metal')  // poubelle
+    solide(cylinder(0.38, 0.38, 0.05, 0x222211, i * 4, 0.92, -5), 'metal') // couvercle
   }
 
   // Quelques passants dans la rue (zone spawn)
   // Lampadaires rue
   for (let lx = -10; lx <= 10; lx += 10) {
-    cylinder(0.08, 0.1, 6, 0x666666, lx, 3, -5)
+    solide(cylinder(0.08, 0.1, 6, 0x666666, lx, 3, -5), 'metal')
     const lp = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xffffaa }))
     lp.position.set(lx, 6.2, -5); add(lp)
@@ -944,6 +1002,13 @@ export function buildMapParty() {
   }
 }
 
+// Chaque carte, teintée après sa construction pendant la vérification des solides (?solides=1).
+const verifiable = build => () => {
+  const info = build()
+  if (tintSolids) for (const m of solidMeshes()) tint(m)
+  return info
+}
+
 export const MAP_BUILDERS = [
   buildMapStreet,
   buildMapWarehouse,
@@ -951,4 +1016,4 @@ export const MAP_BUILDERS = [
   buildMapMilitary,
   buildMapConvoy,
   buildMapParty,
-]
+].map(verifiable)

@@ -43,8 +43,11 @@ describe('ce qui compte comme touche', () => {
     expect(isHit('lock')).toBe(true)
   })
 
+  // Depuis la tâche T5 du lot 2, un tir manqué s'arrête dans le décor ('decor') ou part au loin ('rien').
   it('un tir manqué ne compte pas', () => {
     expect(isHit('miss')).toBe(false)
+    expect(isHit('decor')).toBe(false)
+    expect(isHit('rien')).toBe(false)
   })
 
   // Règle inchangée : un garde abattu n'est pas un contrat, il ne compte pas pour la précision.

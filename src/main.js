@@ -4,9 +4,9 @@ import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope,
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
-import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject } from './maps.js'
+import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject, solidMeshes, setSolidTint } from './maps.js'
 import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
-import { spawnTrail, spawnImpact, spawnDust, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
+import { spawnTrail, retargetTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
 import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
@@ -16,6 +16,7 @@ import { STRESS, APNEE, SILLAGE } from './shot/tuning.js'
 import { createRecoil } from './shot/recoil.js'
 import { createBolt } from './shot/bolt.js'
 import { npcHit } from './shot/hitzones.js'
+import { solidHit, resolveImpact } from './shot/occlusion.js'
 import { targetScore, guardHit } from './shot/score.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
@@ -23,7 +24,6 @@ import { rankFor, precisionOf, isHit } from './campaign/rank.js'
 import { levelShortcut } from './campaign/shortcuts.js'
 import { stepConvoy, releaseConvoy } from './campaign/convoy.js'
 import { buildMoralLock, releaseMoralLock } from './campaign/lock.js'
-import { missImpact } from './campaign/impact.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
@@ -54,6 +54,8 @@ const SENSITIVITY = 0.0018
 let bulletInFlight = false
 let bulletDelay = 0
 let pendingShotRay = null   // rayon capturé À L'INSTANT du tir (pas à l'impact)
+let pendingTrail = null     // sillage de la balle en vol : la résolution recale son bout sur le point d'impact
+let lastImpact = null       // ce que la dernière balle a touché (relu par __mission() en développement)
 // Coup de feu (spec du lot 2, §3.3) : recul ajouté au regard du joueur (recoilOffset, en radians, relu à chaque image)
 // et culasse, toutes deux au temps de la mission (missionClock, en secondes, avancé de dt en jeu : arrêté en pause,
 // ralenti pendant la kill-cam).
@@ -535,6 +537,7 @@ function startLevel(n, prep = null) {
   }
 
   stress = 0; alertActive = false; alertTimer = 0; bulletInFlight = false
+  pendingTrail = null; lastImpact = null
   missionClock = 0; bolt.reset()   // culasse prête au premier coup
   document.getElementById('game-over-reason').textContent = 'Vous avez été repéré'
   score = upgradeState.totalScore
@@ -911,27 +914,36 @@ function shoot() {
   ray.setFromCamera(new THREE.Vector2(aimX, aimY), camera)
   pendingShotRay = ray
 
-  // Sillage : du canon jusqu'à ce que la balle rencontre sur son rayon au moment du coup, pendant le temps de vol
-  spawnTrail(camera.localToWorld(MUZZLE.clone()), firstHit(ray.ray).point, stats.bulletDelay)
+  // Sillage : du canon jusqu'à ce que la balle rencontre sur son rayon au moment du coup (le PNJ, le décor, sinon un
+  // point au loin), pendant le temps de vol ; la résolution le recale si elle trouve autre chose (resolveBullet)
+  pendingTrail = spawnTrail(camera.localToWorld(MUZZLE.clone()), firstHit(ray.ray).point, stats.bulletDelay)
   // Recul : la vue monte après le départ de la balle, qui va là où l'on visait
   recoil.kick()
 }
 
-// Ce que la balle rencontre en premier sur son rayon : le PNJ vivant le plus proche, touché sur une de ses zones
-// calées sur les os (npcHit, src/shot/hitzones.js : tête, torse ou membre), sinon le cadenas du port, sinon le sol de
-// la carte (ou 40 m devant). kind : 'target', 'civilian', 'guard', 'lock' ou 'miss' ; part : zone touchée sur le PNJ
-// ('tete', 'torse', 'membre'), ou null ; point : où la balle s'arrête ; hole : trou d'impact laissé au sol (tir
-// manqué), ou null.
+// Ce qui arrête une balle dans la mission, hors PNJ (spec du lot 2, §3.4) : le décor solide de la carte (maps.js), les
+// jeeps du convoi, et le cadenas du port par sa boîte (plus large que lui : il se vise facilement).
+const missionSolids = () => (convoyCar ? [...solidMeshes(), ...convoyCar.vehicles.map(v => v.mesh)] : solidMeshes())
+const missionBoxes = () => (moralLockBox ? [{ box: moralLockBox, surface: 'metal', cadenas: true }] : [])
+
+// La jeep du convoi dont fait partie un maillage touché, ou null : une marque y reste et roule avec elle.
+function jeepOf(objet) {
+  const jeeps = convoyCar ? convoyCar.vehicles.map(v => v.mesh) : []
+  for (let o = objet; o; o = o.parent) if (jeeps.includes(o)) return o
+  return null
+}
+
+// Ce que la balle rencontre en premier sur son rayon (resolveImpact, src/shot/occlusion.js) : le PNJ vivant le plus
+// proche, touché sur une de ses zones calées sur les os (npcHit, src/shot/hitzones.js : tête, torse ou membre), le
+// décor solide (solidHit : la carte, les jeeps, le cadenas), sinon rien (un point au loin sur le rayon). Le résultat
+// de resolveImpact, plus role : 'target', 'civilian', 'guard' (PNJ), 'lock' (le cadenas), 'decor' ou 'rien' ; point :
+// où la balle s'arrête.
 function firstHit(ray) {
-  const hit = npcHit(ray, npcs)
-  if (hit) {
-    const { npc, part, point } = hit
-    return { kind: npc.isTarget ? 'target' : npc.isCivilian ? 'civilian' : 'guard', npc, part, point, hole: null }
-  }
-  const lockPt = moralLockBox && ray.intersectBox(moralLockBox, new THREE.Vector3())
-  if (lockPt) return { kind: 'lock', npc: null, part: null, point: lockPt, hole: null }
-  const { point: missPt, hole } = missImpact(ray, mapGround())
-  return { kind: 'miss', npc: null, part: null, point: missPt, hole }
+  const npc = npcHit(ray, npcs)
+  const impact = resolveImpact({ ray, npcHits: npc ? [npc] : [], decorHit: solidHit(ray, missionSolids(), missionBoxes()) })
+  const role = impact.kind === 'npc' ? (impact.npc.isTarget ? 'target' : impact.npc.isCivilian ? 'civilian' : 'guard')
+    : impact.cadenas ? 'lock' : impact.kind
+  return { ...impact, role }
 }
 
 function resolveBullet() {
@@ -940,14 +952,20 @@ function resolveBullet() {
   // Utiliser le rayon CAPTURÉ AU MOMENT DU TIR (pas la visée actuelle)
   const raycaster = pendingShotRay
   pendingShotRay = null
+  const trail = pendingTrail
+  pendingTrail = null
   if (!raycaster) return
 
   const stats = getStats()
 
-  // Ce que la balle touche : le PNJ le plus proche (sur la pose qu'il a à l'arrivée de la balle), sinon le cadenas du
-  // port, sinon rien
-  const { kind, npc: closestNpc, part, point: closestPt, hole: holePos } = firstHit(raycaster.ray)
-  if (isHit(kind)) statHits++   // précision du rapport de fin : le cadenas compte, libérer n'interdit pas FANTÔME
+  // Ce que la balle touche, à son arrivée (pose des PNJ, jeeps qui ont roulé) : le premier sur son rayon, d'un PNJ, du
+  // décor solide et du cadenas ; sinon elle part au loin. Le sillage finit là, même si un PNJ a quitté la ligne depuis
+  // le coup.
+  const hit = firstHit(raycaster.ray)
+  const { role, npc: closestNpc, part, point: closestPt } = hit
+  retargetTrail(trail, hit.point)
+  lastImpact = { role, surface: hit.surface || null, part: part || null }
+  if (isHit(role)) statHits++   // précision du rapport de fin : le cadenas compte, libérer n'interdit pas FANTÔME
 
   if (closestNpc) {
     // Éclaboussure de sang au point d'impact
@@ -963,7 +981,7 @@ function resolveBullet() {
   }
 
   // CHOIX MORAL : tir sur le cadenas du conteneur → les victimes s'échappent
-  if (kind === 'lock') {
+  if (role === 'lock') {
     spawnImpact(moralLockMesh.position.clone(), 0xc9a227, 10)
     const lockPos = moralLockMesh.position.clone()
     removeMoralLock()
@@ -982,13 +1000,14 @@ function resolveBullet() {
     }
   }
 
-  // Tir raté
-  if (kind === 'miss') {
-    // Point d'impact sur le sol de la carte (ou loin devant)
+  // Tir raté : la balle s'arrête dans le décor (gerbe de sa matière, marque persistante sur la surface, qui roule avec
+  // une jeep touchée), ou part au loin. Les PNJ proches du point d'impact réagissent.
+  if (role === 'decor' || role === 'rien') {
     const shotPos = closestPt
-    spawnDust(shotPos)
-    // trou d'impact persistant dans le sol (témoin de tes tirs ratés)
-    if (holePos) spawnBulletHole(holePos)
+    if (role === 'decor') {
+      spawnSpray(shotPos, hit.normal, hit.surface)
+      spawnBulletHole(shotPos, hit.normal, jeepOf(hit.objet))
+    }
 
     if (!stats.silenced) {
       stress = Math.min(1, stress + STRESS.tirManque)
@@ -1558,11 +1577,15 @@ if (import.meta.env.DEV) {
     culasse: +bolt.progress(missionClock).toFixed(3), stress,
     trembleMrad: getTrembleMrad(), tremblePx: getTrembleOffset(), regard: viewAngles(),
     reculDeg: { tangage: +THREE.MathUtils.radToDeg(recoilOffset.pitch).toFixed(4), lacet: +THREE.MathUtils.radToDeg(recoilOffset.yaw).toFixed(4) } })
-  // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console
+  // ?solides=1 : chaque maillage qui arrête la balle prend la couleur de sa matière (pierre gris clair, métal bleu,
+  // bois orange, sol vert ; maps.js, SOLID_TINTS), la carte affichée et toutes celles qui suivent, jeeps comprises.
+  if (q.has('solides')) setSolidTint(true)
+  // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console ;
+  // dernierImpact : ce que la dernière balle a touché ({ role, surface, part }, voir firstHit)
   window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,
     pnj: npcs.map(n => n.mesh.position.toArray().map(v => +v.toFixed(3))),
     chronoMs: Math.round(performance.now() - statStart), tirs: statShots, touches: statHits, alertes: statAlerts, score,
-    balle: bulletInFlight, sol: mapGround(), souffle: holdBreathKey,
+    balle: bulletInFlight, sol: mapGround(), souffle: holdBreathKey, dernierImpact: lastImpact,
     jeeps: convoyCar ? convoyCar.vehicles.map(v => v.mesh.position.toArray().map(c => +c.toFixed(3))) : null })
   // Visée scriptée (scripts/verif-mission.mjs) : __aimAt('cadenas') vise le cadenas du port, __aimAt('civil', 2) le
   // troisième civil vivant ('cible', 'garde', 'civil'). Faux si rien ne correspond. Le tir reste celui du joueur.
@@ -1573,8 +1596,8 @@ if (import.meta.env.DEV) {
   // n'en a pas.
   const vitessePnj = npc => npc.state === STATES.FLEE ? npc.fleeDir.clone().multiplyScalar(npc.speed * 8)
     : npc.state === STATES.WALK ? npc.walkDir.clone().multiplyScalar(npc.speed) : new THREE.Vector3()
+  const role = npc => npc.isTarget ? 'cible' : npc.isCivilian ? 'civil' : 'garde'
   window.__aimAt = (what, n = 0, avance = 0, zone = 'torse') => {
-    const role = npc => npc.isTarget ? 'cible' : npc.isCivilian ? 'civil' : 'garde'
     const npc = what === 'cadenas' ? null : npcs.filter(x => x.alive && role(x) === what)[n]
     const z = npc && npc.hitZones().find(x => x.part === zone)
     const p = what === 'cadenas' ? moralLockBox && moralLockBox.getCenter(new THREE.Vector3())
@@ -1583,6 +1606,15 @@ if (import.meta.env.DEV) {
     if (avance && convoyCar && npc) p.x += convoyCar.dir * convoyCar.speed * avance
     else if (avance && npc) p.addScaledVector(vitessePnj(npc), avance)
     ;({ yaw, pitch } = aimAngles(camera.position.toArray(), p.toArray()))
+    return true
+  }
+  // Pose un PNJ vivant (quoi, n : comme __aimAt) en (x, z), sur le sol de la carte, et l'y garde immobile jusqu'à ce
+  // qu'il fuie : scripts/verif-mission.mjs, cible cachée derrière un conteneur (spec du lot 2, §4). Faux sans PNJ.
+  window.__placer = (what, n, x, z) => {
+    const npc = npcs.filter(p => p.alive && role(p) === what)[n]
+    if (!npc) return false
+    npc.mesh.position.set(x, npc.groundY, z)
+    npc.lockState = STATES.IDLE; npc.state = STATES.IDLE; npc.stateTimer = 0
     return true
   }
   // ?memtest=1&images=3 : mesure mémoire scriptée (spec du lot 1 §4.1), lue par scripts/memtest.mjs. Pas de

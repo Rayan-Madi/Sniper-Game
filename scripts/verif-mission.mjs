@@ -300,6 +300,25 @@ const SCENARIOS = {
     } finally { await c.close() }
   },
 
+  // Port (spec du lot 2, §4 et §5) : une cible posée derrière le conteneur rouge (__placer), visée au torse à travers
+  // lui. La balle s'arrête sur le conteneur, en métal (étincelles et marque : CAPTURES=1), et ne touche personne. Avant
+  // le lot 2 (aucune occlusion), elle touchait la cible au travers.
+  async occlusion() {
+    const c = await play(3)
+    try {
+      check(await js(c, `__placer('cible', 0, -16.5, -3)`), 'cible posée derrière le conteneur rouge', null)
+      await frames(c, 3)
+      const avant = await mission(c)
+      check(await aimAndShoot(c, 'cible', 0), 'cible visée au torse, à travers le conteneur', null)
+      await capture(c, 'occlusion-m3')
+      const m = await mission(c)
+      check(m.tirs === avant.tirs + 1, 'un tir est parti', { avant: avant.tirs, apres: m.tirs })
+      check(m.touches === 0 && m.cibles === avant.cibles, 'aucune touche à travers le conteneur', { touches: m.touches, cibles: m.cibles })
+      check(m.dernierImpact && m.dernierImpact.role === 'decor' && m.dernierImpact.surface === 'metal',
+        'la balle s\'est arrêtée sur le conteneur (décor en métal)', m.dernierImpact)
+    } finally { await c.close() }
+  },
+
   // Civil abattu puis Échap dans les 600 ms : pas de pause, l'échec arrive seul.
   async 'civil-echap'() {
     const c = await play(1)

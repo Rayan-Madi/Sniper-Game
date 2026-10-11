@@ -3,8 +3,9 @@ import * as THREE from 'three'
 
 // Effets de tir et trous d'impact (spec du lot 1 §4.2) : créés en rafale, à chaque tir. Une géométrie de particule
 // partagée, un seul matériau par éclaboussure (son opacité baisse) libéré en fin de vie, le sillage de la balle (lot 2,
-// tâche T3 : il remplace le traceur d'impact) libère ce qu'il possède ; les trous d'impact partagent une géométrie et un
-// matériau, jamais libérés.
+// tâche T3 : il remplace le traceur d'impact) libère ce qu'il possède, les gerbes des impacts sur le décor aussi (lot 2,
+// tâche T5 : une par matière, un matériau par nuage) ; les trous d'impact, orientés sur la surface touchée, partagent
+// une géométrie et un matériau, jamais libérés.
 vi.mock('../../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
@@ -17,27 +18,31 @@ import { createFakeRenderer, drawnGeometries, trackDisposals } from './fakeRende
 // ressources déjà libérées, qui ne doivent pas passer d'un test à l'autre. Sinon un test ne voit pas une ressource
 // partagée libérée à tort : un test précédent l'a déjà libérée (et retenue comme telle), elle ne l'est plus une
 // seconde fois. Avec les modules gardés, « tir manqué » restait vert sous une libération du partagé.
-let scene, spawnTrail, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole,
+let scene, spawnTrail, spawnImpact, spawnSpray, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole,
   clearBulletHoles, isShared
 beforeEach(async () => {
   vi.resetModules()
   ;({ scene } = await import('../../src/scene.js'))
-  ;({ spawnTrail, spawnImpact, spawnDust, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles }
+  ;({ spawnTrail, spawnImpact, spawnSpray, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles }
     = await import('../../src/effects.js'))
   ;({ isShared } = await import('../../src/gfx/dispose.js'))
   scene.clear()
 })
 
 const FROM = new THREE.Vector3(0, 9.5, 28), AT = new THREE.Vector3(2, 1.2, -4)
-// Tir touché : sillage pendant les 0,45 s du vol, puis éclaboussure de 16 particules (resolveBullet). Tir manqué :
-// sillage et poussière. Les deux partent ensemble ici : seule compte la libération.
+// Tir touché : sillage pendant les 0,45 s du vol, puis éclaboussure de 16 particules (resolveBullet). Tir dans le
+// décor : sillage et gerbe de la matière touchée (la marque, partagée, est à part). Ils partent ensemble ici : seule
+// compte la libération.
+const NORMALE = new THREE.Vector3(0, 0, 1)
 const hit = () => { spawnTrail(FROM, AT, 0.45); spawnImpact(AT, 0xaa2222, 16) }
-const miss = () => { spawnTrail(FROM, AT, 0.45); spawnDust(AT) }
+const decor = surface => () => { spawnTrail(FROM, AT, 0.45); spawnSpray(AT, NORMALE, surface) }
+const miss = decor('sol')
+const DECOR = ['metal', 'pierre', 'bois', 'sol'].map(s => [`tir dans le décor (${s})`, decor(s)])
 const expire = () => { for (let i = 0; i < 3; i++) updateEffects(1) }   // vol et effacement du sillage compris
 const splashes = () => scene.children.filter(o => o.isGroup)
 
 describe('effets de tir, niveau 1 : en fin de vie, tout ce qui est possédé est libéré, rien de partagé', () => {
-  for (const [name, shot] of [['tir touché', hit], ['tir manqué', miss], ['flash de bouche', () => spawnMuzzle(FROM, new THREE.Vector3(0, 0, -1))]]) {
+  for (const [name, shot] of [['tir touché', hit], ...DECOR, ['flash de bouche', () => spawnMuzzle(FROM, new THREE.Vector3(0, 0, -1))]]) {
     it(name, () => {
       shot()
       const t = trackDisposals(scene)
@@ -96,7 +101,7 @@ describe('éclaboussure : une géométrie partagée, un matériau par impact', (
 })
 
 describe('effets de tir, niveau 2 : faux renderer', () => {
-  for (const [name, shot] of [['100 tirs touchés', hit], ['100 tirs manqués', miss]]) {
+  for (const [name, shot] of [['100 tirs touchés', hit], ...DECOR.map(([n, f]) => ['100 ' + n.replace('tir', 'tirs'), f])]) {
     it(`${name} puis fin de vie : Δ = 0`, () => {
       const r = createFakeRenderer()
       shot(); r.render(scene); expire(); r.render(scene)
@@ -135,12 +140,30 @@ describe('trous d\'impact', () => {
     expect(n).toBe(0)
   })
 
-  it('faux renderer : 100 tirs manqués, toujours une seule géométrie de trou comptée', () => {
+  it('faux renderer : 100 tirs dans le décor (sol, murs, flancs), toujours une seule géométrie de trou comptée', () => {
     const r = createFakeRenderer()
-    for (let i = 0; i < 100; i++) { spawnBulletHole(at(i)); r.render(scene) }
+    const normales = [new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0)]
+    for (let i = 0; i < 100; i++) { spawnBulletHole(at(i), normales[i % 3]); r.render(scene) }
     expect(r.info().geometries).toBe(1)
     clearBulletHoles()
     for (let i = 0; i < 100; i++) { spawnBulletHole(at(i)); r.render(scene) }
     expect(r.info().geometries).toBe(1)
+  })
+
+  // Marque sur une jeep du convoi (lot 2, tâche T5) : rattachée à elle. La jeep libérée (releaseConvoy, disposeObject)
+  // ne libère pas la géométrie ni le matériau partagés des trous ; clearBulletHoles retire ensuite la marque.
+  it("une marque rattachée à une jeep : la jeep libérée, rien du trou ne l'est", async () => {
+    const { disposeObject } = await import('../../src/gfx/dispose.js')
+    const jeep = new THREE.Group()
+    jeep.add(new THREE.Mesh(new THREE.BoxGeometry(5, 0.7, 2.4), new THREE.MeshLambertMaterial()))
+    scene.add(jeep)
+    const hole = spawnBulletHole(at(0), new THREE.Vector3(0, 0, 1), jeep)
+    expect(hole.parent).toBe(jeep)
+    const t = trackDisposals(jeep)
+    disposeObject(jeep)
+    expect(t.sharedFreed()).toEqual([])
+    expect(t.leaks()).toEqual([])
+    clearBulletHoles()
+    expect(hole.parent).toBe(null)
   })
 })

@@ -7,7 +7,7 @@
 // Prérequis : npm run dev. Usage : node scripts/capture-mission.mjs <dossier> [menu] [1…6] [retour1…retour6]
 //   [lunette1…lunette6] [mi-lunette1…mi-lunette6] [tir1…tir6]
 //   ex. node scripts/capture-mission.mjs avant-lot1 menu 1 3 5 6   → shots/avant-lot1/m1.png, …
-//   retour<n> : mission n, trois tirs manqués (impacts au sol, poussière, sillage encore en vie), puis retour au menu
+//   retour<n> : mission n, trois tirs manqués (marques et gerbes dans le décor, sillage encore en vie), puis retour au menu
 //   (pause, MENU ; MENU de l'écran d'échec si une cible a fui) → shots/<dossier>/retour-m<n>.png. Le décor de la
 //   scène (__decor() : fond, objets hors carte) est affiché avant et après le retour.
 //   lunette<n> : mission n, vue de départ, puis clic droit et 15 images (250 ms) : lunette ouverte à 100 %
@@ -204,11 +204,11 @@ async function shoot(target) {
   }
 }
 
-// Lunette ouverte, visée relevée au-dessus des PNJ : la balle passe haut et finit au sol très loin derrière eux (une
-// soixantaine de mètres au port), aucun ne fuit et la mission continue. Trois tirs manqués un peu décalés, puis
-// retour au menu pendant que poussière et sillage sont encore en vie. Le clic gauche ne tire que lunette ouverte à
-// 100 % (180 ms, spec du lot 2 §3.2) et culasse revenue (1,2 s après le coup précédent, §3.3) : avant chaque tir, les
-// images avancent jusqu'à __aim().pret.
+// Lunette ouverte, visée relevée au-dessus des PNJ : la balle passe haut et finit loin derrière eux, dans le décor du
+// fond (au port, l'entrepôt et ses portes, à une cinquantaine de mètres ; spec du lot 2 §3.4), aucun ne fuit et la mission
+// continue. Trois tirs manqués un peu décalés, puis retour au menu pendant que gerbes et sillage sont encore en vie.
+// Le clic gauche ne tire que lunette ouverte à 100 % (180 ms, spec du lot 2 §3.2) et culasse revenue (1,2 s après le
+// coup précédent, §3.3) : avant chaque tir, les images avancent jusqu'à __aim().pret.
 const mouse = (type, init) => `document.dispatchEvent(new MouseEvent('${type}', ${JSON.stringify(init)}))`
 const playing = c => js(c, `__mission().phase === 'playing'`)
 async function missThenMenu(c) {
