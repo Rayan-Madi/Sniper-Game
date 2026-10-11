@@ -83,11 +83,17 @@ export const SCORE_ZONE = {
 }
 
 // ─── Zones touchées (rayons en mètres) ─────────────────────────────
+// Calées sur les os des modèles (src/shot/hitzones.js), mesurées sur les sept GLB du jeu, sommet par sommet, debout
+// et assis (tests/shot/glb-bones.test.js) : chaque rayon suit la distance typique de la peau (vêtements compris) à
+// l'os. Plus grand, la zone déborde de la silhouette ; plus petit, la balle traverse un bord visible sans toucher.
 export const ZONES = {
-  tete: 0.13,           // sphère de la tête (« sphère de 13 cm » du §3.6 de la spec)
-  torse: 0.15,          // capsule du bassin au cou : un rayon qui passe à 25 cm de l'axe la manque
-  bras: 0.06,           // capsules des bras
-  jambe: 0.08,          // capsules des jambes
+  tete: 0.10,           // sphère entre les os Head et HeadTop_End : 20 cm, pour une tête de 17 cm de large et 23 de haut
+  torse: 0.15,          // capsule des hanches au haut du dos : un rayon qui passe à 25 cm de l'axe la manque
+  cou: 0.06,            // capsule de la base du cou à la tête, comptée torse
+  bras: 0.06,           // bras, avant-bras et mains
+  jambe: 0.08,          // cuisses et tibias
+  pied: 0.05,           // pieds, de la cheville à la plante
+  prefiltre: 0.3,       // marge ajoutée de chaque côté de la boîte grossière d'un PNJ avant le test des zones
 }
 
 // ─── Son ───────────────────────────────────────────────────────────

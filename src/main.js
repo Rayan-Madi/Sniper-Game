@@ -15,6 +15,8 @@ import { aimAngles, stepStress, clampPitch } from './aim.js'
 import { STRESS, APNEE, SILLAGE } from './shot/tuning.js'
 import { createRecoil } from './shot/recoil.js'
 import { createBolt } from './shot/bolt.js'
+import { npcHit } from './shot/hitzones.js'
+import { targetScore, guardHit } from './shot/score.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
 import { rankFor, precisionOf, isHit } from './campaign/rank.js'
@@ -915,22 +917,21 @@ function shoot() {
   recoil.kick()
 }
 
-// Ce que la balle rencontre en premier sur son rayon : le PNJ vivant le plus proche (boîte de getBounds), sinon le
-// cadenas du port, sinon le sol de la carte (ou 40 m devant). kind : 'target', 'civilian', 'guard', 'lock' ou 'miss' ;
-// point : où la balle s'arrête ; hole : trou d'impact laissé au sol (tir manqué), ou null.
+// Ce que la balle rencontre en premier sur son rayon : le PNJ vivant le plus proche, touché sur une de ses zones
+// calées sur les os (npcHit, src/shot/hitzones.js : tête, torse ou membre), sinon le cadenas du port, sinon le sol de
+// la carte (ou 40 m devant). kind : 'target', 'civilian', 'guard', 'lock' ou 'miss' ; part : zone touchée sur le PNJ
+// ('tete', 'torse', 'membre'), ou null ; point : où la balle s'arrête ; hole : trou d'impact laissé au sol (tir
+// manqué), ou null.
 function firstHit(ray) {
-  let npc = null, dist = Infinity, point = null
-  for (const n of npcs) {
-    if (!n.alive) continue
-    const { center, size } = n.getBounds()
-    const pt = ray.intersectBox(new THREE.Box3().setFromCenterAndSize(center, size), new THREE.Vector3())
-    if (pt && ray.origin.distanceTo(pt) < dist) { dist = ray.origin.distanceTo(pt); npc = n; point = pt }
+  const hit = npcHit(ray, npcs)
+  if (hit) {
+    const { npc, part, point } = hit
+    return { kind: npc.isTarget ? 'target' : npc.isCivilian ? 'civilian' : 'guard', npc, part, point, hole: null }
   }
-  if (npc) return { kind: npc.isTarget ? 'target' : npc.isCivilian ? 'civilian' : 'guard', npc, point, hole: null }
   const lockPt = moralLockBox && ray.intersectBox(moralLockBox, new THREE.Vector3())
-  if (lockPt) return { kind: 'lock', npc: null, point: lockPt, hole: null }
+  if (lockPt) return { kind: 'lock', npc: null, part: null, point: lockPt, hole: null }
   const { point: missPt, hole } = missImpact(ray, mapGround())
-  return { kind: 'miss', npc: null, point: missPt, hole }
+  return { kind: 'miss', npc: null, part: null, point: missPt, hole }
 }
 
 function resolveBullet() {
@@ -943,17 +944,17 @@ function resolveBullet() {
 
   const stats = getStats()
 
-  // Ce que la balle touche : le PNJ le plus proche, sinon le cadenas du port, sinon rien
-  const { kind, npc: closestNpc, point: closestPt, hole: holePos } = firstHit(raycaster.ray)
+  // Ce que la balle touche : le PNJ le plus proche (sur la pose qu'il a à l'arrivée de la balle), sinon le cadenas du
+  // port, sinon rien
+  const { kind, npc: closestNpc, part, point: closestPt, hole: holePos } = firstHit(raycaster.ray)
   if (isHit(kind)) statHits++   // précision du rapport de fin : le cadenas compte, libérer n'interdit pas FANTÔME
 
   if (closestNpc) {
     // Éclaboussure de sang au point d'impact
     spawnImpact(closestPt, closestNpc.isCivilian ? 0xcc0000 : 0xaa2222, 16)
-    // HEADSHOT : impact dans la zone de la tête (haut de la hitbox)
-    const isHeadshot = (closestPt.y - closestNpc.mesh.position.y) > 1.45
+    // La cible meurt quelle que soit la zone touchée (tête, torse ou membre) ; la zone fixe ses points
     if (closestNpc.isTarget) {
-      killTarget(closestNpc, isHeadshot)
+      killTarget(closestNpc, part)
     } else if (closestNpc.isCivilian) {
       killCivilian(closestNpc)
     } else if (closestNpc.isGuard) {
@@ -1014,15 +1015,15 @@ function killCivilian(npc) {
   }, 600)
 }
 
-function killTarget(npc, headshot = false) {
+function killTarget(npc, part = 'torse') {
   npc.die()
   playKill()
-  // Cible en mouvement (véhicule) = tir difficile = plus de points, headshot = ×2
-  let bonus = npc.onVehicle ? 400 : (npc.isStill() ? 250 : 120)
-  if (headshot) bonus *= 2
+  // Cible en mouvement (véhicule) = tir difficile = plus de points ; tête ×2, torse ×1, membre ×0,6 (src/shot/score.js)
+  const bonus = targetScore({ onVehicle: npc.onVehicle, still: npc.isStill(), part })
   score += bonus
   stress = Math.max(0, stress - STRESS.cibleAbattue)
-  addKillFeed(headshot ? `🎯 HEADSHOT : cible éliminée (+${bonus} pts)` : `✓ Cible éliminée (+${bonus} pts)`)
+  addKillFeed(part === 'tete' ? `🎯 HEADSHOT : cible éliminée (+${bonus} pts)`
+    : part === 'membre' ? `✓ Cible éliminée, touchée au membre (+${bonus} pts)` : `✓ Cible éliminée (+${bonus} pts)`)
 
   // Double élimination : deux cibles en moins de 4 secondes
   const nowK = performance.now()
@@ -1056,19 +1057,19 @@ function killTarget(npc, headshot = false) {
   checkWin()
 }
 
+// Garde touché (spec du lot 2, §3.4) : il tombe toujours, quelle que soit la zone ; sans silencieux, le bruit du tir
+// déclenche l'alerte ; au silencieux, les autres gardes réagissent sans alerte (guardHit, src/shot/score.js).
 function hitGuard(npc, stats) {
-  if (stats.superSilenced) {
-    npc.die()
-    addKillFeed('Garde éliminé [silencieux+]')
-  } else if (stats.silenced) {
-    npc.die()
-    addKillFeed('Garde éliminé [silencieux]')
-    // Autres gardes réagissent mais pas d'alerte immédiate
+  const issue = guardHit(stats)
+  if (issue.meurt) npc.die()
+  addKillFeed(issue.feed)
+  if (issue.gardesReagissent) {
     for (const g of guards) {
       if (g.alive) g.react(npc.mesh.position)
     }
-  } else {
-    triggerAlert('⚠ Garde touché : ALERTE DÉCLENCHÉE')
+  }
+  if (issue.alerte) {
+    triggerAlert('⚠ Garde abattu : ALERTE DÉCLENCHÉE')
     stress = Math.min(1, stress + STRESS.gardeTouche)
   }
 }
@@ -1567,12 +1568,16 @@ if (import.meta.env.DEV) {
   // troisième civil vivant ('cible', 'garde', 'civil'). Faux si rien ne correspond. Le tir reste celui du joueur.
   // avance (s) : vise là où le PNJ sera après le vol de la balle : une cible du convoi, qui roule (M5), ou un PNJ qui
   // marche ou qui fuit (vitesses de NPC._move : speed en marche, speed × 8 en fuite, déviations ignorées).
+  // zone : 'torse' (défaut), 'tete' ou 'membre' : vise le milieu de cette zone touchée du PNJ, sur sa pose du moment
+  // (NPC.hitZones, src/shot/hitzones.js) ; le milieu de sa boîte grossière s'il n'en a pas.
   const vitessePnj = npc => npc.state === STATES.FLEE ? npc.fleeDir.clone().multiplyScalar(npc.speed * 8)
     : npc.state === STATES.WALK ? npc.walkDir.clone().multiplyScalar(npc.speed) : new THREE.Vector3()
-  window.__aimAt = (what, n = 0, avance = 0) => {
+  window.__aimAt = (what, n = 0, avance = 0, zone = 'torse') => {
     const role = npc => npc.isTarget ? 'cible' : npc.isCivilian ? 'civil' : 'garde'
     const npc = what === 'cadenas' ? null : npcs.filter(x => x.alive && role(x) === what)[n]
-    const p = what === 'cadenas' ? moralLockBox && moralLockBox.getCenter(new THREE.Vector3()) : npc?.getBounds().center
+    const z = npc && npc.hitZones().find(x => x.part === zone)
+    const p = what === 'cadenas' ? moralLockBox && moralLockBox.getCenter(new THREE.Vector3())
+      : z ? z.a.clone().lerp(z.b, 0.5) : npc?.getBounds().center
     if (!p) return false
     if (avance && convoyCar && npc) p.x += convoyCar.dir * convoyCar.speed * avance
     else if (avance && npc) p.addScaledVector(vitessePnj(npc), avance)

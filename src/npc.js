@@ -4,6 +4,7 @@ import { spawnCharacter, animateRig } from './characters.js'
 import { getObstacles } from './maps.js'
 import { disposeObject } from './gfx/dispose.js'
 import { npcCastsShadow } from './gfx/quality.js'
+import { zonesFromSkeleton, zonesFromProcedural } from './shot/hitzones.js'
 
 // Ombre des personnages (préréglage graphique, spec du lot 1 §4.3) : 'tous', 'cibles-gardes' ou 'aucun'. main.js le pose
 // (applyQuality) avant de monter une mission ; il vaut pour les PNJ créés ensuite, applyShadows le reporte sur ceux
@@ -534,6 +535,7 @@ export class NPC {
     return this.mesh.position.clone().setY(this.mesh.position.y + 1.68)
   }
 
+  // Boîte grossière du corps debout : préfiltre du tir (npcHit, src/shot/hitzones.js, qui l'élargit), foule du PvP.
   getBounds() {
     const wp = new THREE.Vector3()
     this.mesh.getWorldPosition(wp)
@@ -543,6 +545,12 @@ export class NPC {
       // Boîte généreuse : 0.8×2.0×0.8 — visible même vue de dessus
       size:   new THREE.Vector3(0.80, 2.0, 0.80),
     }
+  }
+
+  // Zones touchées sur la pose du moment (spec du lot 2, §3.4) : tête, torse et membres, calés sur les os du modèle,
+  // ou sur les groupes articulés du modèle procédural faute de modèle.
+  hitZones() {
+    return this.character ? zonesFromSkeleton(this.character.model) : zonesFromProcedural(this.mesh)
   }
 
   isStill() {
