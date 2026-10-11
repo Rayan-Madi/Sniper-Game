@@ -21,9 +21,9 @@ const walk = (apt, from, to, steps = 400) => {
 
 describe('l\'appartement', () => {
   // budget relevé par le prologue v2 (spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §5, au lieu de 47 et
-  // 16 600) : toujours fusionné par matériau. Mesuré par stats() après l'architecture intérieure : 48 objets, 27 410
-  // triangles (en jeu : 45 appels, 27 306 triangles au départ). Toute hausse est un choix assumé : mettre ce test à jour
-  // en même temps que REPRISE.md.
+  // 16 600) : toujours fusionné par matériau. Mesuré par stats() après l'architecture intérieure et sa relecture :
+  // 48 objets, 27 398 triangles (en jeu : 45 appels, 27 294 triangles au départ). Toute hausse est un choix assumé :
+  // mettre ce test à jour en même temps que REPRISE.md.
   it('tient le budget relevé : au plus 80 objets dessinés et 45 000 triangles', () => {
     const apt = buildApartment()
     const { drawables, triangles } = apt.stats()
@@ -276,6 +276,40 @@ describe('l\'appartement : l\'architecture intérieure', () => {
     apt.dispose()
   })
 
+  // relecture de N3 : des plinthes couraient aussi sur des faces que personne ne voit (des triangles pris au budget de N4)
+  it('les plinthes ne courent que dans les pièces dessinées : rien côté cuisine, côté parents ni dehors', () => {
+    const apt = buildApartment(), { proud } = probes(apt), bad = []
+    // [lieu, x, z, nx, nz] sur la face du mur, normale vers le côté qu'on ne voit pas
+    const UNSEEN = [
+      ['cuisine, mur de l\'entrée', 5.0, 4.44, 0, -1], ['cuisine, mur de l\'entrée', 7.0, 4.44, 0, -1],
+      ['cuisine, mur du salon', 7.44, 3.0, -1, 0], ['cuisine, mur de la chambre', 4.56, 2.65, 1, 0],
+      ['parents, mur du couloir', 1.0, 5.86, 0, 1], ['parents, mur du couloir', 3.5, 5.86, 0, 1],
+      ['parents, au-delà de l\'arche du couloir', 4.44, 6.4, -1, 0],
+      ['dehors, salon', 10.0, 0.94, 0, -1], ['dehors, salon', 10.0, 7.06, 0, 1],
+      ['dehors, salon', 12.56, 1.5, 1, 0], ['dehors, sous la baie', 12.56, 4.0, 1, 0],
+      ['dehors, couloir', 0.44, 5.15, -1, 0], ['dehors, chambre', 0.44, 2.65, -1, 0],
+      ['dehors, chambre', 1.0, 0.74, 0, -1], ['dehors, sous la fenêtre de la chambre', 2.3, 0.74, 0, -1],
+      ['dehors, palier', 4.94, 7.8, -1, 0], ['dehors, palier', 7.06, 7.8, 1, 0], ['dehors, palier', 6.0, 8.56, 0, 1],
+    ]
+    for (const [lieu, x, z, nx, nz] of UNSEEN) {
+      const v = proud(x, 0.02, z, nx, nz)
+      if (!(Math.abs(v) < 0.002)) bad.push(`${lieu} (${x} ; ${z}) : ${r3(v)}`)
+    }
+    // et elles restent au bout des longueurs coupées, contre les angles des pièces dessinées
+    const KEPT = [
+      ['entrée, mur du salon, contre la cuisine', 7.44, 4.58, -1, 0], ['entrée, mur de la cuisine, contre le salon', 7.42, 4.56, 0, 1],
+      ['entrée, mur de la cuisine, contre le couloir', 4.58, 4.56, 0, 1], ['entrée, mur du palier, contre le salon', 7.42, 6.94, 0, -1],
+      ['couloir, au bout de l\'arche', 4.44, 5.72, -1, 0], ['couloir, avant l\'arche', 4.44, 4.58, -1, 0],
+      ['palier, contre la porte', 5.3, 7.06, 0, 1], ['palier, contre la porte', 6.7, 7.06, 0, 1],
+    ]
+    for (const [lieu, x, z, nx, nz] of KEPT) {
+      const v = proud(x, 0.02, z, nx, nz)
+      if (!(v >= 0.01)) bad.push(`${lieu} (${x} ; ${z}) : ${r3(v)}, plus de plinthe`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
   // les ouvertures : mur le long de x (z constant) ou de z ; faces habillées (côté des coordonnées croissantes : 1) ;
   // côtés de l'ouverture qui reçoivent un montant de chambranle (le côté gâche de la porte d'entrée est l'indice
   // « serrure » ; dans le couloir, l'arche touche les murs)
@@ -311,6 +345,27 @@ describe('l\'appartement : l\'architecture intérieure', () => {
         const d = o.alongX ? hit([mid, 1.0, plane], [dir, 0, 0], 1) : hit([plane, 1.0, mid], [0, 0, dir], 1)
         if (!(d <= half - 0.01)) bad.push(`${o.nom} (vers ${dir}) : ${r3(d)} pour ${half}`)
       }
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  // relecture de N3 : le battant laissait 2 mm de jour contre son bâti (côtés et traverse), une fente sur le vide de la
+  // pièce derrière, qui n'est pas dessinée
+  it('les portes fermées remplissent leur bâti : aucun jour entre le battant et le bâti, ni sur les côtés ni en tête', () => {
+    const apt = buildApartment(), { hit } = probes(apt), bad = []
+    const T = 0.12, back = 0.3, step = 0.0005
+    for (const o of OPENINGS.filter(p => p.closed)) {
+      const s = o.faces[0], face = o.line + s * T / 2
+      // rayon perpendiculaire au mur, tiré de 30 cm devant sa face vue : il doit s'arrêter avant d'avoir traversé le mur
+      const through = (a, y) => !Number.isFinite(o.alongX ? hit([a, y, face + s * back], [0, 0, -s], back + T + 0.01) : hit([face + s * back, y, a], [-s, 0, 0], back + T + 0.01))
+      const holes = new Set()
+      for (const y of [0.5, 1.5]) for (let k = 0; k * step <= 0.02; k++) {
+        if (through(o.from + 0.012 + k * step, y)) holes.add(`côté from à ${y} m`)
+        if (through(o.to - 0.012 - k * step, y)) holes.add(`côté to à ${y} m`)
+      }
+      for (const a of [o.from + 0.2, (o.from + o.to) / 2]) for (let k = 0; k * step <= 0.02; k++) if (through(a, o.top - 0.012 - k * step)) holes.add('en tête')
+      for (const h of holes) bad.push(`${o.nom} : jour ${h}`)
     }
     expect(bad).toEqual([])
     apt.dispose()
@@ -405,6 +460,24 @@ describe('l\'appartement : l\'architecture intérieure', () => {
     ]
     for (const [lieu, face, a, b] of OUTLETS) if (![0.25, 0.3].some(y => scan(face, y, a, b).some(plate))) bad.push(`prise : ${lieu}`)
     expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  // relecture de N3 : la rosace, trop plate (2,4 cm de creux, aucun relief qui accroche la lumière), se lisait d'en
+  // dessous comme un disque uni
+  it('la rosace du salon est en relief : deux tores marqués autour du bouton, pas un disque plat', () => {
+    const apt = buildApartment(), { hit } = probes(apt)
+    // profondeur sous le plafond, de 5 à 24 cm de l'axe (au-delà du cache-piton), au milieu d'une facette ; rayons tirés
+    // vers le haut entre le globe et la rosace
+    const a = Math.PI / 24, depth = []
+    for (let r = 0.05; r <= 0.24 + 1e-9; r += 0.0025) depth.push(H - (2.4 + hit([10 + r * Math.cos(a), 2.4, 4 + r * Math.sin(a)], [0, 1, 0], 1)))
+    expect(Math.max(...depth)).toBeGreaterThanOrEqual(0.035)
+    // tores : creux locaux qui dominent d'au moins 8 mm le champ de part et d'autre
+    const rings = depth.filter((d, i) => {
+      if (!(i > 0 && i < depth.length - 1 && d >= depth[i - 1] && d > depth[i + 1])) return false
+      return Math.min(...depth.slice(0, i)) <= d - 0.008 && Math.min(...depth.slice(i + 1)) <= d - 0.008
+    })
+    expect(rings.length).toBeGreaterThanOrEqual(2)
     apt.dispose()
   })
 

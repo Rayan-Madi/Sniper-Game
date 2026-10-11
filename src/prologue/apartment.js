@@ -623,6 +623,27 @@ export function buildApartment() {
   const box = (m, cx, cy, cz, w, h, d, place) => B.box(m, cx, cy, cz, w, h, d, place)
   const solid = (minX, maxX, minZ, maxZ) => colliders.push({ minX, maxX, minZ, maxZ })
 
+  // les pièces dessinées, d'axe de mur à axe de mur (la cuisine et la chambre des parents ne le sont pas)
+  const rooms = [
+    { x0: 5, x1: 7, z0: 7, z1: 8.5, sol: M.carrelage },     // palier
+    { x0: 4.5, x1: 7.5, z0: 4.5, z1: 7, sol: M.parquet },   // entrée
+    { x0: 7.5, x1: 12.5, z0: 1, z1: 7, sol: M.parquet },    // salon
+    { x0: 0.5, x1: 4.5, z0: 4.5, z1: 5.8, sol: M.parquet }, // couloir
+    { x0: 0.5, x1: 4.5, z0: 0.8, z1: 4.5, sol: M.parquet }, // chambre
+  ]
+  // Étendues [a, b] d'un morceau de mur (de a à b le long de x si alongX, sinon de z) dont la face, à la cote q, borde
+  // une pièce dessinée : coupées aux axes des murs de la pièce (dans un angle, les deux plinthes se croisent dans
+  // l'épaisseur du mur), et seulement s'il en reste un bout entre les faces de ces murs.
+  function roomSpans(alongX, q, a, b) {
+    const spans = []
+    for (const r of rooms) {
+      const [p0, p1, r0, r1] = alongX ? [r.z0, r.z1, r.x0, r.x1] : [r.x0, r.x1, r.z0, r.z1]
+      if (q <= p0 || q >= p1 || Math.min(b, r1 - T / 2) - Math.max(a, r0 + T / 2) <= 1e-6) continue
+      spans.push([Math.max(a, r0), Math.min(b, r1)])
+    }
+    return spans
+  }
+
   // ── murs ──
   // Un segment horizontal (z constant) ou vertical (x constant) ; ouvertures { from, to, bottom = 0, top }.
   // matNeg / matPos : peinture du côté des petites / grandes coordonnées (deux demi-épaisseurs si elles diffèrent).
@@ -649,13 +670,15 @@ export function buildApartment() {
       }
       if (p.y0 === 0) {   // seuls les morceaux qui partent du sol arrêtent le joueur (jamais un linteau)
         if (alongX) solid(p.a, p.b, line - T / 2, line + T / 2); else solid(line - T / 2, line + T / 2, p.a, p.b)
-        for (const side of [-1, 1]) {   // plinthes : droites et sombres sur le palier, moulurées et blanches dans l'appartement
+        // plinthes, seulement côté pièce dessinée (ni cuisine, ni parents, ni dehors) : droites et sombres sur le palier,
+        // moulurées et blanches dans l'appartement
+        for (const side of [-1, 1]) for (const [a, b] of roomSpans(alongX, line + side * (T / 2 + 0.01), p.a, p.b)) {
           if ((side < 0 ? matNeg : matPos) === M.murPalier) {
-            const o = line + side * (T / 2 + 0.006)
-            if (alongX) box(M.boisSombre, mid, 0.04, o, len, 0.08, 0.012); else box(M.boisSombre, o, 0.04, mid, 0.012, 0.08, len)
+            const o = line + side * (T / 2 + 0.006), sl = b - a, sm = (a + b) / 2
+            if (alongX) box(M.boisSombre, sm, 0.04, o, sl, 0.08, 0.012); else box(M.boisSombre, o, 0.04, sm, 0.012, 0.08, sl)
           } else {
-            const f = line + side * T / 2, at = a => alongX ? V(a, 0, f) : V(f, 0, a)
-            B.add(M.blanc, prism(P_PLINTHE, alongX ? V(0, 0, side) : V(side, 0, 0), UP, at(p.a), at(p.b)))
+            const f = line + side * T / 2, at = u => alongX ? V(u, 0, f) : V(f, 0, u)
+            B.add(M.blanc, prism(P_PLINTHE, alongX ? V(0, 0, side) : V(side, 0, 0), UP, at(a), at(b)))
           }
         }
       }
@@ -692,13 +715,6 @@ export function buildApartment() {
   wall(0.5, 0.8, 4.5, 0.8, [O.fenetre], M.murEnfant)
 
   // ── sols et plafonds ──
-  const rooms = [
-    { x0: 5, x1: 7, z0: 7, z1: 8.5, sol: M.carrelage },     // palier
-    { x0: 4.5, x1: 7.5, z0: 4.5, z1: 7, sol: M.parquet },   // entrée
-    { x0: 7.5, x1: 12.5, z0: 1, z1: 7, sol: M.parquet },    // salon
-    { x0: 0.5, x1: 4.5, z0: 4.5, z1: 5.8, sol: M.parquet }, // couloir
-    { x0: 0.5, x1: 4.5, z0: 0.8, z1: 4.5, sol: M.parquet }, // chambre
-  ]
   for (const r of rooms) {
     const w = r.x1 - r.x0, d = r.z1 - r.z0, cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2
     const sol = new THREE.BoxGeometry(w, 0.02, d); sol.translate(cx, -0.01, cz)
@@ -765,10 +781,11 @@ export function buildApartment() {
     B.add(M.metal, new THREE.CylinderGeometry(0.007, 0.007, 0.04, 8).rotateX(Math.PI / 2), { x, y: 1.0, z: z + s * 0.024 })
     box(M.metal, x + dir * 0.05, 1.0, z + s * 0.044, 0.11, 0.016, 0.018)
   }
-  // portes fermées : 1 cm en retrait de la face vue s, un seuil dessous (la pièce derrière n'est pas dessinée)
+  // portes fermées : 1 cm en retrait de la face vue s, un seuil dessous (la pièce derrière n'est pas dessinée). Le battant
+  // entre de 1 mm dans son bâti (2 cm), sur les côtés et en tête : aucun jour sur le vide de la pièce derrière.
   function closedDoor(o, s, handleAt, dir) {
-    const zc = o.line + s * (T / 2 - 0.03), cx = (o.from + o.to) / 2
-    box(M.boiserie, cx, 1.019, zc, o.to - o.from - 0.044, 2.018, 0.04)
+    const zc = o.line + s * (T / 2 - 0.03), cx = (o.from + o.to) / 2, lap = 0.001, y0 = 0.01, y1 = o.top - 0.02 + lap
+    box(M.boiserie, cx, (y0 + y1) / 2, zc, o.to - o.from - 2 * (0.02 - lap), y1 - y0, 0.04)
     box(M.boisSombre, cx, 0.005, o.line, o.to - o.from, 0.01, T)
     doorPanels(cx, zc + s * 0.02, s); handle(handleAt, zc + s * 0.02, s, dir)
   }
@@ -1375,11 +1392,14 @@ export function buildApartment() {
   // ── luminaires, éteints (aucune lumière de plus) : suspension à globe opalin sous une rosace (salon), plafonniers
   // (entrée, couloir), lanterne de papier rose (chambre) ──
   {
-    const rose = lathe([[0, -0.032], [0.035, -0.032], [0.05, -0.024], [0.08, -0.02], [0.11, -0.022], [0.14, -0.014],
-      [0.17, -0.012], [0.2, -0.006], [0.23, 0]], 24)
+    // rosace en relief (d'en dessous, un disque presque plat se lisait comme une tache unie) : bouton central, gorge,
+    // anneau en tore, champ, grand tore, ressaut ; leurs flancs prennent la lumière du ciel et de la lune, pas leurs fonds
+    const rose = lathe([[0, -0.05], [0.026, -0.05], [0.036, -0.044], [0.04, -0.03], [0.052, -0.024],
+      [0.066, -0.03], [0.078, -0.034], [0.09, -0.03], [0.1, -0.022], [0.135, -0.02],
+      [0.152, -0.03], [0.17, -0.038], [0.188, -0.034], [0.2, -0.022], [0.21, -0.012], [0.232, -0.008], [0.245, 0]], 24)
     B.add(M.blanc, rose, { x: 10.0, y: H, z: 4.0 })
-    B.add(M.metal, new THREE.CylinderGeometry(0.035, 0.045, 0.03, 12), { x: 10.0, y: H - 0.047, z: 4.0 })   // cache-piton
-    B.add(M.metal, rod(V(10.0, H - 0.06, 4.0), V(10.0, 2.11, 4.0), 0.004, 6))                              // fil
+    B.add(M.metal, new THREE.CylinderGeometry(0.035, 0.045, 0.03, 12), { x: 10.0, y: H - 0.063, z: 4.0 })   // cache-piton, sous le bouton
+    B.add(M.metal, rod(V(10.0, H - 0.076, 4.0), V(10.0, 2.11, 4.0), 0.004, 6))                             // fil
     B.add(M.metal, new THREE.CylinderGeometry(0.03, 0.04, 0.04, 12), { x: 10.0, y: 2.1, z: 4.0 })           // douille
     B.add(M.blanc, new THREE.SphereGeometry(0.14, 18, 12), { x: 10.0, y: 1.97, z: 4.0 })                    // globe
     for (const [x, z, r] of [[6.0, 5.75, 0.17], [2.5, 5.15, 0.13]]) {
