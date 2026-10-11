@@ -16,11 +16,13 @@ Toutes celles des lots 0 et 1 (`docs/superpowers/plans/2026-10-07-lot0-correctio
 - [x] `PHONE.fin`, `PHONE.vibre`, `PHONE.notif`, `PHONE.reposer` (§3.5 de la spec).
 - [x] `allFound`, `phoneCanPutDown`, sous-état de fin piloté par `tick` (étapes du §3.1, temps de jeu seulement, rien pendant la pause), passage en `examining` sur le téléphone à la fin ; REPOSER refusé après les 6 indices. Témoins rouges.
 - [x] Commit : `feat(enquete): l'enquête sait qu'elle est finie quand les six indices sont trouvés`
+- [x] Relecture de E1 : en effets atténués, la fiche s'ouvre à la fin de la vibration (2,5 s, lettre du §3.1) ; une durée de réplique invalide ne bloque plus la séquence ; le fondu de fin d'`investigation.js` s'appelle `fadingOut` (plus de confusion avec le mode `ending`). Témoins rouges.
 
 ### Tâche E2 : la séquence, le maintien, REPOSER, le coup de pouce
 
 **Fichiers :** `src/prologue/investigation.js`, `src/prologue/ambience.js`, `src/prologue/apartment.js`, `src/prologue/enquete.css`, tests `tests/prologue/investigation.test.js`, `tests/prologue/ambience.test.js`.
 - [ ] Séquence de fin (§3.1) : réplique, vibration (`buzz()`) et lueur de l'écran, pivot lissé du regard (sauf effets atténués), fiche du téléphone ouverte d'elle-même ; contrôleur figé pendant la séquence ; tout libéré à `stop()`.
+- [ ] Points laissés par la relecture de E1 (avec E1 seul, une fois la séquence finie, l'état est sur le téléphone sans fiche à l'écran et E ou un clic lance `finish('listened')` : rien ne part dans `main` avant E2) : `closeFiche()` ne dégèle plus le contrôleur quand l'état passe en `ending` ; la séquence est pilotée par `state.ending.steps` (chaque étape entrée déclenchée une fois) ; quand la fiche du téléphone s'ouvre d'elle-même, `phoneOpenedAt` et la garde repartent de zéro, ou le maintien les remplace ; la vibration n'est pas coupée par l'ouverture de la fiche (§3.6).
 - [ ] Maintien 1 s pour écouter (E ou clic gauche), anneau qui se remplit, relâcher annule (§3.2) ; garde de 600 ms retirée si redondante (tests du double-clic toujours verts).
 - [ ] REPOSER (`KeyR` ou clic droit) avant les 6 indices (§3.3), libellé selon la disposition du clavier.
 - [ ] Coup de pouce (§3.4).
