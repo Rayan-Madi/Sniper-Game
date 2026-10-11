@@ -1,0 +1,33 @@
+# Enquête : une fin qui vient d'elle-même (plan d'exécution)
+
+> **Pour les agents :** exécuter tâche par tâche, en TDD (superpowers:test-driven-development), chaque tâche relue avant la suivante.
+
+**But :** après le 6e indice, Viktor dit « J'en ai assez vu. », le téléphone vibre et s'allume, le regard s'y pose et sa fiche s'ouvre ; écouter se fait en maintenant E ou le clic 1 s ; avant le 6e indice, le téléphone se repose ; coup de pouce par une vibration quand la piste du téléphone tombe.
+
+**Spec :** `docs/superpowers/specs/2026-10-11-enquete-fin-design.md` (fait foi). Spec d'origine : `docs/superpowers/specs/2026-10-04-enquete-design.md`.
+
+## Contraintes globales
+
+Toutes celles des lots 0 et 1 (`docs/superpowers/plans/2026-10-07-lot0-corrections.md`, `2026-10-07-lot1-socle-technique.md`) : témoin rouge, `e.code`, commits en français sans trailer ni attribution, auteur `Rayan Madi <madirayan75015@gmail.com>`, aucun tiret cadratin neuf, Chrome sans interface sans port de débogage fixe, serveur 5173 réutilisé, effets atténués respectés (`src/comfort.js`), libérations du lot 1 (rien ne reste après `stop()`).
+
+### Tâche E1 : état et données
+
+**Fichiers :** `src/prologue/state.js`, `src/prologue/clues.js`, `tests/prologue/state.test.js`.
+- [ ] `PHONE.fin`, `PHONE.vibre`, `PHONE.notif`, `PHONE.reposer` (§3.5 de la spec).
+- [ ] `allFound`, `phoneCanPutDown`, sous-état de fin piloté par `tick` (étapes du §3.1, temps de jeu seulement, rien pendant la pause), passage en `examining` sur le téléphone à la fin ; REPOSER refusé après les 6 indices. Témoins rouges.
+- [ ] Commit : `feat(enquete): l'enquête sait qu'elle est finie quand les six indices sont trouvés`
+
+### Tâche E2 : la séquence, le maintien, REPOSER, le coup de pouce
+
+**Fichiers :** `src/prologue/investigation.js`, `src/prologue/ambience.js`, `src/prologue/apartment.js`, `src/prologue/enquete.css`, tests `tests/prologue/investigation.test.js`, `tests/prologue/ambience.test.js`.
+- [ ] Séquence de fin (§3.1) : réplique, vibration (`buzz()`) et lueur de l'écran, pivot lissé du regard (sauf effets atténués), fiche du téléphone ouverte d'elle-même ; contrôleur figé pendant la séquence ; tout libéré à `stop()`.
+- [ ] Maintien 1 s pour écouter (E ou clic gauche), anneau qui se remplit, relâcher annule (§3.2) ; garde de 600 ms retirée si redondante (tests du double-clic toujours verts).
+- [ ] REPOSER (`KeyR` ou clic droit) avant les 6 indices (§3.3), libellé selon la disposition du clavier.
+- [ ] Coup de pouce (§3.4).
+- [ ] Vérification réelle : Chrome sans interface sur `?enquete=1&indices=5`, dernier indice examiné puis fiche fermée, captures de la séquence (réplique, lueur, fiche ouverte) regardées.
+- [ ] `docs/superpowers/REPRISE.md` : la question ouverte du téléphone est réglée (REPOSER), la fin de l'enquête décrite en une ligne dans « Où on en est », nombre de tests attendu.
+- [ ] Commit : `feat(enquete): après le sixième indice, le téléphone vibre et la fiche s'ouvre, écouter se fait en maintenant, le téléphone se repose`
+
+## Critères de fin
+
+Ceux du §5 de la spec, chaque tâche vue rouge puis verte et relue, relecture finale de la branche, fusion en avance rapide dans `main`, push.
