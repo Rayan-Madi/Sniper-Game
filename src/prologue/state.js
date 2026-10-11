@@ -13,11 +13,14 @@ export const ENDING = { silence: 0.8, breath: 0.6, buzz: 1.2, turn: 1.2, vibrati
 // suivantes gardent leur durée
 const seconds = d => (Number.isFinite(d) && d > 0 ? d : 0)
 
-// speechTime : durée d'une réplique dite (secondes) ; reducedMotion : booléen ou fonction, lu au début de la séquence
+// speechTime : durée d'une réplique dite (secondes) ; reducedMotion : booléen ou fonction, lu au début de la séquence,
+// vrai quand le regard ne doit pas pivoter (effets atténués, ou téléphone hors de vue : investigation.js)
 export function createInvestigationState({ clues = CLUES, phone = PHONE, anchors = {}, hintDelay = 40, found = [],
   speechTime = text => estimate(text) / 1000, reducedMotion = false } = {}) {
   const known = new Set(clues.map(c => c.id))
-  const s = { mode: 'exploring', found: new Set(found.filter(id => known.has(id))), current: null, result: null, idle: 0, before: null, end: null }
+  // phoneSeen : la fiche du téléphone a été ouverte (même reposé ensuite) ; phoneHinted : sa piste est déjà tombée
+  const s = { mode: 'exploring', found: new Set(found.filter(id => known.has(id))), current: null, result: null, idle: 0, before: null, end: null,
+    phoneSeen: false, phoneHinted: false }
 
   // la séquence de fin : ses étapes datées, le temps écoulé, les étapes entrées (dans l'ordre, aucune sautée)
   function startEnding() {
@@ -66,7 +69,7 @@ export function createInvestigationState({ clues = CLUES, phone = PHONE, anchors
       if (s.mode !== 'exploring') return null
       if (id === phone.id) {
         if (!api.phoneUnlocked) return { type: 'phone-locked', line: phone.verrouille }
-        s.mode = 'examining'; s.current = phone.id
+        s.mode = 'examining'; s.current = phone.id; s.phoneSeen = true
         return { type: 'phone', phone }
       }
       const clue = clues.find(c => c.id === id)
@@ -102,13 +105,16 @@ export function createInvestigationState({ clues = CLUES, phone = PHONE, anchors
       s.idle += dt
       if (s.idle < hintDelay) return null
       s.idle = 0
-      return api.hint(pos)
+      const hint = api.hint(pos)
+      if (hint === phone.piste) s.phoneHinted = true
+      return hint
     },
-    // le téléphone dès qu'il est déverrouillé, sinon l'indice non vu le plus proche (ou le premier dans l'ordre)
+    // le téléphone déverrouillé, s'il n'a jamais été examiné et que sa piste n'est pas encore tombée (une seule fois) ;
+    // sinon l'indice non vu le plus proche (ou le premier dans l'ordre) ; null s'il ne reste rien à désigner
     hint(pos = null) {
-      if (api.phoneUnlocked) return phone.piste
+      if (api.phoneUnlocked && !s.phoneSeen && !s.phoneHinted) return phone.piste
       const rest = clues.filter(c => !s.found.has(c.id))
-      if (!rest.length) return phone.piste
+      if (!rest.length) return null
       if (!pos) return rest[0].piste
       const d = c => { const a = anchors[c.id]; return a ? Math.hypot(a.x - pos.x, a.z - pos.z) : Infinity }
       return rest.reduce((best, c) => (d(c) < d(best) ? c : best)).piste

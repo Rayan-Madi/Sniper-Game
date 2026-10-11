@@ -108,6 +108,32 @@ describe('machine à états', () => {
     expect(s.hint({ x: 2, z: 3 })).toBe(PHONE.piste)
   })
 
+  // relecture finale (spec 2026-10-11 §3.4) : examiné une fois, même reposé, le téléphone n'est plus désigné ; jamais
+  // examiné, il ne l'est qu'une fois ; les autres pistes reviennent à l'indice non trouvé le plus proche
+  const ANCHORS = { serrure: { x: 6, z: 7 }, lutte: { x: 7, z: 6 }, corps: { x: 10.6, z: 4.8 }, photo: { x: 11, z: 6.3 }, mot: { x: 9.6, z: 3 }, doudou: { x: 2.1, z: 3.3 }, telephone: { x: 4.8, z: 6.2 } }
+  const FOUR = ['serrure', 'lutte', 'corps', 'photo']
+  const piste = id => CLUES.find(c => c.id === id).piste
+  const CHAMBRE = { x: 2, z: 4 }, TABLE = { x: 9.5, z: 3.5 }
+
+  it('le téléphone examiné puis reposé : la piste désigne l\'indice non trouvé le plus proche, plus le téléphone', () => {
+    const s = createInvestigationState({ anchors: ANCHORS, found: FOUR })
+    expect(s.hint(CHAMBRE)).toBe(PHONE.piste)                  // témoin : déverrouillé, jamais examiné
+    expect(s.examine('telephone')).toMatchObject({ type: 'phone' })
+    expect(s.putDown()).toBe(true)
+    expect(s.hint(CHAMBRE)).toBe(piste('doudou'))
+    expect(s.hint(TABLE)).toBe(piste('mot'))
+    expect(s.tick(40.5, CHAMBRE)).toBe(piste('doudou'))
+  })
+
+  it('jamais examiné : la piste du téléphone ne tombe qu\'une fois, les suivantes désignent les indices manquants', () => {
+    const s = createInvestigationState({ anchors: ANCHORS, found: FOUR })
+    expect(s.tick(40.5, CHAMBRE)).toBe(PHONE.piste)
+    expect(s.tick(40.5, CHAMBRE)).toBe(piste('doudou'))
+    expect(s.tick(40.5, TABLE)).toBe(piste('mot'))
+    s.examine('mot'); s.close()
+    expect(s.tick(40.5, TABLE)).toBe(piste('doudou'))         // un indice de plus : toujours pas le téléphone
+  })
+
   it('trouver un indice remet à zéro l\'attente de la piste ; pas de piste pendant une fiche ou une pause', () => {
     const s = createInvestigationState()
     s.tick(30)

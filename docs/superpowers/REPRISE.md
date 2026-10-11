@@ -22,7 +22,7 @@ Ce que j'attends : le résultat le plus « stylé » possible (qualité visuelle
 
 ## Où on en est
 
-Fait, relu et testé (**768 tests verts** avec la fin de l'enquête ; 728 à la fin du lot 1, 326 à la fin du lot 0) ; les points 1 à 5 sont fusionnés dans `main`, la fin de l'enquête (point 6) l'est après la relecture finale de sa branche `enquete-fin` :
+Fait, relu et testé (**774 tests verts** avec la fin de l'enquête ; 728 à la fin du lot 1, 326 à la fin du lot 0) ; les points 1 à 5 sont fusionnés dans `main`, la fin de l'enquête (point 6) l'est après la relecture finale de sa branche `enquete-fin` :
 1. **Briefings M1-M6 et épilogue** en motion design « dossier du fixeur » (Plan 1) : kit `src/briefing/kit.js`, `playCinematic` dans `src/briefing/index.js`, scènes générées depuis les maquettes par `scripts/port-maquette.mjs` (ne jamais éditer `src/briefing/scenes/*.js` à la main).
 2. **Prologue** en deux cinématiques (Plan 2) : `prologue-a` et `prologue-b`, une fois par campagne (`upgradeState.prologueSeen`).
 3. **Enquête jouable** entre A et B (Plan 3) : `src/prologue/`. Budget gardé par un test (au plus 47 maillages et 16 600 triangles par `stats()` ; mesuré en jeu : 44 appels, 16 446 triangles).
@@ -46,7 +46,7 @@ Fait, relu et testé (**768 tests verts** avec la fin de l'enquête ; 728 à la 
    - confort : Effets atténués (Auto suit `prefers-reduced-motion`, Oui, Non) : flash du tir à 0,06, aucune secousse, glitchs des cinématiques au tiers, carton SIGNAL PERDU figé ; bouton Plein écran ;
    - précompilation : la mission se monte et ses shaders se compilent sur l'écran noir d'ouverture de son briefing ;
    - chiffres, avant le lot contre après, en Moyen (README des annexes, « Après le lot 1 ») : après toute une partie, retour au menu à 3 288 géométries et 3 553 textures avant, 447 et 32 après (dont les 38 et 29 des sept modèles, gardées pour la session) ; chaque relance de M6 ajoutait 89 géométries et 155 textures, chaque arène PvP 84 et 329 : plus rien ; triangles de M6 à la vue de départ, 2,65 M avant, 1,42 M en Moyen, 1,33 M en Bas ; arène PvP, 5,5 M avant, 2,75 M ; première image de M1 à froid (RTX 3080), 1,18 s avant, 0,41 s après ; arrêt entre la cinématique et M6, d'environ 2,8 s à 0,5 à 0,7 s. Les cinq seuils du §6 de la spec sont tenus en Moyen et en Bas (`node scripts/memtest.mjs --check`).
-6. **Enquête : une fin qui vient d'elle-même** (spec `docs/superpowers/specs/2026-10-11-enquete-fin-design.md`, plan `docs/superpowers/plans/2026-10-11-enquete-fin.md`) : la fiche du 6e indice refermée, Viktor dit « J'en ai assez vu. », le téléphone vibre sur la console et son écran s'allume, le regard s'y pose (pas en effets atténués) et sa fiche s'ouvre d'elle-même ; écouter se fait en maintenant E ou le clic gauche 1 s (anneau qui se remplit) ; avant le 6e indice, R ou le clic droit REPOSE le téléphone ; quand la piste du téléphone tombe, il vibre une fois (coup de pouce).
+6. **Enquête : une fin qui vient d'elle-même** (spec `docs/superpowers/specs/2026-10-11-enquete-fin-design.md`, plan `docs/superpowers/plans/2026-10-11-enquete-fin.md`) : la fiche du 6e indice refermée, Viktor dit « J'en ai assez vu. », le téléphone vibre sur la console et son écran s'allume, le regard s'y pose s'il est en vue, à 100° au plus (pas en effets atténués) et sa fiche s'ouvre d'elle-même ; écouter se fait en maintenant E ou le clic gauche 1 s (anneau qui se remplit) ; avant le 6e indice, R ou le clic droit REPOSE le téléphone ; quand la piste du téléphone tombe, il vibre une fois (coup de pouce) ; cette piste ne tombe qu'une fois, et plus du tout une fois le téléphone examiné, même reposé.
 
 À lire pour le contexte : les specs `docs/superpowers/specs/` (cinématiques, enquête, lot 1) et les plans `docs/superpowers/plans/`.
 
@@ -61,9 +61,8 @@ Fait, relu et testé (**768 tests verts** avec la fin de l'enquête ; 728 à la 
 - **Voix** : **on garde les bips**, pas de voix (ni synthèse ni service en ligne).
 - **Historique Git** : réécrit le 7 octobre 2026 (trailers `Co-Authored-By` retirés, auteurs unifiés sous Rayan Madi).
 
-Questions encore ouvertes (celle du téléphone de l'enquête, qu'on ne pouvait pas reposer, est réglée le 11 octobre 2026 : REPOSER, point 6) :
+Questions encore ouvertes (celle du téléphone de l'enquête, qu'on ne pouvait pas reposer, est réglée le 11 octobre 2026 : REPOSER, point 6 ; celle du regard qui pivotait vers un mur aussi : il ne pivote que vers un téléphone en vue) :
 - PvP hors réseau local : par défaut, réseau local avec un champ « adresse du relais » (pas d'hébergement payant).
-- Fin de l'enquête, à juger en jeu : quand le 6e indice est trouvé loin de l'entrée (salon, chambre de la petite, palier), le regard pivote vers le téléphone à travers le mur et finit sur ce mur ; la fiche qui s'ouvre aussitôt montre bien le téléphone allumé, vu de l'entrée. Piste si ça gêne : ne pivoter que si le téléphone est en vue, sinon garder le regard fixe, comme en effets atténués.
 
 ## Suite prévue (dans cet ordre)
 

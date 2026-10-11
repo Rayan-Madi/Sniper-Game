@@ -36,7 +36,7 @@ Cohérence avec l'histoire : le téléphone de Viktor est resté en **silencieux
 | + 1,2 | Le regard **pivote en douceur** vers le téléphone (1,2 s, interpolation lissée du lacet et du tangage vers l'ancre du téléphone) |
 | fin du pivot | La **fiche du téléphone s'ouvre** d'elle-même : 2 appels manqués, les lignes de Viktor, et une seule action : **maintenir E (ou le clic) : ÉCOUTER LE MESSAGE** |
 
-Effets atténués (réglage du lot 1, `reducedMotionActive`) : pas de pivot, la fiche s'ouvre directement après la vibration.
+Effets atténués (réglage du lot 1, `reducedMotionActive`) : pas de pivot, la fiche s'ouvre directement après la vibration. Même chose, depuis la relecture finale, quand le téléphone n'est pas en vue du joueur (rayon de l'œil vers le centre de son volume de visée, arrêté par les murs comme celui de la visée) ou qu'il est à plus de 100° du regard : d'une autre pièce, le regard ne finit plus sur un mur.
 
 Si le joueur avait déjà ouvert la fiche du téléphone avant (et l'avait reposée), la séquence est la même : la fiche se rouvre.
 
@@ -50,7 +50,7 @@ Quand la fiche du téléphone est ouverte **avant** que les 6 indices soient tro
 
 ### 3.4 Le coup de pouce
 
-Quand le téléphone est déverrouillé (4 indices ou plus) et que la piste du téléphone tombe (40 s sans découverte, système de pistes existant), le téléphone **vibre une fois** (une salve, lueur brève) en même temps que la piste « Mon téléphone… dans l'entrée. ». Rien n'est forcé.
+Quand le téléphone est déverrouillé (4 indices ou plus) et que la piste du téléphone tombe (40 s sans découverte, système de pistes existant), le téléphone **vibre une fois** (une salve, lueur brève) en même temps que la piste « Mon téléphone… dans l'entrée. ». Rien n'est forcé. Cette piste, et donc sa vibration, ne tombe qu'une fois, et jamais après que le téléphone a été examiné (même reposé) : les pistes suivantes désignent l'indice non trouvé le plus proche, comme avant le déverrouillage (relecture finale).
 
 ### 3.5 Données
 
@@ -84,7 +84,7 @@ Précisions arrêtées à la tâche E2 (`investigation.js`, `ambience.js`, `apar
 - la lueur : l'écran reste allumé toute la vibration (`setPhoneLight(0.55)`, intensité 23, au-dessus du clignotement de repos qui monte à 14), plus vif à chaque salve (jusqu'à 40), puis s'éteint en 0,6 s ; il reprend ensuite son clignotement de repos, éteint (pas au milieu d'un clignotement). Seule l'intensité change, jamais la couleur émissive, que gère la surbrillance de la visée ;
 - « 1 NOUVEAU MESSAGE » sur l'écran 3D : la géométrie ne le permet pas (écran de 6,6 × 14,2 cm, une trentaine de pixels de large à 1,5 m, moins encore sur la photo de la fiche) : lueur seule, comme le prévoit le §3.1. `PHONE.notif` reste dans les données pour un plan rapproché futur ;
 - la photo de la fiche ouverte d'elle-même est prise depuis `apartment.phoneView` (debout dans l'entrée, à 1 m de la console) et non depuis le joueur, qui peut être dans la chambre de la petite : sous « LE TÉLÉPHONE », la photo d'un mur n'aurait pas de sens. La caméra est remise en place avant que l'image ne s'affiche. Ouverte par le joueur, la fiche garde la photo de ce qu'il regarde ;
-- le regard pivote vers le centre du volume de visée du téléphone, par le plus court chemin, en interpolation lissée (départ et arrivée doux) ; d'une autre pièce, il se tourne vers le bruit, à travers le mur ;
+- le regard pivote vers le centre du volume de visée du téléphone, par le plus court chemin, en interpolation lissée (départ et arrivée doux) ; seulement s'il est en vue et à 100° au plus (relecture finale, §3.1) ;
 - « Le téléphone… » est dit comme une piste (sous-titre et voix intérieure) ;
 - écouter : 1 s de temps de jeu, E ou clic gauche ; seul un appui neuf compte (pas la répétition d'une touche tenue depuis la séquence) ; relâcher, la pause ou la fenêtre quittée annulent et vident l'anneau. L'invite est « MAINTENIR E : ÉCOUTER LE MESSAGE », l'anneau autour du E ; la garde de 600 ms du lot 0 est retirée (l'invite est là dès l'ouverture), le test du double-clic reste vert ;
 - REPOSER : la touche physique R (`e.code === 'KeyR'`), son libellé lu dans la carte du clavier, ou le clic droit ; affiché seulement tant que la fiche peut se fermer, en action secondaire, plus discrète, qui ne bat pas ;
@@ -94,7 +94,7 @@ Précisions arrêtées à la relecture de E2 :
 - toutes les touches affichées suivent la disposition du clavier, comme REPOSER : E de l'invite de visée, de la carte de départ, de FERMER et de MAINTENIR (la touche physique reste `KeyE`). Quand la carte du clavier arrive après l'ouverture d'une fiche, les libellés déjà affichés sont mis à jour sans attendre une autre ouverture ;
 - effets atténués : le glitch à l'ouverture d'une fiche (celle du téléphone qui s'ouvre d'elle-même comprise) ne secoue plus le voile, et son grain ne monte que d'un tiers de sa hausse, comme les glitchs des cinématiques (lot 1 §4.5) ; son son reste ;
 - limite connue, gardée pour plus tard : la pause suspend la séquence, mais pas la frappe d'une réplique en cours, sa voix bipée ni la durée d'affichage du sous-titre (minuteurs réels, comme les pistes et les fiches avant cette spec). Après une longue pause pendant « J'en ai assez vu. », la réplique peut être finie, voire effacée. Suite possible : faire avancer la frappe et la voix au temps de jeu ;
-- à juger en jeu par Rayan : d'une autre pièce, le pivot vers le bruit finit sur un mur (le téléphone est hors de vue) ; la fiche qui s'ouvre aussitôt montre le téléphone allumé, vu de l'entrée. Piste si ça gêne : ne pivoter que si le téléphone est en vue (rayon contre les murs), sinon garder le regard fixe, comme en effets atténués.
+- d'une autre pièce, le pivot vers le bruit finissait sur un mur (le téléphone hors de vue) : réglé à la relecture finale, le regard ne pivote plus que vers un téléphone en vue, à 100° au plus (§3.1).
 
 ## 4. Tests
 

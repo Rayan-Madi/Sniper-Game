@@ -679,9 +679,17 @@ describe('l\'enquête : la fin, écouter, reposer, le coup de pouce', () => {
     h.stop()
   })
 
+  // juste derrière la porte d'entrée, le téléphone (sur la console) est en vue ; de la chambre de la petite, les murs le cachent
+  const ENTREE = { x: 6.0, z: 5.8 }, CHAMBRE = { x: 2.45, z: 3.9 }
+  // lacet d'un regard posé sur le téléphone depuis ce point (convention du contrôleur : atan2(−dx, −dz))
+  const yawToPhone = (h, from) => { const c = phoneCenter(h); return Math.atan2(-(c.x - from.x), -(c.z - from.z)) }
+  // pose le joueur et son regard, la fiche du sixième indice encore ouverte ; la caméra la prend aussitôt
+  const poseAt = (h, pose) => { h.debug.controller.setPose(pose); h.update(0) }
+
   it('le regard pivote en douceur vers le téléphone, puis la fiche s\'ouvre', async () => {
     const { h, d } = lastClue()
     const c = h.debug.controller, center = phoneCenter(h)
+    poseAt(h, { ...ENTREE, yaw: yawToPhone(h, ENTREE) + 0.6, pitch: -0.05 })   // dans l'entrée, le téléphone en vue
     const yaw0 = c.yaw
     closeIt()
     const yaws = []
@@ -690,7 +698,7 @@ describe('l\'enquête : la fin, écouter, reposer, le coup de pouce', () => {
     const dx = center.x - c.position.x, dz = center.z - c.position.z
     expect(c.yaw).toBeCloseTo(Math.atan2(-dx, -dz), 2)
     expect(c.pitch).toBeCloseTo(Math.atan2(center.y - 1.65, Math.hypot(dx, dz)), 2)
-    expect(Math.abs(c.yaw - yaw0)).toBeGreaterThan(0.3)        // il a vraiment tourné (du palier vers la console)
+    expect(Math.abs(c.yaw - yaw0)).toBeGreaterThan(0.3)        // il a vraiment tourné (vers la console)
     const steps = yaws.slice(1).map((y, i) => Math.abs(y - yaws[i]))
     expect(Math.max(...steps)).toBeLessThan(0.06)              // aucun saut d'une image à l'autre
     const moving = steps.filter(s => s > 1e-9)
@@ -700,10 +708,55 @@ describe('l\'enquête : la fin, écouter, reposer, le coup de pouce', () => {
     h.stop()
   })
 
+  // relecture finale : le regard ne pivote que vers un téléphone en vue (rayon de l'œil contre les murs) et à 100° au
+  // plus ; sinon il reste fixe et la fiche s'ouvre quand le téléphone a fini de vibrer, comme en effets atténués
+  const ending = async (h, d) => {
+    const c = h.debug.controller, buzzed = spy(h, d, 'buzz'), yaw0 = c.yaw, pitch0 = c.pitch
+    closeIt()
+    let opened = null
+    await d.frames(8, 0.05, t => { if (opened === null && ficheOn()) opened = t })
+    return { turned: c.yaw - yaw0, pitched: c.pitch - pitch0, opened, buzzes: buzzed.length, silent: buzzed.length ? buzzed[0].t + ENDING.vibration : null }
+  }
+
+  it('de la chambre de la petite, le téléphone caché par les murs : pas de pivot, la fiche s\'ouvre quand il a fini de vibrer', async () => {
+    for (const look of ['vers le téléphone', 'doudou']) {
+      const { h, d } = lastClue()
+      const a = h.debug.apartment.anchors.doudou
+      const yaw = look === 'doudou' ? Math.atan2(-(a.x - CHAMBRE.x), -(a.z - CHAMBRE.z)) : yawToPhone(h, CHAMBRE) + 0.35   // à 20° : seuls les murs l'arrêtent
+      poseAt(h, { ...CHAMBRE, yaw, pitch: -0.3 })
+      const r = await ending(h, d)
+      expect([look, r.turned, r.pitched]).toEqual([look, 0, 0])
+      expect(r.buzzes).toBe(4)
+      expect(r.opened).not.toBeNull()
+      expect(r.opened).toBeGreaterThanOrEqual(r.silent - 0.06)
+      expect(r.opened).toBeLessThan(6)
+      expect($('#enq-fiche h3').textContent).toBe('2 APPELS MANQUÉS')
+      h.stop()
+    }
+  })
+
+  it('dans l\'entrée, le téléphone en vue mais à plus de 100° du regard : pas de pivot (à 85°, témoin : il pivote)', async () => {
+    const run = async offset => {
+      const { h, d } = lastClue()
+      poseAt(h, { ...ENTREE, yaw: yawToPhone(h, ENTREE) + offset, pitch: -0.05 })
+      const r = await ending(h, d)
+      h.stop()
+      return r
+    }
+    const near = await run(1.5)                                // 85° entre le regard et le téléphone
+    expect(near.turned).toBeCloseTo(-1.5, 2)
+    const far = await run(2.0)                                 // 109°
+    expect([far.turned, far.pitched]).toEqual([0, 0])
+    expect(far.buzzes).toBe(4)
+    expect(far.opened).toBeGreaterThanOrEqual(far.silent - 0.06)
+    expect(far.opened).toBeLessThan(6)
+  })
+
   it('effets atténués : pas de pivot, la fiche s\'ouvre quand le téléphone a fini de vibrer', async () => {
     settings.reducedMotion = 'oui'
     const { h, d } = lastClue()
     const c = h.debug.controller, buzzed = spy(h, d, 'buzz')
+    poseAt(h, { ...ENTREE, yaw: yawToPhone(h, ENTREE) + 0.6, pitch: -0.05 })   // en vue : sans le réglage, il pivoterait
     closeIt()
     const yaw0 = c.yaw, pitch0 = c.pitch
     let opened = null
@@ -861,6 +914,36 @@ describe('l\'enquête : la fin, écouter, reposer, le coup de pouce', () => {
     const peak = after.glow.findIndex(v => v > IDLE_PEAK)
     expect(peak).toBeGreaterThanOrEqual(0)
     expect(after.glow.slice(peak + 10).every(v => v === 3)).toBe(true)   // une seconde après : éteint
+  })
+
+  // relecture finale : le téléphone n'est désigné (et ne vibre) qu'une fois s'il n'a jamais été examiné, plus du tout
+  // une fois examiné, même reposé ; les autres pistes mènent aux indices manquants
+  const MISSING = CLUES.slice(4)                                 // à 4 indices : le mot et le doudou
+  const hintsOf = said => said.map(c => c.args[0]).filter(t => t === PHONE.piste || CLUES.some(c => c.piste === t))
+
+  it('coup de pouce : le téléphone examiné puis reposé ne vibre plus, les pistes mènent aux indices manquants', async () => {
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { cam: START, indices: 4, ouvrir: 'telephone' } })
+    press('KeyR')
+    expect(h.debug.state.mode).toBe('exploring')
+    const d = driver(h), buzzed = spy(h, d, 'buzz'), said = spy(h, d, 'speak')
+    await d.frames(85, 0.1)                                    // deux pistes
+    const hints = hintsOf(said)
+    expect(hints).toHaveLength(2)
+    for (const t of hints) expect(MISSING.map(c => c.piste)).toContain(t)
+    expect(buzzed).toHaveLength(0)
+    h.stop()
+  })
+
+  it('coup de pouce : jamais examiné, le téléphone n\'est désigné et ne vibre qu\'une fois, les pistes suivantes mènent aux indices manquants', async () => {
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { cam: START, indices: 4 } })
+    const d = driver(h), buzzed = spy(h, d, 'buzz'), said = spy(h, d, 'speak')
+    await d.frames(125, 0.1)                                   // trois pistes
+    const hints = hintsOf(said)
+    expect(hints).toHaveLength(3)
+    expect(hints[0]).toBe(PHONE.piste)
+    for (const t of hints.slice(1)) expect(MISSING.map(c => c.piste)).toContain(t)
+    expect(buzzed).toHaveLength(1)
+    h.stop()
   })
 })
 

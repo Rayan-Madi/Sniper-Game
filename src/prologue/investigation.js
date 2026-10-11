@@ -24,6 +24,7 @@ const GLOW_FADE = 0.6       // l'écran du téléphone s'éteint en 0,6 s après
 const PAIR = 2 * BUZZ.salve + BUZZ.gap
 const SALVES = [0, BUZZ.salve + BUZZ.gap, ENDING.vibration - PAIR, ENDING.vibration - BUZZ.salve]
 const smooth = p => p * p * (3 - 2 * p)
+const TURN_MAX = 100 * Math.PI / 180   // le regard ne pivote pas vers un téléphone à plus de 100° de lui
 const PHOTO_W = 640         // largeur de l'instantané (4:3)
 const PHOTO_CROP = 0.74     // cadre le plus large : 74 % du 4:3 central (aussi celui d'un indice introuvable à l'image)
 const PHOTO_MIN = 0.35      // cadre le plus serré : 35 % de la hauteur de l'image (plus serré, l'agrandissement se verrait)
@@ -394,6 +395,25 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     const k = smooth(Math.min(1, Math.max(0, progress))), p = controller.position
     controller.setPose({ x: p.x, z: p.z, yaw: turn.yaw0 + turn.dyaw * k, pitch: turn.pitch0 + turn.dpitch * k })
   }
+  // le regard peut-il se poser sur le téléphone ? Il faut le voir d'où l'on est (rayon de l'œil vers le centre de son
+  // volume de visée, arrêté par les murs comme celui de la visée d'interact.js) et qu'il soit à 100° du regard au plus.
+  // Sinon le regard reste fixe (d'une autre pièce, il finissait sur un mur) : lu au début de la séquence, le joueur y
+  // est figé.
+  const _sight = new THREE.Raycaster(), _eye = new THREE.Vector3(), _to = new THREE.Vector3(), _gaze = new THREE.Vector3()
+  function phoneInSight() {
+    const target = apartment.targets.find(t => t.userData.clueId === PHONE.id)
+    if (!target) return false
+    const c = _aim.setFromObject(target).getCenter(_at), p = controller.position
+    _eye.set(p.x, camera.position.y, p.z)
+    const dist = _to.subVectors(c, _eye).length()
+    if (dist < 1e-6) return true
+    _to.divideScalar(dist)
+    const yaw = controller.yaw, pitch = controller.pitch
+    _gaze.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch))
+    if (_gaze.angleTo(_to) > TURN_MAX) return false
+    _sight.set(_eye, _to); _sight.near = 0; _sight.far = dist
+    return _sight.intersectObjects(apartment.occluders, true).length === 0
+  }
 
   // ── départ, pause, fin ──
   function startSound() {
@@ -523,8 +543,10 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     renderer.shadowMap.autoUpdate = false     // l'ombre de la lampe est calculée une fois, puis figée
     renderer.shadowMap.needsUpdate = true
 
-    // effets atténués : le réglage du moment, lu au début de la séquence de fin (pas de pivot du regard)
-    state = createInvestigationState({ anchors: apartment.anchors, found: CLUES.slice(0, opts.indices || 0).map(c => c.id), reducedMotion: effectsReduced })
+    // pas de pivot du regard en effets atténués (le réglage du moment), ni vers un téléphone hors de vue ou trop loin du
+    // regard : lu au début de la séquence de fin, la fiche s'ouvre alors quand le téléphone a fini de vibrer
+    state = createInvestigationState({ anchors: apartment.anchors, found: CLUES.slice(0, opts.indices || 0).map(c => c.id),
+      reducedMotion: () => effectsReduced() || !phoneInSight() })
     amb = createAmbience(audio)
     controller = createFpsController({ camera, colliders: apartment.colliders, start: apartment.start,
       onStep: () => amb.step(), onUnlock: () => pause() })
@@ -602,7 +624,8 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
         const hint = state.tick(dt, p)
         if (hint) {
           say(hint)
-          if (hint === PHONE.piste && state.phoneUnlocked) vibrate([0])   // coup de pouce : il vibre une fois
+          // coup de pouce : il vibre une fois, avec sa piste (qui ne tombe qu'une fois, et plus après qu'il a été examiné)
+          if (hint === PHONE.piste && state.phoneUnlocked) vibrate([0])
         }
         if (state.mode !== 'paused') { stepVibration(dt); stepHold(dt) }
         if (!fadingOut) followEnding()
