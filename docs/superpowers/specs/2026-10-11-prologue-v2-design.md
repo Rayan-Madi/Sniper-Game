@@ -74,6 +74,8 @@ Aujourd'hui l'appartement est fait de boîtes à arêtes vives. Objectif : qu'il
 - `dispose()` libère tout (test existant, étendu aux nouveaux objets) ;
 - performance : l'enquête doit rester légère sur un PC moyen (mesure `?enquete=1&stats=1` avant et après, appels de dessin au plus +10).
 
+**Décidé à N3 (architecture intérieure)** : les portes intérieures, leurs chambranles et leurs bâtis sont peints comme les plinthes et les corniches (un matériau « boiserie » de plus, soit un appel de dessin, compté parmi les occulteurs : portes et cadres arrêtent toujours la visée et le regard vers le téléphone) ; en bois sombre, leurs moulures et leurs panneaux ne se lisaient pas dans la nuit. La porte palière garde son bois sombre et son bâti d'origine ; côté entrée, elle reçoit un chambranle, sauf côté gâche, qui reste l'indice « serrure ». Les portes de la cuisine et des parents sont logées dans une vraie ouverture (bâti, seuil). Le palier ne change pas (cimaise, plinthes sombres, pas de corniche). Dans la chambre, la tête du lit est contre l'allège : le radiateur est un petit radiateur de cinq éléments sous la fenêtre, à gauche du lit. Les luminaires sont éteints : aucune lumière de plus. Moulures, appuis, panneaux et rosace sont bâtis par de petits constructeurs propres à l'enquête plutôt que par `ExtrudeGeometry` et `LatheGeometry` : three est d'un seul bloc dans le bundle principal, qu'elles auraient grossi de 7 kB.
+
 ## 6. Critères de fin
 
 - La cinématique B raconte l'histoire du §1 (captures aux temps clés), le journal des appels et la fiche du téléphone sont cohérents, plus aucune trace d'un message d'Anton à 18:52.

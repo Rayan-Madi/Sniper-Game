@@ -23,14 +23,17 @@ function canvasTexture(w, h, draw, { repeat = null } = {}) {
 // Générateur pseudo-aléatoire de la maquette (même graine que la ville des cinématiques : 7)
 function makeRnd(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646 } }
 
+// Géométrie non indexée (faite de triangles à plat) rendue indexée : la fusion veut des géométries toutes indexées.
+function indexed(g) { if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]); return g }
+
 // Rassemble des géométries par matériau, puis fusionne : un maillage par matériau.
 function createBatcher() {
   const buckets = new Map()   // matériau → géométries déjà transformées
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3()
   return {
-    // geo : géométrie indexée ; place : { x, y, z, rx, ry, rz, sx, sy, sz }
+    // geo : géométrie (indexée ou non) ; place : { x, y, z, rx, ry, rz, sx, sy, sz }
     add(mat, geo, place = {}) {
-      const g = geo.clone()
+      const g = indexed(geo.clone())
       m4.compose(p.set(place.x || 0, place.y || 0, place.z || 0), q.setFromEuler(e.set(place.rx || 0, place.ry || 0, place.rz || 0)),
         s.set(place.sx ?? 1, place.sy ?? 1, place.sz ?? 1))
       g.applyMatrix4(m4)
@@ -67,6 +70,86 @@ function between(geo, a, b) {
   return geo
 }
 const rod = (a, b, r, seg = 8) => between(new THREE.CylinderGeometry(r, r, a.distanceTo(b), seg), a, b)
+const UP = new THREE.Vector3(0, 1, 0)   // jamais modifié
+
+// Constructeurs maison plutôt qu'ExtrudeGeometry et LatheGeometry : three est d'un seul bloc dans le bundle principal,
+// et toute classe qu'on n'y utilisait pas l'y ferait grossir ; ceux-ci restent dans le morceau de l'enquête.
+// Géométrie faite de triangles à plat (sommets [x, y, z] trois par trois) : une normale par face, uv nulles.
+function fromTriangles(v) {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(v.length / 3 * 2), 2))
+  g.computeVertexNormals()
+  return indexed(g)
+}
+// Le polygone simple pts ([x, y]) tiré le long de z, de 0 à len : côtés à arêtes vives, bouts triangulés.
+function extrude(pts, len) {
+  const c = pts.map(([x, y]) => new THREE.Vector2(x, y)), v = [], tri = (a, b, d) => v.push(...a, ...b, ...d)
+  if (THREE.ShapeUtils.isClockWise(c)) c.reverse()
+  for (let i = 0; i < c.length; i++) {
+    const p = c[i], q = c[(i + 1) % c.length]
+    tri([p.x, p.y, 0], [q.x, q.y, 0], [q.x, q.y, len]); tri([p.x, p.y, 0], [q.x, q.y, len], [p.x, p.y, len])
+  }
+  for (const [a, b, d] of THREE.ShapeUtils.triangulateShape(c, [])) {
+    const A = c[a], ccw = (c[b].x - A.x) * (c[d].y - A.y) - (c[b].y - A.y) * (c[d].x - A.x) > 0
+    const [P, Q] = ccw ? [c[b], c[d]] : [c[d], c[b]]           // dans le sens direct, vu de +z
+    tri([A.x, A.y, len], [P.x, P.y, len], [Q.x, Q.y, len]); tri([A.x, A.y, 0], [Q.x, Q.y, 0], [P.x, P.y, 0])
+  }
+  return fromTriangles(v)
+}
+// Révolution d'un profil [r, y] autour de l'axe y, en seg côtés ; un profil qui s'éloigne de l'axe regarde vers le bas.
+function lathe(profile, seg) {
+  const v = [], at = (r, y, a) => [r * Math.cos(a), y, r * Math.sin(a)]
+  for (let s = 0; s < seg; s++) {
+    const a0 = s / seg * Math.PI * 2, a1 = (s + 1) / seg * Math.PI * 2
+    for (let i = 0; i + 1 < profile.length; i++) {
+      const [r0, y0] = profile[i], [r1, y1] = profile[i + 1], A = at(r0, y0, a0), C = at(r1, y1, a1)
+      v.push(...A, ...at(r1, y1, a0), ...C)
+      if (r0 > 0) v.push(...A, ...C, ...at(r0, y0, a1))
+    }
+  }
+  return fromTriangles(v)
+}
+
+// Prisme : un profil [u, v] (plan de coupe, en mètres) tiré en ligne droite de p0 à p1, son point (0, 0) sur cette
+// ligne ; u suit le vecteur unitaire au, v le vecteur unitaire av (perpendiculaires). Moulures, appuis.
+function prism(profile, au, av, p0, p1) {
+  const ax = new THREE.Vector3().crossVectors(au, av), d = new THREE.Vector3().subVectors(p1, p0)
+  return extrude(profile, d.length()).applyMatrix4(new THREE.Matrix4().makeBasis(au, av, ax).setPosition(ax.dot(d) >= 0 ? p0 : p1))   // repère direct
+}
+// Profils des moulures (mètres). Plinthe : u saillie hors du mur, v hauteur ; épaisse au pied, amincie en tête.
+const P_PLINTHE = [[0, 0], [0.016, 0], [0.016, 0.07], [0.013, 0.08], [0.009, 0.09], [0.004, 0.1], [0, 0.1]]
+// Corniche en gorge : u saillie hors du mur, v sous le plafond (négatif). Elle déborde de plus en plus en montant :
+// dans un angle rentrant, l'union des deux longueurs qui se croisent dessine l'onglet, sans coupe.
+const P_CORNICHE = [[0, 0], [0, -0.11], [0.008, -0.11], [0.008, -0.1], [0.018, -0.094], [0.034, -0.082], [0.05, -0.064],
+  [0.062, -0.044], [0.07, -0.028], [0.074, -0.02], [0.086, -0.02], [0.086, -0.01], [0.095, -0.01], [0.095, 0]]
+// Chambranle : u depuis le bord de l'ouverture vers l'extérieur, v saillie. Plus épais vers l'extérieur : au coin, l'union
+// du montant et de la traverse dessine l'onglet.
+const P_CHAMBRANLE = [[0, 0], [0, 0.01], [0.012, 0.012], [0.016, 0.015], [0.03, 0.016], [0.034, 0.019], [0.052, 0.02],
+  [0.056, 0.024], [0.068, 0.025], [0.072, 0.022], [0.072, 0]]
+const W_CHAMBRANLE = 0.072
+// Appui de fenêtre : u vers la pièce depuis la face du mur (négatif : sous la menuiserie), v hauteur ; nez arrondi.
+const P_APPUI = [[-0.24, 0], [0.03, 0], [0.038, 0.004], [0.042, 0.012], [0.042, 0.022], [0.038, 0.03], [0.03, 0.034], [-0.24, 0.034]]
+
+// Panneau à plate-bande, w × h, centré : posé sur la face d'un battant (z = 0), son pourtour monte en biseau (largeur b)
+// jusqu'au champ du panneau, t plus haut ; le dessous, dans le battant, n'a pas de face.
+function raisedPanel(w, h, b = 0.02, t = 0.01) {
+  const X = w / 2, Y = h / 2, x = X - b, y = Y - b, v = [], tri = (p, q, r) => v.push(...p, ...q, ...r)
+  const lo = [[-X, -Y], [X, -Y], [X, Y], [-X, Y]], hi = [[-x, -y], [x, -y], [x, y], [-x, y]]
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4, A = [...lo[i], 0], C = [...hi[j], t]
+    tri(A, [...lo[j], 0], C); tri(A, C, [...hi[i], t])
+  }
+  tri([-x, -y, t], [x, -y, t], [x, y, t]); tri([-x, -y, t], [x, y, t], [-x, y, t])
+  return fromTriangles(v)
+}
+// Rectangle w × h à coins arrondis (rayon r, k segments par coin), centré : la tranche d'un élément de radiateur.
+function roundedRect(w, h, r, k = 2) {
+  const pts = []
+  for (const [cx, cy, a0] of [[w / 2 - r, -h / 2 + r, -Math.PI / 2], [w / 2 - r, h / 2 - r, 0], [-w / 2 + r, h / 2 - r, Math.PI / 2], [-w / 2 + r, -h / 2 + r, Math.PI]])
+    for (let i = 0; i <= k; i++) { const a = a0 + i / k * Math.PI / 2; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]) }
+  return pts
+}
 
 // UV planaires (x, z) en mètres / tuile : le parquet et le carrelage gardent la même échelle d'une pièce à l'autre.
 function worldUV(geo, tu, tv = tu) {
@@ -515,6 +598,7 @@ export function buildApartment() {
     tapis: lambert(0xffffff, { map: T_rug }),
     tissuRose: lambert(0x8a5a6a),
     blanc: lambert(0xb8b4ac, {}, { cast: true }),
+    boiserie: lambert(0xb8b4ac, {}, { cast: true }),   // portes intérieures, chambranles, bâtis : peints comme les plinthes, ils arrêtent la visée
     livres: lambert(0xffffff, { vertexColors: true }, { cast: true }),
     metal: lambert(0x6a6e76),
     miroir: new THREE.MeshPhongMaterial({ color: 0x10141a, specular: 0x8899aa, shininess: 90 }),
@@ -565,31 +649,47 @@ export function buildApartment() {
       }
       if (p.y0 === 0) {   // seuls les morceaux qui partent du sol arrêtent le joueur (jamais un linteau)
         if (alongX) solid(p.a, p.b, line - T / 2, line + T / 2); else solid(line - T / 2, line + T / 2, p.a, p.b)
-        for (const side of [-1, 1]) {   // plinthes (sombres sur le palier, blanches dans l'appartement)
-          const o = line + side * (T / 2 + 0.006), pm = (side < 0 ? matNeg : matPos) === M.murPalier ? M.boisSombre : M.blanc
-          if (alongX) box(pm, mid, 0.04, o, len, 0.08, 0.012); else box(pm, o, 0.04, mid, 0.012, 0.08, len)
+        for (const side of [-1, 1]) {   // plinthes : droites et sombres sur le palier, moulurées et blanches dans l'appartement
+          if ((side < 0 ? matNeg : matPos) === M.murPalier) {
+            const o = line + side * (T / 2 + 0.006)
+            if (alongX) box(M.boisSombre, mid, 0.04, o, len, 0.08, 0.012); else box(M.boisSombre, o, 0.04, mid, 0.012, 0.08, len)
+          } else {
+            const f = line + side * T / 2, at = a => alongX ? V(a, 0, f) : V(f, 0, a)
+            B.add(M.blanc, prism(P_PLINTHE, alongX ? V(0, 0, side) : V(side, 0, 0), UP, at(p.a), at(p.b)))
+          }
         }
       }
     }
   }
 
+  // les ouvertures : mur le long de x (alongX, z = line) ou de z (x = line), de from à to, jusqu'à top
+  const O = {
+    entree: { alongX: true, line: 7, from: 5.55, to: 6.45, top: 2.05 },
+    cuisine: { alongX: true, line: 4.5, from: 5.6, to: 6.5, top: 2.05 },
+    parents: { alongX: true, line: 5.8, from: 1.5, to: 2.4, top: 2.05 },
+    chambre: { alongX: true, line: 4.5, from: 2.0, to: 2.9, top: 2.05 },
+    arcSalon: { alongX: false, line: 7.5, from: 5.0, to: 6.6, top: 2.2 },
+    arcCouloir: { alongX: false, line: 4.5, from: 4.6, to: 5.7, top: 2.2 },
+    baie: { alongX: false, line: 12.5, from: 2, to: 6, bottom: 0.9, top: 2.3 },
+    fenetre: { alongX: true, line: 0.8, from: 1.4, to: 3.2, bottom: 1.0, top: 2.2 },
+  }
   // palier
   // les murs latéraux partent de l'épaisseur du mur z = 7 : leur bout (prolongé de T/2) y est noyé, et non à fleur de sa face côté entrée
   wall(5, 7 + T / 2, 5, 8.5, [], M.murPalier); wall(7, 7 + T / 2, 7, 8.5, [], M.murPalier); wall(5, 8.5, 7, 8.5, [], M.murPalier)
   // entrée
-  wall(4.5, 7, 7.5, 7, [{ from: 5.55, to: 6.45, top: 2.05 }], M.mur, M.murPalier)
-  wall(4.5, 4.5, 7.5, 4.5)
-  wall(7.5, 1, 7.5, 7, [{ from: 5.0, to: 6.6, top: 2.2 }])
-  wall(4.5, 4.5, 4.5, 7, [{ from: 4.6, to: 5.7, top: 2.2 }])
+  wall(4.5, 7, 7.5, 7, [O.entree], M.mur, M.murPalier)
+  wall(4.5, 4.5, 7.5, 4.5, [O.cuisine])
+  wall(7.5, 1, 7.5, 7, [O.arcSalon])
+  wall(4.5, 4.5, 4.5, 7, [O.arcCouloir])
   // salon
   wall(7.5, 1, 12.5, 1); wall(7.5, 7, 12.5, 7)
-  wall(12.5, 1, 12.5, 7, [{ from: 2, to: 6, bottom: 0.9, top: 2.3 }])
+  wall(12.5, 1, 12.5, 7, [O.baie])
   // couloir
-  wall(0.5, 4.5, 0.5, 5.8); wall(0.5, 5.8, 4.5, 5.8)
-  wall(0.5, 4.5, 4.5, 4.5, [{ from: 2.0, to: 2.9, top: 2.05 }], M.murEnfant, M.mur)
+  wall(0.5, 4.5, 0.5, 5.8); wall(0.5, 5.8, 4.5, 5.8, [O.parents])
+  wall(0.5, 4.5, 4.5, 4.5, [O.chambre], M.murEnfant, M.mur)
   // chambre de la petite
   wall(0.5, 0.8, 0.5, 4.5, [], M.murEnfant); wall(4.5, 0.8, 4.5, 4.5, [], M.murEnfant)
-  wall(0.5, 0.8, 4.5, 0.8, [{ from: 1.4, to: 3.2, bottom: 1.0, top: 2.2 }], M.murEnfant)
+  wall(0.5, 0.8, 4.5, 0.8, [O.fenetre], M.murEnfant)
 
   // ── sols et plafonds ──
   const rooms = [
@@ -606,40 +706,84 @@ export function buildApartment() {
     box(M.plafond, cx, H + 0.01, cz, w, 0.02, d)
   }
 
-  // ── chambranles ──
-  function frame(alongX, line, from, to, top, mat = M.boisSombre, skipB = false) {
-    const fw = 0.06, fd = T + 0.03
-    if (alongX) {
-      box(mat, from - fw / 2, top / 2, line, fw, top, fd)
-      if (!skipB) box(mat, to + fw / 2, top / 2, line, fw, top, fd)
-      box(mat, (from + to) / 2, top + fw / 2, line, to - from + 2 * fw, fw, fd)
-    } else {
-      box(mat, line, top / 2, from - fw / 2, fd, top, fw)
-      box(mat, line, top / 2, to + fw / 2, fd, top, fw)
-      box(mat, line, top + fw / 2, (from + to) / 2, fd, fw, to - from + 2 * fw)
+  // ── corniches : une gorge sous le plafond, le long des quatre murs de chaque pièce de l'appartement (pas du palier) ──
+  for (const r of rooms.slice(1)) {
+    const x0 = r.x0 + T / 2, x1 = r.x1 - T / 2, z0 = r.z0 + T / 2, z1 = r.z1 - T / 2
+    for (const [n, a, b] of [[V(0, 0, 1), V(x0, H, z0), V(x1, H, z0)], [V(0, 0, -1), V(x0, H, z1), V(x1, H, z1)],
+      [V(1, 0, 0), V(x0, H, z0), V(x0, H, z1)], [V(-1, 0, 0), V(x1, H, z0), V(x1, H, z1)]]) B.add(M.blanc, prism(P_CORNICHE, n, UP, a, b))
+  }
+
+  // ── chambranles et bâtis des portes et des arches, peints comme les portes intérieures (boiserie : ils arrêtent la
+  // visée, comme les murs) ──
+  // point de la face s (±1) d'une ouverture o, à l'abscisse a le long du mur et à la hauteur y
+  const onFace = (o, s, a, y) => { const f = o.line + s * T / 2; return o.alongX ? V(a, y, f) : V(f, y, a) }
+  // chambranle mouluré sur la face s : montants (côtés listés) et traverse, d'onglet ; head : étendue de la traverse
+  function architrave(o, s, { sides = ['from', 'to'], head = null } = {}) {
+    const n = o.alongX ? V(0, 0, s) : V(s, 0, 0), w = o.alongX ? V(1, 0, 0) : V(0, 0, 1), W = W_CHAMBRANLE
+    if (sides.includes('from')) B.add(M.boiserie, prism(P_CHAMBRANLE, w.clone().negate(), n, onFace(o, s, o.from, 0), onFace(o, s, o.from, o.top + W)))
+    if (sides.includes('to')) B.add(M.boiserie, prism(P_CHAMBRANLE, w, n, onFace(o, s, o.to, 0), onFace(o, s, o.to, o.top + W)))
+    const [h0, h1] = head || [sides.includes('from') ? o.from - W : o.from, sides.includes('to') ? o.to + W : o.to]
+    B.add(M.boiserie, prism(P_CHAMBRANLE, UP, n, onFace(o, s, h0, o.top), onFace(o, s, h1, o.top)))
+  }
+  // bâti : deux montants et une traverse de 2 cm qui habillent l'épaisseur du mur (5 mm de débord de chaque côté)
+  function lining(o, th = 0.02) {
+    const d = T + 0.01, bx = (a0, a1, y0, y1) => o.alongX
+      ? box(M.boiserie, (a0 + a1) / 2, (y0 + y1) / 2, o.line, a1 - a0, y1 - y0, d) : box(M.boiserie, o.line, (y0 + y1) / 2, (a0 + a1) / 2, d, y1 - y0, a1 - a0)
+    bx(o.from, o.from + th, 0, o.top); bx(o.to - th, o.to, 0, o.top); bx(o.from, o.to, o.top - th, o.top)
+  }
+  // la porte d'entrée garde son bâti d'origine (côté palier, éclairé par le néon) ; le montant côté gâche appartient à
+  // l'indice « serrure »
+  {
+    const fw = 0.06, fd = T + 0.03, o = O.entree
+    box(M.boisSombre, o.from - fw / 2, o.top / 2, o.line, fw, o.top, fd)
+    box(M.boisSombre, (o.from + o.to) / 2, o.top + fw / 2, o.line, o.to - o.from + 2 * fw, fw, fd)
+    // côté palier, le chambranle reçoit la lumière du néon (fine peau émissive, UV verticales du monde)
+    for (const [cx, cy, w, h] of [[5.52, 1.025, 0.06, 2.05], [6.0, 2.08, 1.02, 0.06]]) { const g = new THREE.BoxGeometry(w, h, 0.004); g.translate(cx, cy, 7 + fd / 2 + 0.002); B.add(M.portePalier, heightUV(g)) }
+    architrave(o, -1, { sides: ['from'], head: [o.from - W_CHAMBRANLE, o.to + W_CHAMBRANLE] })   // côté entrée : la traverse, intacte, court au-dessus de la gâche
+  }
+  for (const o of [O.chambre, O.cuisine, O.parents, O.arcSalon, O.arcCouloir]) lining(o)
+  architrave(O.chambre, 1); architrave(O.chambre, -1)
+  architrave(O.cuisine, 1); architrave(O.parents, -1)   // l'autre face donne sur une pièce fermée
+  architrave(O.arcSalon, 1); architrave(O.arcSalon, -1)
+  // l'arche du couloir touche presque les murs du couloir : côté entrée, un seul montant et la traverse jusqu'à l'angle ;
+  // côté couloir, la traverse seule, d'un mur à l'autre
+  architrave(O.arcCouloir, 1, { sides: ['to'], head: [4.5 + T / 2, O.arcCouloir.to + W_CHAMBRANLE] })
+  architrave(O.arcCouloir, -1, { sides: [], head: [4.5 + T / 2, 5.8 - T / 2] })
+
+  // ── portes intérieures : battants logés dans leur bâti, à deux panneaux à plate-bande, béquille sur rosace ──
+  const DOOR_Y = [0.16, 0.86, 1.0, 1.9]   // panneau du bas, panneau du haut (y0, y1)
+  // panneaux sur la face d'un battant (le long de x) en z, tournée vers s
+  function doorPanels(cx, z, s) {
+    for (const [y0, y1] of [[DOOR_Y[0], DOOR_Y[1]], [DOOR_Y[2], DOOR_Y[3]]]) {
+      const g = raisedPanel(0.6, y1 - y0); if (s < 0) g.rotateY(Math.PI)
+      B.add(M.boiserie, g, { x: cx, y: (y0 + y1) / 2, z })
     }
   }
-  frame(true, 7, 5.55, 6.45, 2.05, M.boisSombre, true)   // le montant côté gâche appartient à l'indice « serrure »
-  // côté palier, le chambranle reçoit la lumière du néon (fine peau émissive, UV verticales du monde)
-  for (const [cx, cy, w, h] of [[5.52, 1.025, 0.06, 2.05], [6.0, 2.08, 1.02, 0.06]]) { const g = new THREE.BoxGeometry(w, h, 0.004); g.translate(cx, cy, 7 + (T + 0.03) / 2 + 0.002); B.add(M.portePalier, heightUV(g)) }
-  frame(true, 4.5, 2.0, 2.9, 2.05)
-  frame(true, 4.5, 5.6, 6.5, 2.05); frame(true, 5.8, 1.5, 2.4, 2.05)   // cuisine, parents (portes fermées)
-
-  // ── portes fermées (battants en saillie, poignées) et porte ouverte de la chambre ──
-  box(M.boisSombre, 6.05, 1.025, 4.58, 0.88, 2.04, 0.04); solid(5.6, 6.5, 4.44, 4.6)
-  box(M.metal, 6.38, 1.0, 4.62, 0.12, 0.02, 0.02); box(M.metal, 6.42, 1.0, 4.61, 0.05, 0.12, 0.012)
-  box(M.boisSombre, 1.95, 1.025, 5.72, 0.88, 2.04, 0.04); solid(1.5, 2.4, 5.7, 5.86)
-  box(M.metal, 1.62, 1.0, 5.68, 0.12, 0.02, 0.02); box(M.metal, 1.58, 1.0, 5.69, 0.05, 0.12, 0.012)
-  for (const [mx, mz] of [[6.05, 4.612], [1.95, 5.688]]) for (const dy of [0.55, 1.5]) box(M.boisSombre, mx, dy, mz, 0.64, 0.6, 0.01)   // panneaux moulurés
-  // porte de la chambre, grande ouverte, rabattue contre le mur (gond en x = 2,9, côté chambre)
-  box(M.boisSombre, 3.36, 1.025, 4.41, 0.88, 2.04, 0.04); solid(2.9, 3.82, 4.37, 4.44)
-  box(M.metal, 3.72, 1.0, 4.375, 0.12, 0.02, 0.02)
+  // béquille : rosace, tige, et le levier tourné vers le gond (dir : ±1 le long de x)
+  function handle(x, z, s, dir) {
+    B.add(M.metal, new THREE.CylinderGeometry(0.024, 0.024, 0.008, 16).rotateX(Math.PI / 2), { x, y: 1.0, z: z + s * 0.004 })
+    B.add(M.metal, new THREE.CylinderGeometry(0.007, 0.007, 0.04, 8).rotateX(Math.PI / 2), { x, y: 1.0, z: z + s * 0.024 })
+    box(M.metal, x + dir * 0.05, 1.0, z + s * 0.044, 0.11, 0.016, 0.018)
+  }
+  // portes fermées : 1 cm en retrait de la face vue s, un seuil dessous (la pièce derrière n'est pas dessinée)
+  function closedDoor(o, s, handleAt, dir) {
+    const zc = o.line + s * (T / 2 - 0.03), cx = (o.from + o.to) / 2
+    box(M.boiserie, cx, 1.019, zc, o.to - o.from - 0.044, 2.018, 0.04)
+    box(M.boisSombre, cx, 0.005, o.line, o.to - o.from, 0.01, T)
+    doorPanels(cx, zc + s * 0.02, s); handle(handleAt, zc + s * 0.02, s, dir)
+  }
+  closedDoor(O.cuisine, 1, 6.4, -1); solid(5.6, 6.5, 4.44, 4.6)
+  closedDoor(O.parents, -1, 1.6, 1); solid(1.5, 2.4, 5.7, 5.86)
+  // porte de la chambre, grande ouverte, rabattue contre son chambranle (gond en x = 2,9, côté chambre)
+  { const zc = 4.5 - T / 2 - 0.025 - 0.02
+    box(M.boiserie, 3.35, 1.019, zc, 0.86, 2.018, 0.04); solid(2.9, 3.82, 4.37, 4.44)
+    doorPanels(3.35, zc - 0.02, -1); handle(3.71, zc - 0.02, -1, -1) }
 
   // ── la porte d'entrée : battant à part (il bouge), pivot au gond (5,6 ; 6,97) ──
   const pivot = new THREE.Object3D(); pivot.position.set(5.6, 0, 6.97); pivot.rotation.y = 30 * DEG; group.add(pivot)
-  const leafGeo = mergeGeometries([
+  const leafGeo = mergeGeometries([   // côté entrée, des panneaux à plate-bande comme les portes intérieures
     new THREE.BoxGeometry(0.9, 2.05, 0.041).translate(0.45, 1.025, -0.0005),
-    new THREE.BoxGeometry(0.62, 0.7, 0.01).translate(0.45, 0.55, -0.026), new THREE.BoxGeometry(0.62, 0.9, 0.01).translate(0.45, 1.5, -0.026),
+    raisedPanel(0.62, 0.7).rotateY(Math.PI).translate(0.45, 0.55, -0.021), raisedPanel(0.62, 0.9).rotateY(Math.PI).translate(0.45, 1.5, -0.021),
   ])
   const leaf = new THREE.Mesh(leafGeo, M.boisSombre); leaf.castShadow = true; leaf.receiveShadow = true; pivot.add(leaf)
   // face palier du battant (panneaux moulurés compris), éclairée par le néon
@@ -759,30 +903,101 @@ export function buildApartment() {
     // livres tombés au sol
     for (const [bx, bz, ry] of [[10.75, 6.25, 0.4], [11.55, 6.05, -0.9], [10.95, 5.95, 1.6]]) B.add(M.livres, tint(new THREE.BoxGeometry(0.16, 0.035, 0.24), cols[Math.floor(rnd() * cols.length)]), { x: bx, y: 0.018, z: bz, ry })
   }
-  // radiateur sous la fenêtre
-  for (let i = 0; i < 15; i++) box(M.blanc, 12.37, 0.44, 3.25 + i * 0.1, 0.09, 0.56, 0.06)
-  box(M.blanc, 12.37, 0.15, 4.0, 0.06, 0.03, 1.5); box(M.blanc, 12.37, 0.73, 4.0, 0.06, 0.03, 1.5)
-  solid(12.28, 12.44, 3.2, 4.8)
-  // fenêtre du salon : appui, menuiseries, vitre
-  box(M.blanc, 12.38, 0.91, 4.0, 0.18, 0.03, 4.1)
-  for (const z of [2.03, 3.33, 4.67, 5.97]) box(M.metal, 12.5, 1.6, z, 0.07, 1.4, 0.06)
-  for (const y of [0.93, 1.6, 2.27]) box(M.metal, 12.5, y, 4.0, 0.07, 0.06, 4.0)
-  { const g = new THREE.PlaneGeometry(4, 1.4); g.rotateY(-Math.PI / 2); g.translate(12.52, 1.6, 4.0); B.add(M.vitre, g) }
-  // rideaux (plans ondulés) et tringle
-  function curtain(mat, cx, cz, w, top, alongZ, facing, seed, bottom = 0.02) {
-    const rnd = makeRnd(seed), g = new THREE.PlaneGeometry(w, top, 28, 6), p = g.attributes.position
-    const ph = rnd() * 6
+  // ── radiateur en fonte : éléments à tranche arrondie, deux collecteurs, le tuyau qui sort du sol et son robinet ──
+  // f : face du mur { alongX, at, n (vers la pièce) } ; de a0 à a1 le long du mur, de y0 à y1 ; pitch : pas visé d'un
+  // élément au suivant ; valve : côté du robinet (-1 : a0, 1 : a1)
+  function radiator(f, a0, a1, y0, y1, pitch, valve) {
+    const P = (a, y, u) => f.alongX ? V(a, y, f.at + f.n * u) : V(f.at + f.n * u, y, a)
+    const nIn = f.alongX ? V(0, 0, f.n) : V(f.n, 0, 0), along = new THREE.Vector3().crossVectors(nIn, UP)
+    const D = 0.075, uc = 0.035 + D / 2, count = Math.max(2, Math.round((a1 - a0) / pitch)), p = (a1 - a0) / count, thk = p * 0.7
+    const shape = roundedRect(D, y1 - y0, 0.03)
+    for (let k = 0; k < count; k++) {
+      const g = extrude(shape, thk).translate(0, 0, -thk / 2)
+      B.add(M.blanc, g.applyMatrix4(new THREE.Matrix4().makeBasis(nIn, UP, along).setPosition(P(a0 + (k + 0.5) * p, (y0 + y1) / 2, uc))))
+    }
+    for (const y of [y0 + 0.05, y1 - 0.05]) B.add(M.blanc, rod(P(a0 + 0.01, y, uc), P(a1 - 0.01, y, uc), 0.016))
+    const va = valve < 0 ? a0 - 0.035 : a1 + 0.035, end = valve < 0 ? a0 + 0.01 : a1 - 0.01, yt = y1 - 0.05
+    B.add(M.blanc, rod(P(va, 0, uc), P(va, yt, uc), 0.011)); B.add(M.blanc, rod(P(va, yt, uc), P(end, yt, uc), 0.011))
+    B.add(M.metal, rod(P(va, yt, uc), P(va, yt + 0.07, uc), 0.017, 10)); B.add(M.metal, rod(P(va, yt + 0.07, uc), P(va, yt + 0.095, uc), 0.024, 10))
+  }
+
+  // ── fenêtres : embrasure (tableaux peints), appui à nez arrondi, dormant, vantaux à petits bois, espagnolettes ──
+  // o : l'ouverture ; n : côté de la pièce (+1 : coordonnées croissantes) ; bays : travées de deux vantaux ; handleY :
+  // bas de la poignée. La menuiserie est posée au fond de l'embrasure, de 16 à 22 cm derrière la face du mur (les
+  // tableaux prolongent l'épaisseur du mur jusqu'à 24 cm) ; la pluie, la ville et la lumière de la nuit sont derrière.
+  function windowSet(o, n, bays, handleY) {
+    const at = o.line + n * T / 2
+    const P = (a, y, d) => o.alongX ? V(a, y, at - n * d) : V(at - n * d, y, a)   // d : profondeur derrière la face
+    const lbox = (mat, a0, a1, y0, y1, d0, d1) => {
+      const c = P((a0 + a1) / 2, (y0 + y1) / 2, (d0 + d1) / 2)
+      if (o.alongX) box(mat, c.x, c.y, c.z, a1 - a0, y1 - y0, d1 - d0); else box(mat, c.x, c.y, c.z, d1 - d0, y1 - y0, a1 - a0)
+    }
+    const nIn = o.alongX ? V(0, 0, n) : V(n, 0, 0), th = 0.02, DL = 0.24, F = [0.16, 0.22], L = [0.155, 0.205]
+    // tableaux, appui et bandeau sous son nez
+    lbox(M.blanc, o.from, o.from + th, o.bottom, o.top, -0.005, DL); lbox(M.blanc, o.to - th, o.to, o.bottom, o.top, -0.005, DL)
+    lbox(M.blanc, o.from, o.to, o.top - th, o.top, -0.005, DL)
+    B.add(M.blanc, prism(P_APPUI, nIn, UP, P(o.from - 0.05, o.bottom, 0), P(o.to + 0.05, o.bottom, 0)))
+    lbox(M.blanc, o.from - 0.03, o.to + 0.03, o.bottom - 0.05, o.bottom, -0.012, 0)
+    // dormant, puis le vitrage dans son épaisseur
+    const A0 = o.from + th, A1 = o.to - th, Y0 = o.bottom + 0.034, Y1 = o.top - th, fw = 0.05
+    lbox(M.blanc, A0, A0 + fw, Y0, Y1, ...F); lbox(M.blanc, A1 - fw, A1, Y0, Y1, ...F)
+    lbox(M.blanc, A0 + fw, A1 - fw, Y0, Y0 + fw, ...F); lbox(M.blanc, A0 + fw, A1 - fw, Y1 - fw, Y1, ...F)
+    const a0 = A0 + fw, a1 = A1 - fw, y0 = Y0 + fw, y1 = Y1 - fw
+    {
+      const g = new THREE.PlaneGeometry(a1 - a0, y1 - y0)
+      if (!o.alongX) g.rotateY(n < 0 ? -Math.PI / 2 : Math.PI / 2); else if (n < 0) g.rotateY(Math.PI)
+      const c = P((a0 + a1) / 2, (y0 + y1) / 2, 0.19); g.translate(c.x, c.y, c.z); B.add(M.vitre, g)
+    }
+    // travées : un meneau entre deux ; deux vantaux chacune (montants, traverses, deux petits bois), battement, espagnolette
+    const mw = 0.06, bw = (a1 - a0 - (bays - 1) * mw) / bays, st = 0.045
+    for (let k = 0; k < bays; k++) {
+      const b0 = a0 + k * (bw + mw), b1 = b0 + bw, mid = (b0 + b1) / 2
+      if (k) lbox(M.blanc, b0 - mw, b0, y0, y1, ...F)
+      for (const [l0, l1] of [[b0, mid], [mid, b1]]) {
+        lbox(M.blanc, l0, l0 + st, y0, y1, ...L); lbox(M.blanc, l1 - st, l1, y0, y1, ...L)
+        lbox(M.blanc, l0 + st, l1 - st, y0, y0 + 0.06, ...L); lbox(M.blanc, l0 + st, l1 - st, y1 - 0.05, y1, ...L)
+        const g0 = y0 + 0.06, g1 = y1 - 0.05
+        for (const f of [1 / 3, 2 / 3]) { const y = g0 + (g1 - g0) * f; lbox(M.blanc, l0 + st, l1 - st, y - 0.011, y + 0.011, 0.165, 0.2) }
+      }
+      lbox(M.blanc, mid - 0.014, mid + 0.014, y0 + 0.02, y1 - 0.02, 0.145, L[0])
+      B.add(brass, rod(P(mid, y0 + 0.06, 0.138), P(mid, y1 - 0.06, 0.138), 0.006, 6))
+      lbox(brass, mid - 0.01, mid + 0.01, handleY, handleY + 0.13, 0.125, 0.137)
+    }
+  }
+
+  // ── rideaux : un plan plissé, plis serrés sous la tringle qui s'ouvrent vers le bas, ourlet ; tringle à anneaux ──
+  function curtain(mat, cx, cz, w, y0, y1, alongZ, facing, seed) {
+    const h = y1 - y0, rnd = makeRnd(seed), g = new THREE.PlaneGeometry(w, h, 40, 8), p = g.attributes.position
+    const ph = rnd() * 6, folds = Math.max(4, Math.round(w / 0.11))
     for (let i = 0; i < p.count; i++) {
-      const u = p.getX(i), v = p.getY(i)
-      p.setZ(i, 0.035 * Math.sin(u * 30 + ph) + 0.012 * Math.sin(u * 71 + ph * 2) + (v < -top / 2 + 0.05 ? 0.01 : 0))
+      const u = p.getX(i) / w + 0.5, v = p.getY(i) / h + 0.5   // de 0 à 1 : de gauche à droite, de bas en haut
+      const k = u * folds * Math.PI * 2 + ph, amp = 0.022 + 0.014 * (1 - v)
+      p.setZ(i, amp * Math.sin(k) + 0.006 * Math.sin(k * 2.3 + ph) + (v < 0.03 ? 0.006 : 0))
     }
     g.computeVertexNormals()
     if (alongZ) g.rotateY(facing < 0 ? -Math.PI / 2 : Math.PI / 2); else if (facing < 0) g.rotateY(Math.PI)
-    g.translate(cx, bottom + top / 2, cz)
+    g.translate(cx, (y0 + y1) / 2, cz)
     B.add(mat, g)
   }
-  curtain(M.rideau, 12.34, 1.7, 0.75, 2.42, true, -1, 41); curtain(M.rideau, 12.34, 6.3, 0.75, 2.42, true, -1, 43)
-  B.add(M.metal, rod(V(12.36, 2.47, 1.15), V(12.36, 2.47, 6.85), 0.012))
+  // barre de p0 à p1, embouts en boule, supports scellés au mur (paires [mur, barre]), anneaux aux points donnés
+  function curtainRod(p0, p1, supports, rings) {
+    B.add(M.metal, rod(p0, p1, 0.011))
+    for (const q of [p0, p1]) B.add(M.metal, new THREE.SphereGeometry(0.022, 8, 6), { x: q.x, y: q.y, z: q.z })
+    for (const [w, r] of supports) B.add(M.metal, rod(w, r, 0.006, 6))
+    const alongX = Math.abs(p1.x - p0.x) > Math.abs(p1.z - p0.z)
+    for (const q of rings) B.add(M.metal, new THREE.TorusGeometry(0.019, 0.0035, 3, 8), { x: q.x, y: q.y, z: q.z, ry: alongX ? Math.PI / 2 : 0 })
+  }
+  const ringsOver = (c, w, at) => { const m = Math.round(w / 0.1), r = []; for (let k = 0; k <= m; k++) r.push(at(c - w / 2 + k * w / m)); return r }
+
+  // le salon : radiateur, baie à trois travées, rideaux sombres jusqu'au sol
+  radiator({ alongX: false, at: 12.5 - T / 2, n: -1 }, 3.25, 4.75, 0.12, 0.72, 0.075, -1)
+  solid(12.28, 12.44, 3.2, 4.8)
+  windowSet(O.baie, -1, 3, 1.3)
+  curtain(M.rideau, 12.34, 1.7, 0.7, 0.02, 2.45, true, -1, 41); curtain(M.rideau, 12.34, 6.3, 0.7, 0.02, 2.45, true, -1, 43)
+  {
+    const at = z => V(12.34, 2.47, z), wallAt = z => V(12.44, 2.47, z)
+    curtainRod(at(1.22), at(6.78), [1.32, 4.0, 6.68].map(z => [wallAt(z), at(z)]), [...ringsOver(1.7, 0.7, at), ...ringsOver(6.3, 0.7, at)])
+  }
   // chaise renversée près de l'arche, hors du passage (8,0 ; 6,65), sans collision
   {
     const c = new THREE.Group(), parts = []
@@ -862,12 +1077,16 @@ export function buildApartment() {
     for (let i = 0; i < 6; i++) B.add(M.livres, tint(new THREE.BoxGeometry(0.06, 0.06, 0.06), cols[i % 4]), { x: 1.35 + rnd() * 0.5, y: 0.03, z: 3.4 + rnd() * 0.35, ry: rnd() * 2 })
     B.add(M.livres, tint(new THREE.BoxGeometry(0.06, 0.06, 0.06), 0xe0b030), { x: 1.0, y: 0.45, z: 3.85, ry: 0.4 })
   }
-  // fenêtre de la chambre
-  box(M.blanc, 2.3, 1.01, 0.88, 1.9, 0.03, 0.16)
-  for (const x of [1.43, 2.3, 3.17]) box(M.metal, x, 1.6, 0.8, 0.06, 1.2, 0.07)
-  for (const y of [1.03, 2.17]) box(M.metal, 2.3, y, 0.8, 1.8, 0.06, 0.07)
-  { const g = new THREE.PlaneGeometry(1.8, 1.2); g.translate(2.3, 1.6, 0.78); B.add(M.vitre, g) }
-  curtain(M.tissuRose, 1.1, 0.92, 0.55, 1.4, false, 1, 47, 0.9); curtain(M.tissuRose, 3.5, 0.92, 0.55, 1.4, false, 1, 53, 0.9)
+  // fenêtre de la chambre, à deux vantaux ; rideaux roses sur leur tringle ; un petit radiateur sous la fenêtre, à gauche
+  // du lit (la tête du lit est contre l'allège)
+  windowSet(O.fenetre, 1, 1, 1.45)
+  curtain(M.tissuRose, 1.1, 0.96, 0.55, 0.9, 2.4, false, 1, 47); curtain(M.tissuRose, 3.5, 0.96, 0.55, 0.9, 2.4, false, 1, 53)
+  {
+    const at = x => V(x, 2.42, 0.96), wallAt = x => V(x, 2.42, 0.8 + T / 2)
+    curtainRod(at(0.72), at(3.88), [0.82, 2.3, 3.78].map(x => [wallAt(x), at(x)]), [...ringsOver(1.1, 0.55, at), ...ringsOver(3.5, 0.55, at)])
+  }
+  radiator({ alongX: true, at: 0.8 + T / 2, n: 1 }, 1.46, 1.76, 0.15, 0.6, 0.055, -1)
+  solid(1.38, 1.8, 0.86, 0.98)
   // veilleuse en étoile sur la table de chevet
   {
     const star = new THREE.Shape(), R = 0.065, r = 0.028
@@ -1134,9 +1353,47 @@ export function buildApartment() {
     tg.done()
   }
 
+  // ── interrupteurs (près des portes, côté poignée, à 1,1 m) et prises (à 28 cm) : plaques sur la face d'un mur ──
+  function plate(f, a, y, outlet = false) {
+    const at = u => f.alongX ? [a, y, f.at + f.n * u] : [f.at + f.n * u, y, a]
+    const bx = (mat, w, h, u0, u1, da = 0) => { const [x, yy, z] = at((u0 + u1) / 2); if (f.alongX) box(mat, x + da, yy, z, w, h, u1 - u0); else box(mat, x, yy, z + da, u1 - u0, h, w) }
+    bx(M.blanc, 0.08, 0.08, 0, 0.009)
+    if (!outlet) { bx(M.blanc, 0.026, 0.04, 0.009, 0.014); return }
+    const [x, yy, z] = at(0.0095)   // le puits de la prise et ses deux trous
+    B.add(M.metal, new THREE.CylinderGeometry(0.021, 0.021, 0.001, 16), { x, y: yy, z, rx: f.alongX ? Math.PI / 2 : 0, rz: f.alongX ? 0 : Math.PI / 2 })
+    for (const d of [-0.0095, 0.0095]) bx(M.miroir, 0.006, 0.006, 0.0098, 0.0102, d)
+  }
+  plate({ alongX: true, at: 7 - T / 2, n: -1 }, 6.66, 1.1)            // entrée, à côté de la porte palière
+  plate({ alongX: false, at: 7.5 + T / 2, n: 1 }, 4.72, 1.1)          // salon, à côté de l'arche
+  plate({ alongX: true, at: 5.8 - T / 2, n: -1 }, 1.26, 1.1)          // couloir, à côté de la porte des parents
+  plate({ alongX: true, at: 4.5 - T / 2, n: -1 }, 1.78, 1.1)          // chambre, à côté de sa porte
+  plate({ alongX: true, at: 4.5 + T / 2, n: 1 }, 7.1, 0.28, true)     // entrée
+  plate({ alongX: true, at: 1 + T / 2, n: 1 }, 7.85, 0.28, true)      // salon, au bout du canapé
+  plate({ alongX: true, at: 5.8 - T / 2, n: -1 }, 3.95, 0.28, true)   // couloir
+  plate({ alongX: true, at: 0.8 + T / 2, n: 1 }, 3.42, 0.28, true)    // chambre, près de la veilleuse
+
+  // ── luminaires, éteints (aucune lumière de plus) : suspension à globe opalin sous une rosace (salon), plafonniers
+  // (entrée, couloir), lanterne de papier rose (chambre) ──
+  {
+    const rose = lathe([[0, -0.032], [0.035, -0.032], [0.05, -0.024], [0.08, -0.02], [0.11, -0.022], [0.14, -0.014],
+      [0.17, -0.012], [0.2, -0.006], [0.23, 0]], 24)
+    B.add(M.blanc, rose, { x: 10.0, y: H, z: 4.0 })
+    B.add(M.metal, new THREE.CylinderGeometry(0.035, 0.045, 0.03, 12), { x: 10.0, y: H - 0.047, z: 4.0 })   // cache-piton
+    B.add(M.metal, rod(V(10.0, H - 0.06, 4.0), V(10.0, 2.11, 4.0), 0.004, 6))                              // fil
+    B.add(M.metal, new THREE.CylinderGeometry(0.03, 0.04, 0.04, 12), { x: 10.0, y: 2.1, z: 4.0 })           // douille
+    B.add(M.blanc, new THREE.SphereGeometry(0.14, 18, 12), { x: 10.0, y: 1.97, z: 4.0 })                    // globe
+    for (const [x, z, r] of [[6.0, 5.75, 0.17], [2.5, 5.15, 0.13]]) {
+      B.add(M.metal, new THREE.CylinderGeometry(r + 0.012, r + 0.012, 0.012, 20), { x, y: H - 0.006, z })
+      B.add(M.blanc, new THREE.SphereGeometry(r, 18, 5, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), { x, y: H - 0.012, z, sy: 0.45 })
+    }
+    B.add(M.metal, rod(V(2.5, H, 2.65), V(2.5, 2.37, 2.65), 0.004, 6))
+    B.add(M.blanc, new THREE.SphereGeometry(0.13, 18, 12), { x: 2.5, y: 2.25, z: 2.65 })
+    for (const dy of [-0.06, 0, 0.06]) B.add(M.metal, new THREE.TorusGeometry(Math.sqrt(0.13 ** 2 - dy * dy) + 0.002, 0.002, 3, 28), { x: 2.5, y: 2.25 + dy, z: 2.65, rx: Math.PI / 2 })
+  }
+
   // ── fusion du décor : un maillage par matériau ──
   const meshes = B.finish(group)
-  for (const m of meshes) if ([M.mur, M.murPalier, M.murEnfant, M.boisSombre].includes(m.material)) occluders.push(m)
+  for (const m of meshes) if ([M.mur, M.murPalier, M.murEnfant, M.boisSombre, M.boiserie].includes(m.material)) occluders.push(m)
 
   // ── animation : porte, pluie, néon qui grésille ──
   const neonState = { t: 0, next: 1.2, burst: 0, level: 1 }

@@ -20,13 +20,15 @@ const walk = (apt, from, to, steps = 400) => {
 }
 
 describe('l\'appartement', () => {
-  // valeurs mesurées par stats() : 47 objets et 16 550 triangles (REPRISE.md, 44 appels en capture réelle après
-  // élagage). Toute hausse est un choix assumé : mettre ce test à jour en même temps que REPRISE.md.
-  it('tient le budget mesuré : au plus 47 objets dessinés et 16 600 triangles', () => {
+  // budget relevé par le prologue v2 (spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §5, au lieu de 47 et
+  // 16 600) : toujours fusionné par matériau. Mesuré par stats() après l'architecture intérieure : 48 objets, 27 410
+  // triangles (en jeu : 45 appels, 27 306 triangles au départ). Toute hausse est un choix assumé : mettre ce test à jour
+  // en même temps que REPRISE.md.
+  it('tient le budget relevé : au plus 80 objets dessinés et 45 000 triangles', () => {
     const apt = buildApartment()
     const { drawables, triangles } = apt.stats()
-    expect(drawables).toBeLessThanOrEqual(47)
-    expect(triangles).toBeLessThanOrEqual(16600)
+    expect(drawables).toBeLessThanOrEqual(80)
+    expect(triangles).toBeLessThanOrEqual(45000)
     apt.dispose()
   })
 
@@ -128,13 +130,16 @@ describe('l\'appartement', () => {
     apt.dispose()
   })
 
+  // prologue v2 : toutes les textures de chaque matériau (carte, carte émissive…), pas seulement la carte ; les moulures,
+  // menuiseries, radiateurs et luminaires sont fusionnés dans les maillages parcourus ici
   it('dispose libère géométries, matériaux, textures et la carte d\'ombre', () => {
     const apt = buildApartment()
     const geos = new Set(), mats = new Set(), maps = new Set()
     apt.group.traverse(o => {
       if (o.geometry) geos.add(o.geometry)
-      for (const m of [].concat(o.material || [])) { mats.add(m); if (m.map) maps.add(m.map) }
+      for (const m of [].concat(o.material || [])) { mats.add(m); for (const k in m) if (m[k] && m[k].isTexture) maps.add(m[k]) }
     })
+    expect(maps.size).toBeGreaterThan(10)
     const spies = [...geos, ...mats, ...maps].map(x => vi.spyOn(x, 'dispose'))
     const shadow = vi.spyOn(apt.lights.spot.shadow, 'dispose')
     apt.dispose()
@@ -199,6 +204,223 @@ describe('l\'appartement : l\'écran du téléphone', () => {
     apt.setPhoneLight(null)
     apt.update(0.05)
     expect(screenOf(apt).emissiveIntensity).toBe(3)              // la valeur de base, pas la suite du clignotement
+    apt.dispose()
+  })
+})
+
+// ── prologue v2 : un appartement moins cubique, l'architecture intérieure (spec
+// docs/superpowers/specs/2026-10-11-prologue-v2-design.md §5) ──
+// Sondes au rayon contre le décor tel qu'il est dessiné : maillages visibles et opaques seulement (ni lueurs, ni vitres,
+// ni sang, ni volumes de visée invisibles, ni pluie).
+describe('l\'appartement : l\'architecture intérieure', () => {
+  const H = 2.6, V3 = (...a) => new THREE.Vector3(...a)
+  const visible = o => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true }
+  function probes(apt) {
+    apt.group.updateMatrixWorld(true)
+    const meshes = []; apt.group.traverse(o => { if (o.isMesh && !o.material.transparent && visible(o)) meshes.push(o) })
+    const ray = new THREE.Raycaster()
+    // distance au premier objet opaque, depuis o dans la direction d (Infinity si rien avant far)
+    const hit = (o, d, far = 10) => {
+      ray.set(new THREE.Vector3(...o), new THREE.Vector3(...d).normalize()); ray.near = 0; ray.far = far
+      const h = ray.intersectObjects(meshes, false)[0]
+      return h ? h.distance : Infinity
+    }
+    // saillie de ce qui est posé sur la face d'un mur au point (x, y, z) de cette face, normale (nx, nz) vers la pièce :
+    // 0 sur le mur nu, positive devant lui, négative dans un renfoncement
+    const proud = (x, y, z, nx, nz) => 0.2 - hit([x + nx * 0.2, y, z + nz * 0.2], [-nx, 0, -nz], 0.5)
+    // balaie la face le long du mur (de a à b, pas de 5 mm) : saillies relevées
+    const scan = (face, y, a, b, step = 0.005) => {
+      const out = []
+      for (let s = a; s <= b + 1e-9; s += step) out.push(face.alongX ? proud(s, y, face.at, 0, face.n) : proud(face.at, y, s, face.n, 0))
+      return out
+    }
+    return { hit, proud, scan }
+  }
+  // un point libre de chaque mur des pièces (ni meuble, ni ouverture) : [lieu, x, z, nx, nz] sur la face du mur
+  const WALLS = [
+    ['entrée, mur du palier', 5.0, 6.94, 0, -1], ['entrée, mur du palier', 7.2, 6.94, 0, -1],
+    ['entrée, mur de la cuisine', 5.0, 4.56, 0, 1], ['entrée, mur de la cuisine', 7.0, 4.56, 0, 1],
+    ['entrée, mur du couloir', 4.56, 6.35, 1, 0], ['entrée, mur du salon', 7.44, 4.75, -1, 0],
+    ['salon, mur du canapé', 7.9, 1.06, 0, 1], ['salon, mur du canapé', 11.5, 1.06, 0, 1],
+    ['salon, mur de l\'étagère', 9.5, 6.94, 0, -1], ['salon, mur de l\'étagère', 12.2, 6.94, 0, -1],
+    ['salon, mur de la fenêtre', 12.44, 1.2, -1, 0], ['salon, mur de la fenêtre', 12.44, 6.8, -1, 0],
+    ['salon, mur de l\'entrée', 7.56, 3.0, 1, 0],
+    ['couloir, fond', 0.56, 5.15, 1, 0], ['couloir, mur des parents', 0.9, 5.74, 0, -1], ['couloir, mur des parents', 4.0, 5.74, 0, -1],
+    ['couloir, mur de la chambre', 1.2, 4.56, 0, 1], ['couloir, mur de la chambre', 3.8, 4.56, 0, 1],
+    ['chambre, mur de la fenêtre', 0.65, 0.86, 0, 1], ['chambre, mur de la fenêtre', 3.9, 0.86, 0, 1],
+    ['chambre, mur de gauche', 0.56, 2.65, 1, 0], ['chambre, mur de droite', 4.44, 2.65, -1, 0],
+    ['chambre, mur du couloir', 1.2, 4.44, 0, -1], ['chambre, mur du couloir', 4.1, 4.44, 0, -1],
+  ]
+  const r3 = v => Math.round(v * 1000) / 1000
+
+  it('une corniche court sous le plafond de chaque pièce : elle déborde du mur en haut, le mur reparaît 20 cm plus bas', () => {
+    const apt = buildApartment(), { proud } = probes(apt), bad = []
+    for (const [lieu, x, z, nx, nz] of WALLS) {
+      const top = proud(x, H - 0.015, z, nx, nz), below = proud(x, H - 0.2, z, nx, nz)
+      if (!(top >= 0.03)) bad.push(`${lieu} (${x} ; ${z}) : ${r3(top)} m sous le plafond`)
+      if (!(Math.abs(below) < 0.005)) bad.push(`${lieu} (${x} ; ${z}) : ${r3(below)} m à 20 cm du plafond`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('des plinthes moulurées de 10 cm : épaisses au pied, amincies en tête, rien au-dessus', () => {
+    const apt = buildApartment(), { proud } = probes(apt), bad = []
+    for (const [lieu, x, z, nx, nz] of WALLS) {
+      const foot = proud(x, 0.02, z, nx, nz), head = proud(x, 0.095, z, nx, nz), above = proud(x, 0.14, z, nx, nz)
+      if (!(foot >= 0.012)) bad.push(`${lieu} (${x} ; ${z}) : pied ${r3(foot)}`)
+      if (!(head > 0.002 && head < foot - 0.003)) bad.push(`${lieu} (${x} ; ${z}) : tête ${r3(head)} (pied ${r3(foot)})`)
+      if (!(Math.abs(above) < 0.002)) bad.push(`${lieu} (${x} ; ${z}) : ${r3(above)} à 14 cm`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  // les ouvertures : mur le long de x (z constant) ou de z ; faces habillées (côté des coordonnées croissantes : 1) ;
+  // côtés de l'ouverture qui reçoivent un montant de chambranle (le côté gâche de la porte d'entrée est l'indice
+  // « serrure » ; dans le couloir, l'arche touche les murs)
+  const OPENINGS = [
+    { nom: 'porte de la chambre', alongX: true, line: 4.5, from: 2.0, to: 2.9, top: 2.05, faces: [1, -1] },
+    { nom: 'porte de la cuisine', alongX: true, line: 4.5, from: 5.6, to: 6.5, top: 2.05, faces: [1], closed: true },
+    { nom: 'porte des parents', alongX: true, line: 5.8, from: 1.5, to: 2.4, top: 2.05, faces: [-1], closed: true },
+    { nom: 'arche du salon', alongX: false, line: 7.5, from: 5.0, to: 6.6, top: 2.2, faces: [-1, 1] },
+    { nom: 'arche du couloir, côté entrée', alongX: false, line: 4.5, from: 4.6, to: 5.7, top: 2.2, faces: [1], sides: ['to'] },
+    { nom: 'arche du couloir, côté couloir', alongX: false, line: 4.5, from: 4.6, to: 5.7, top: 2.2, faces: [-1], sides: [] },
+    { nom: 'porte d\'entrée', alongX: true, line: 7, from: 5.55, to: 6.45, top: 2.05, faces: [-1], sides: ['from'], noLining: true },
+  ]
+
+  it('chaque porte et chaque arche a son chambranle mouluré, en relief d\'au moins 2 cm, montants et traverse', () => {
+    const apt = buildApartment(), { proud } = probes(apt), bad = []
+    for (const o of OPENINGS) for (const s of o.faces) {
+      const at = o.line + s * 0.06, p = (along, y) => o.alongX ? proud(along, y, at, 0, s) : proud(at, y, along, s, 0)
+      const checks = [['traverse', (o.from + o.to) / 2, o.top + 0.055]]
+      for (const side of o.sides || ['from', 'to']) checks.push([`montant ${side}`, side === 'from' ? o.from - 0.055 : o.to + 0.055, 1.0])
+      for (const [part, along, y] of checks) { const v = p(along, y); if (!(v >= 0.02)) bad.push(`${o.nom} (face ${s}) : ${part} ${r3(v)}`) }
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('les ouvertures sont habillées d\'un bâti : l\'embrasure ne montre plus le bout brut du mur', () => {
+    const apt = buildApartment(), { hit } = probes(apt), bad = []
+    for (const o of OPENINGS) {
+      if (o.noLining || o.sides) continue
+      const mid = (o.from + o.to) / 2, half = (o.to - o.from) / 2
+      const plane = o.closed ? o.line - o.faces[0] * 0.03 : o.line   // derrière le battant d'une porte fermée
+      for (const dir of [-1, 1]) {
+        const d = o.alongX ? hit([mid, 1.0, plane], [dir, 0, 0], 1) : hit([plane, 1.0, mid], [0, 0, dir], 1)
+        if (!(d <= half - 0.01)) bad.push(`${o.nom} (vers ${dir}) : ${r3(d)} pour ${half}`)
+      }
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('les portes fermées sont à panneaux à plate-bande : du battant au panneau, la saillie monte en biseau', () => {
+    const apt = buildApartment(), { scan } = probes(apt), bad = []
+    const doors = [
+      { nom: 'porte de la cuisine', face: { alongX: true, at: 4.56, n: 1 }, a: 5.65, b: 6.45 },
+      { nom: 'porte des parents', face: { alongX: true, at: 5.74, n: -1 }, a: 1.55, b: 2.35 },
+      { nom: 'porte de la chambre, ouverte', face: { alongX: true, at: 4.44, n: -1 }, a: 3.0, b: 3.72 },
+    ]
+    for (const d of doors) for (const y of [0.5, 1.45]) {
+      const levels = new Set(scan(d.face, y, d.a, d.b).filter(Number.isFinite).map(v => Math.round(v * 1000)))
+      if (levels.size < 4) bad.push(`${d.nom} à ${y} m : ${levels.size} niveaux (${[...levels].join(', ')} mm)`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('les fenêtres sont posées au fond d\'une embrasure, à petits bois, sur un appui', () => {
+    const apt = buildApartment(), { hit } = probes(apt), bad = []
+    // runs : nombre de barreaux traversés (suites d'échantillons qui touchent la menuiserie à moins de 50 cm)
+    const runs = ds => { let n = 0, prev = false; for (const d of ds) { const on = d < 0.5; if (on && !prev) n++; prev = on } return n }
+    const range = (a, b, step = 0.005) => { const r = []; for (let s = a; s <= b + 1e-9; s += step) r.push(s); return r }
+    // salon : baie x = 12,5 (face 12,44), z 2 à 6, y 0,9 à 2,3 ; sondes depuis x = 12,2 vers +x
+    const across = range(2.2, 5.8).map(z => hit([12.2, 1.25, z], [1, 0, 0], 3))
+    const depth = Math.min(...across.filter(d => d < 0.5)) + 12.2 - 12.44
+    if (!(depth >= 0.12)) bad.push(`salon : menuiserie à ${r3(depth)} m derrière le mur`)
+    if (runs(across) < 5) bad.push(`salon : ${runs(across)} montants à travers la baie`)
+    const up = range(1.08, 2.15).map(y => hit([12.2, y, 2.5], [1, 0, 0], 3))
+    if (runs(up) < 2) bad.push(`salon : ${runs(up)} traverses dans un vantail`)
+    // chambre : fenêtre z = 0,8 (face 0,86), x 1,4 à 3,2, y 1 à 2,2 ; sondes depuis z = 1,1 vers −z
+    const acrossC = range(1.55, 3.05).map(x => hit([x, 1.3, 1.1], [0, 0, -1], 3))
+    const depthC = Math.min(...acrossC.filter(d => d < 0.5)) + 0.86 - 1.1
+    if (!(depthC >= 0.12)) bad.push(`chambre : menuiserie à ${r3(depthC)} m derrière le mur`)
+    const upC = range(1.12, 2.08).map(y => hit([1.85, y, 1.1], [0, 0, -1], 3))
+    if (runs(upC) < 2) bad.push(`chambre : ${runs(upC)} traverses dans un vantail`)
+    // appui : une tablette sous chaque fenêtre, qui déborde dans la pièce
+    const sill = (x, z, y0) => y0 - hit([x, y0, z], [0, -1, 0], 2)
+    const s1 = sill(12.42, 4.0, 1.3), s2 = sill(2.3, 0.875, 1.4)
+    if (!(s1 > 0.9 && s1 < 0.96)) bad.push(`salon : appui à ${r3(s1)} m`)
+    if (!(s2 > 1.0 && s2 < 1.06)) bad.push(`chambre : appui à ${r3(s2)} m`)
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('chaque rideau pend d\'une tringle, sous la corniche', () => {
+    const apt = buildApartment(), { hit } = probes(apt), bad = []
+    for (const [lieu, x, z] of [['salon, à gauche', 12.34, 1.7], ['salon, à droite', 12.34, 6.3], ['chambre, à gauche', 1.1, 0.96], ['chambre, à droite', 3.5, 0.96]]) {
+      const d = hit([x, 2.55, z], [0, -1, 0], 3)
+      if (!(d < 0.15)) bad.push(`${lieu} : rien sous ${r3(d)} m`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('un radiateur sous chaque fenêtre ; celui de la chambre arrête le joueur', () => {
+    const apt = buildApartment(), { scan } = probes(apt)
+    expect(Math.max(...scan({ alongX: false, at: 12.44, n: -1 }, 0.45, 3.4, 4.6))).toBeGreaterThanOrEqual(0.05)   // salon
+    expect(Math.max(...scan({ alongX: true, at: 0.86, n: 1 }, 0.4, 1.45, 1.75))).toBeGreaterThanOrEqual(0.05)     // chambre, à gauche du lit
+    expect(walk(apt, { x: 1.5, z: 2.0 }, { x: 1.5, z: 1.0 }).z).toBeGreaterThan(1.2)
+    apt.dispose()
+  })
+
+  // occulteurs à jour : la visée (interact.js) et le regard vers le téléphone ne traversent ni une porte ni son cadre
+  it('les portes, leurs chambranles et leurs bâtis arrêtent la visée, comme les murs', () => {
+    const apt = buildApartment(); apt.group.updateMatrixWorld(true)
+    const ray = new THREE.Raycaster(), first = (o, d) => { ray.set(V3(...o), V3(...d)); ray.far = 3; const h = ray.intersectObjects(apt.occluders, true)[0]; return h ? h.distance : Infinity }
+    expect(first([1.95, 1.0, 5.15], [0, 0, 1])).toBeLessThan(0.62)      // porte des parents, battant en z = 5,75
+    expect(first([6.05, 1.0, 5.5], [0, 0, -1])).toBeLessThan(0.96)      // porte de la cuisine, battant en z = 4,55
+    expect(first([7.575, 1.0, 4.0], [0, 0, 1])).toBeLessThan(0.95)      // le long du mur du salon : chambranle de l'arche
+    expect(first([2.45, 1.0, 4.5], [1, 0, 0])).toBeLessThan(0.45)       // dans l'ouverture de la chambre : son bâti
+    apt.dispose()
+  })
+
+  it('un interrupteur près de chaque porte, une prise dans chaque pièce : des plaques fines sur le mur', () => {
+    const apt = buildApartment(), { scan } = probes(apt), bad = []
+    const plate = v => v >= 0.004 && v <= 0.025
+    const SWITCHES = [
+      ['entrée, porte palière', { alongX: true, at: 6.94, n: -1 }, 6.56, 6.95],
+      ['salon, arche', { alongX: false, at: 7.56, n: 1 }, 4.4, 4.9],
+      ['couloir, porte des parents', { alongX: true, at: 5.74, n: -1 }, 0.95, 1.4],
+      ['chambre, sa porte', { alongX: true, at: 4.44, n: -1 }, 1.45, 1.9],
+    ]
+    for (const [lieu, face, a, b] of SWITCHES) if (![1.05, 1.1, 1.15].some(y => scan(face, y, a, b).some(plate))) bad.push(`interrupteur : ${lieu}`)
+    const OUTLETS = [
+      ['entrée', { alongX: true, at: 4.56, n: 1 }, 6.7, 7.4],
+      ['salon', { alongX: true, at: 1.06, n: 1 }, 7.6, 8.1],
+      ['couloir', { alongX: true, at: 5.74, n: -1 }, 3.6, 4.3],
+      ['chambre', { alongX: true, at: 0.86, n: 1 }, 3.28, 3.7],
+    ]
+    for (const [lieu, face, a, b] of OUTLETS) if (![0.25, 0.3].some(y => scan(face, y, a, b).some(plate))) bad.push(`prise : ${lieu}`)
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('un luminaire au plafond de chaque pièce, éteint : aucune lumière de plus', () => {
+    const apt = buildApartment(), { hit } = probes(apt), bad = []
+    const lights = []; apt.group.traverse(o => { if (o.isLight) lights.push(o) })
+    // rayons vers le haut, depuis 1,75 m (au-dessus des meubles, sous un globe suspendu), autour du milieu de la pièce
+    for (const [lieu, cx, cz] of [['entrée', 6.0, 5.75], ['salon', 10.0, 4.0], ['couloir', 2.5, 5.15], ['chambre', 2.5, 2.65]]) {
+      let lowest = Infinity
+      for (let dx = -0.25; dx <= 0.25 + 1e-9; dx += 0.05) for (let dz = -0.25; dz <= 0.25 + 1e-9; dz += 0.05) lowest = Math.min(lowest, hit([cx + dx, 1.75, cz + dz], [0, 1, 0], 1))
+      if (!(1.75 + lowest < H - 0.03)) bad.push(`${lieu} : plafond nu`)
+    }
+    expect(bad).toEqual([])
+    // la lampe, le ciel, la lune, la veilleuse : les seules lumières, comme avant
+    expect(lights.length).toBe(Object.keys(apt.lights).length)
+    for (const l of Object.values(apt.lights)) expect(lights.includes(l)).toBe(true)
     apt.dispose()
   })
 })
