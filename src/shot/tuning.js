@@ -108,6 +108,17 @@ export const SON = {
   vitesse: 343,         // vitesse du son (m/s) : le son de l'impact arrive distance / 343 s après la balle
   echoDb: -18,          // niveau de l'envoi vers l'écho de la carte : plus haut, l'écho se fait plus présent
   echoImpactM: 10,      // un impact plus loin que cela part aussi vers l'écho ; plus près, on n'entend que le coup sec
+  // Niveau de chaque son d'impact (src/audio.js), en dB par rapport à sa recette (0 : tel quel ; +6 : amplitude
+  // doublée, -6 : moitié) : plus haut, ce que la balle touche s'entend mieux. Recettes : chair, métal et pierre culminent
+  // à 0,45, bois à 0,38, sol à 0,3, sous la détonation du tir (1,2).
+  impactDb: { chair: 0, metal: 0, pierre: 0, bois: 0, sol: 0 },
+}
+
+// ─── Pluie du port (M3) ────────────────────────────────────────────
+// La pluie de l'enquête (src/prologue/ambience.js), démarrée et coupée avec la nappe de la mission (src/audio.js).
+export const PLUIE = {
+  niveau: 0.06,         // niveau de la pluie, celui de l'enquête : plus haut, elle couvre davantage le reste du son
+  monteeS: 2,           // montée de la pluie au départ de la mission (elle s'éteint avec la nappe, en 1,2 s)
 }
 
 // ─── Écho de chaque carte (src/shot/acoustics.js) ──────────────────

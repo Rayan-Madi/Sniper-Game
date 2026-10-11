@@ -309,6 +309,30 @@ describe("sons de l'arrivée de la balle", () => {
     expect(() => { a.playShotSounds([]); a.playShotSounds([{ son: 'inconnu', at: 0 }]) }).not.toThrow()
     expect(sources()).toEqual([])
   })
+
+  // Relecture de T6 : le niveau des sons d'impact se règle dans tuning.js (SON.impactDb, en dB par rapport à la
+  // recette d'audio.js), comme celui de l'écho : Rayan règle son tir dans un seul fichier (spec du lot 2, §3.1 et
+  // §3.8). Témoin vu rouge : les niveaux étaient écrits en dur dans audio.js, la table de réglage restait sans effet.
+  it("le niveau de chaque son d'impact se règle dans tuning.js (SON.impactDb, en dB)", async () => {
+    const { SON: reglages } = await import('../src/shot/tuning.js')   // l'instance que lit audio.js (modules remis à neuf)
+    const audio = await import('../src/audio.js')
+    audio.audioContext()
+    // Gain de départ de chaque composante (source → filtre éventuel → gain)
+    const gainDeSource = n => { let g = n; while (g && g.kind !== 'gain') g = [...g.outputs][0]; return g.gain.events.find(e => e[0] === 'set')[1] }
+    const niveaux = son => {
+      created.length = 0
+      avantT6(audio).playShotSounds([{ son, at: 0, echo: false }])
+      return sources().map(gainDeSource)
+    }
+    const recette = Object.fromEntries(IMPACTS.map(son => [son, niveaux(son)]))
+    reglages.impactDb = { ...reglages.impactDb, metal: 6, chair: -6 }
+    for (const son of IMPACTS) {
+      const k = { 'impact-metal': 10 ** (6 / 20), 'impact-chair': 10 ** (-6 / 20) }[son] ?? 1
+      const n = niveaux(son)
+      expect(n.length, son).toBe(recette[son].length)
+      n.forEach((v, i) => expect(v, `${son}, composante ${i}`).toBeCloseTo(recette[son][i] * k, 9))
+    }
+  })
 })
 
 describe("plus de bip d'arcade", () => {
@@ -498,5 +522,70 @@ describe('pluie du port (M3)', () => {
     expect(atteint(premiere, master)).toBe(false)
     expect(atteint(seconde, master)).toBe(true)
     audio.stopMissionAmbience()
+  })
+
+  // Relecture de T6 : la pluie remplissait son bruit par Math.random, 6 s d'échantillons (288 000 tirages à 48 kHz),
+  // et seulement quand le contexte tourne : dans une capture à graine dont le contexte tourne, le hasard tiré après
+  // startLevel en M3 était décalé. Témoin vu rouge : 600 tirages au faux contexte (100 Hz) ; dans Chrome, à la vue de
+  // départ de M3, 303 687 tirages contexte en marche contre 15 687 contexte suspendu.
+  it("la pluie ne déplace pas le hasard du jeu : son bruit vient d'un générateur à graine fixe, pas de Math.random", async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext()
+    created.length = 0
+    const hasard = vi.spyOn(Math, 'random')
+    audio.startMissionAmbience({ rain: true })
+    const [premiere] = pluies()
+    expect(premiere).toBeDefined()
+    expect(hasard).not.toHaveBeenCalled()
+    const bruit = premiere.buffer.getChannelData(0)
+    expect(bruit.length).toBe(6 * ctx.sampleRate)
+    expect(bruit.every(v => v >= -1 && v <= 1)).toBe(true)
+    expect(new Set(bruit).size, 'du bruit, ni silence ni constante').toBeGreaterThan(bruit.length * 0.9)
+    expect(Math.abs(bruit.reduce((s, v) => s + v, 0) / bruit.length), 'centré').toBeLessThan(0.1)
+    audio.stopMissionAmbience()
+    audio.startMissionAmbience({ rain: true })
+    const seconde = pluies().find(p => p !== premiere)
+    expect(seconde).toBeDefined()
+    expect(seconde.buffer.getChannelData(0), 'graine fixe : le même bruit à chaque départ').toEqual(bruit)
+    expect(hasard).not.toHaveBeenCalled()
+    audio.stopMissionAmbience()
+  })
+
+  // Relecture de T6 : niveau et montée de la pluie du port dans tuning.js (PLUIE), avec les autres réglages du son.
+  // Témoin vu rouge : RAIN, écrit en dur dans audio.js (0,06 en 2 s, quel que soit le réglage).
+  it('niveau et montée de la pluie se règlent dans tuning.js (PLUIE)', async () => {
+    const t = await import('../src/shot/tuning.js')   // l'instance que lit audio.js (modules remis à neuf)
+    const PLUIE = t.PLUIE ?? { niveau: 0.06, monteeS: 2 }   // avant la relecture : la table n'existait pas
+    PLUIE.niveau = 0.09; PLUIE.monteeS = 3
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext()
+    ctx.currentTime = 4
+    created.length = 0
+    audio.startMissionAmbience({ rain: true })
+    const [src] = pluies()
+    expect(src).toBeDefined()
+    expect(gainDe(src).gain.events.find(e => e[0] === 'linear')).toEqual(['linear', 0.09, 7])
+    audio.stopMissionAmbience()
+  })
+
+  // Relecture de T6 : le fondu (setTargetAtTime, constante de 1,2 / 3,75 s) était coupé au bout de 1,2 s, la source
+  // arrêtée à 32 dB seulement sous le niveau de la pluie. Témoin vu rouge : il restait 2,4 % du niveau à l'arrêt.
+  it("à l'arrêt, le fondu de la pluie va à son terme : 60 dB perdus quand sa source s'arrête, avec la nappe (1,2 s)", async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext()
+    created.length = 0
+    audio.startMissionAmbience({ rain: true })
+    const [src] = pluies()
+    expect(src).toBeDefined()
+    const g = gainDe(src)
+    ctx.currentTime = 10
+    audio.stopMissionAmbience()
+    const fondu = g.gain.events.find(e => e[0] === 'target')
+    expect(fondu).toBeDefined()
+    let ms = 0
+    while (src.stopAt === null && ms < 5000) { vi.advanceTimersByTime(10); ms += 10 }
+    expect(src.stopAt).not.toBeNull()
+    expect(Math.exp(-(ms / 1000) / fondu[3]), "niveau restant à l'arrêt de la source").toBeLessThanOrEqual(1e-3 + 1e-12)
+    expect(ms / 1000, 'coupée avec la nappe').toBeLessThanOrEqual(1.2 + 0.01)
   })
 })

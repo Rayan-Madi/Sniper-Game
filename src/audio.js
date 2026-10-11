@@ -1,5 +1,5 @@
 // Sons synthétiques via Web Audio API — pas de fichiers externes
-import { SON } from './shot/tuning.js'
+import { SON, PLUIE } from './shot/tuning.js'
 import { impulseResponse } from './shot/acoustics.js'
 import { createRain } from './prologue/ambience.js'
 
@@ -134,44 +134,45 @@ export function playShot() {
 }
 
 // Sons de l'arrivée de la balle (spec du lot 2, §3.5), au niveau d'un impact entendu de loin : bien sous le tir. Le
-// calendrier (src/shot/soundPlan.js) dit lequel, quand (delay, s) et s'il part vers l'écho (vers).
+// calendrier (src/shot/soundPlan.js) dit lequel, quand (delay, s) et s'il part vers l'écho (vers) ; k est le niveau
+// réglé pour la matière (SON.impactDb, src/shot/tuning.js), appliqué à chaque composante de la recette.
 const IMPACTS = {
   // chair : un coup mat et sourd, sans note
-  'impact-chair': (delay, vers) => {
-    noise(0.025, 0.3, delay, 1100, 'bandpass', vers)        // la claque de l'impact
-    noise(0.11, 0.45, delay, 380, 'lowpass', vers)          // le corps, sourd
-    tone(95, 'sine', 0.12, 0.35, 0.001, delay, vers)
+  'impact-chair': (delay, vers, k) => {
+    noise(0.025, 0.3 * k, delay, 1100, 'bandpass', vers)        // la claque de l'impact
+    noise(0.11, 0.45 * k, delay, 380, 'lowpass', vers)          // le corps, sourd
+    tone(95, 'sine', 0.12, 0.35 * k, 0.001, delay, vers)
   },
   // métal : claquement sec, puis la tôle qui sonne (trois notes inharmoniques qui s'éteignent)
-  'impact-metal': (delay, vers) => {
-    noise(0.012, 0.45, delay, 4200, 'highpass', vers)
-    tone(1870, 'sine', 0.35, 0.12, 0.001, delay, vers)
-    tone(2710, 'sine', 0.25, 0.08, 0.001, delay, vers)
-    tone(4130, 'sine', 0.16, 0.05, 0.001, delay, vers)
+  'impact-metal': (delay, vers, k) => {
+    noise(0.012, 0.45 * k, delay, 4200, 'highpass', vers)
+    tone(1870, 'sine', 0.35, 0.12 * k, 0.001, delay, vers)
+    tone(2710, 'sine', 0.25, 0.08 * k, 0.001, delay, vers)
+    tone(4130, 'sine', 0.16, 0.05 * k, 0.001, delay, vers)
   },
   // pierre : éclat sec, puis les débris qui s'effritent
-  'impact-pierre': (delay, vers) => {
-    noise(0.04, 0.45, delay, 2600, 'bandpass', vers)
-    noise(0.14, 0.16, delay + 0.012, 900, 'bandpass', vers)
+  'impact-pierre': (delay, vers, k) => {
+    noise(0.04, 0.45 * k, delay, 2600, 'bandpass', vers)
+    noise(0.14, 0.16 * k, delay + 0.012, 900, 'bandpass', vers)
   },
   // bois : un « toc » creux
-  'impact-bois': (delay, vers) => {
-    noise(0.05, 0.38, delay, 1100, 'bandpass', vers)
-    tone(260, 'triangle', 0.09, 0.25, 0.001, delay, vers)
+  'impact-bois': (delay, vers, k) => {
+    noise(0.05, 0.38 * k, delay, 1100, 'bandpass', vers)
+    tone(260, 'triangle', 0.09, 0.25 * k, 0.001, delay, vers)
   },
   // sol : un souffle de terre et de poussière
-  'impact-sol': (delay, vers) => {
-    noise(0.18, 0.3, delay, 700, 'lowpass', vers)
-    noise(0.05, 0.1, delay, 1800, 'bandpass', vers)
+  'impact-sol': (delay, vers, k) => {
+    noise(0.18, 0.3 * k, delay, 700, 'lowpass', vers)
+    noise(0.05, 0.1 * k, delay, 1800, 'bandpass', vers)
   },
 }
 
 // Joue le calendrier de l'arrivée d'une balle (planShotSounds, src/shot/soundPlan.js) : [{ son, at, echo }], at en
-// secondes à partir de maintenant. Un son inconnu est ignoré.
+// secondes à partir de maintenant, au niveau réglé pour sa matière. Un son inconnu est ignoré.
 export function playShotSounds(plan) {
   for (const { son, at, echo: versEcho } of plan) {
     const jouer = IMPACTS[son]
-    if (jouer) jouer(Math.max(0, at), sorties(versEcho))
+    if (jouer) jouer(Math.max(0, at), sorties(versEcho), 10 ** ((SON.impactDb?.[son.slice('impact-'.length)] ?? 0) / 20))
   }
 }
 
@@ -276,15 +277,14 @@ export function updateStressAudio(dt, stress, scoped) {
 // ─── Ambiance de mission (nappe grave discrète pendant le gameplay) ────
 let ambTimer = null, ambGain = null
 // Pluie de la mission du port (spec du lot 2, §3.5) : celle de l'enquête (createRain), démarrée et coupée avec la
-// nappe, en fondu aux deux bouts.
+// nappe, en fondu aux deux bouts ; niveau et montée réglés dans src/shot/tuning.js (PLUIE).
 let rain = null
-const RAIN = { niveau: 0.06, monteeS: 2 }
 
 // rain : la carte a sa pluie (le port, maps.js) ; REVOIR LE BRIEFING la coupe avec la nappe, le retour la relance.
 export function startMissionAmbience({ rain: pluie = false } = {}) {
   if (pluie && !rain) {
     const r = createRain({ ctx: getCtx(), dest: out() })
-    if (r.start(RAIN)) rain = r   // contexte suspendu : pas de pluie, le départ suivant la relancera
+    if (r.start({ niveau: PLUIE.niveau, monteeS: PLUIE.monteeS })) rain = r   // contexte suspendu : pas de pluie, le départ suivant la relancera
   }
   if (ambTimer) return
   const c = getCtx()

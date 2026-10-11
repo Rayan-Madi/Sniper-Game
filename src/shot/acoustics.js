@@ -6,8 +6,8 @@ import { ACOUSTIQUES } from './tuning.js'
 // port un retour très court qui se répète (sonorité métallique). Réglages : ACOUSTIQUES (src/shot/tuning.js).
 
 // Générateur à graine (mulberry32), rendu dans [0, 1[ : la même carte sonne pareil à chaque montage, et le hasard du
-// jeu (Math.random, à graine dans les captures) n'est pas déplacé.
-function generateur(graine) {
+// jeu (Math.random, à graine dans les captures) n'est pas déplacé. La pluie s'en sert aussi (src/prologue/ambience.js).
+export function generateur(graine) {
   let s = graine >>> 0
   return () => {
     s = (s + 0x6D2B79F5) >>> 0
