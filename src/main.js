@@ -5,7 +5,7 @@ import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
 import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject, solidMeshes, setSolidTint } from './maps.js'
-import { playShot, playSilencedShot, playKill, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, audioContext, masterNode } from './audio.js'
+import { playShot, playSilencedShot, playShotSounds, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, mountEcho, unmountEcho, audioState, audioContext, masterNode } from './audio.js'
 import { spawnTrail, retargetTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
 import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources } from './characters.js'
@@ -18,6 +18,7 @@ import { createBolt } from './shot/bolt.js'
 import { npcHit } from './shot/hitzones.js'
 import { solidHit, resolveImpact } from './shot/occlusion.js'
 import { targetScore, guardHit, missFeed } from './shot/score.js'
+import { planShotSounds } from './shot/soundPlan.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
 import { rankFor, precisionOf, isHit } from './campaign/rank.js'
@@ -504,7 +505,8 @@ function clearEntities() {
 // Démontage de la scène d'une mission (PNJ, convoi, cadenas, impacts, effets) : relance, mission suivante, retour au
 // menu, et la route ?memtest=1. PNJ, jeeps, cadenas et effets libèrent leurs ressources GPU ; les trous d'impact et
 // les modèles GLB partagent les leurs (effects.js, characters.js). Un PNJ abattu déjà retiré au bout de 8 s ne
-// libère rien de plus (NPC.dispose est idempotent).
+// libère rien de plus (NPC.dispose est idempotent). L'écho de la carte (une ConvolverNode et sa réponse) est libéré
+// aussi.
 function unmountLevel() {
   for (const npc of npcs) npc.dispose()
   clearConvoy()
@@ -512,6 +514,7 @@ function unmountLevel() {
   npcs = []; targets = []; guards = []; civilians = []
   clearBulletHoles()
   clearEffects()
+  unmountEcho()
 }
 
 // prep : mission montée pendant son briefing (launchLevel), reprise telle quelle. Sinon (sans briefing, modèles arrivés
@@ -545,7 +548,7 @@ function startLevel(n, prep = null) {
   hudEl.style.display = 'block'
   hudLevel.textContent = `${currentLevelData.name}  ·  ${Math.min(n, MAX_LEVEL)}/${MAX_LEVEL}`
   alertBanner.style.display = 'none'
-  startMissionAmbience()   // nappe sonore de tension pendant la mission
+  startMissionAmbience({ rain: !!currentMapInfo.rain })   // nappe sonore de tension pendant la mission, et la pluie du port
 
   // Dossier d'indices (cible cachée)
   const hidden = currentMapInfo.hiddenTarget
@@ -567,8 +570,9 @@ function startLevel(n, prep = null) {
   setTimeout(() => { if (token === missionToken) instruction.style.opacity = '0' }, 5000)
 }
 
-// Montage de la scène d'une mission (carte, PNJ, cadenas, convoi, caméra de départ), sans écran, son ni minuteur :
-// startLevel l'appelle, la route ?memtest=1 aussi. Le hasard est tiré dans le même ordre qu'avant l'extraction.
+// Montage de la scène d'une mission (carte, PNJ, cadenas, convoi, caméra de départ, écho de la carte), sans écran, son
+// ni minuteur : startLevel l'appelle, la route ?memtest=1 aussi. Le hasard est tiré dans le même ordre qu'avant
+// l'extraction (l'écho a sa propre graine).
 function mountLevel(n) {
   removeMoralLock()
   applyQuality()   // ombre des personnages pour les PNJ qui suivent, résolution dynamique repartie de 1
@@ -578,6 +582,9 @@ function mountLevel(n) {
   // Choisir la map selon le niveau (cyclique si > 5)
   const mapIdx = (n - 1) % MAP_BUILDERS.length
   currentMapInfo = MAP_BUILDERS[mapIdx]()
+  // Écho de la carte (spec du lot 2, §3.5) : sa réponse impulsionnelle est générée ici, pendant le briefing, pas au
+  // premier tir ; aucun son n'est joué
+  mountEcho(currentMapInfo.acoustics)
 
   // Cadenas du choix moral (port) : un tir dessus libère les victimes du conteneur
   if (currentMapInfo.moralLock) {
@@ -784,7 +791,7 @@ function rebriefFromPause() {
       statStart += performance.now() - t0   // le temps passé dans le briefing ne compte pas dans le rapport
       gamePhase = 'paused'
       pauseEl.style.display = 'flex'
-      startMissionAmbience()
+      startMissionAmbience({ rain: !!currentMapInfo.rain })
       clock.getDelta()
     },
   })
@@ -816,6 +823,8 @@ function releaseMouse() {
   if (document.pointerLockElement) document.exitPointerLock()
 }
 
+// Échec de la mission, quelle qu'en soit la cause (civil abattu, cible en fuite, convoi parti) : un seul son d'échec,
+// le même pour toutes, joué une fois (spec du lot 2, §3.5).
 function triggerGameOver(reason) {
   if (!canFail(missionPhase())) return   // une seule fin de mission : pas pendant la kill-cam, pas après la réussite
   gamePhase = 'dead'
@@ -865,29 +874,13 @@ function triggerLevelClear() {
 }
 
 function triggerFleeGameOver() {
-  if (!canFail(missionPhase())) return
-  gamePhase = 'dead'
-  stopMissionAmbience()
-  hideScope()
-  releaseMouse()
-  clearForEndScreen()
-  hudEl.style.display = 'none'
-  document.getElementById('game-over-reason').textContent = 'Une cible a fui votre champ de vision'
-  gameOverEl.style.display = 'flex'
+  triggerGameOver('Une cible a fui votre champ de vision')
 }
 
 // Le convoi a traversé toute la zone sans que le colonel soit abattu : il file
 // vers la frontière. Une seule fenêtre de tir — mission ratée (pas de 2e passage).
 function triggerConvoyEscaped() {
-  if (!canFail(missionPhase())) return
-  gamePhase = 'dead'
-  stopMissionAmbience()
-  hideScope()
-  releaseMouse()
-  clearForEndScreen()
-  hudEl.style.display = 'none'
-  document.getElementById('game-over-reason').textContent = 'Le convoi a filé : le colonel a rejoint la frontière'
-  gameOverEl.style.display = 'flex'
+  triggerGameOver('Le convoi a filé : le colonel a rejoint la frontière')
 }
 
 // ─── Tir ───────────────────────────────────────────────────────────
@@ -964,7 +957,12 @@ function resolveBullet() {
   const hit = firstHit(raycaster.ray)
   const { role, npc: closestNpc, part, point: closestPt } = hit
   retargetTrail(trail, hit.point)
-  lastImpact = { role, surface: hit.surface || null, part: part || null }
+  // Le son de ce que la balle touche (spec du lot 2, §3.5) : chair, métal, pierre, bois ou sol, entendu le temps que le
+  // son revienne du point d'impact (distance / 343 s), vers l'écho de la carte s'il est loin ; rien pour une balle partie
+  // au loin. Il confirme la touche : plus de bip.
+  const sons = planShotSounds({ distance: closestPt.distanceTo(raycaster.ray.origin), surface: hit.surface, part })
+  playShotSounds(sons)
+  lastImpact = { role, surface: hit.surface || null, part: part || null, sons }
   if (isHit(role)) statHits++   // précision du rapport de fin : le cadenas compte, libérer n'interdit pas FANTÔME
 
   if (closestNpc) {
@@ -1038,7 +1036,7 @@ function killCivilian(npc) {
 
 function killTarget(npc, part = 'torse') {
   npc.die()
-  playKill()
+  // Plus de bip de confirmation : le son de l'impact sur la chair confirme la touche (resolveBullet)
   // Cible en mouvement (véhicule) = tir difficile = plus de points ; tête ×2, torse ×1, membre ×0,6 (src/shot/score.js)
   const bonus = targetScore({ onVehicle: npc.onVehicle, still: npc.isStill(), part })
   score += bonus
@@ -1587,8 +1585,12 @@ if (import.meta.env.DEV) {
   // ?solides=1 : chaque maillage qui arrête la balle prend la couleur de sa matière (pierre gris clair, métal bleu,
   // bois orange, sol vert ; maps.js, SOLID_TINTS), la carte affichée et toutes celles qui suivent, jeeps comprises.
   if (q.has('solides')) setSolidTint(true)
+  // Son de la mission (spec du lot 2, §3.5 ; scripts/verif-mission.mjs) : __son() dit l'écho monté (son acoustique),
+  // la pluie, la nappe et l'état du contexte audio
+  window.__son = () => audioState()
   // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console ;
-  // dernierImpact : ce que la dernière balle a touché ({ role, surface, part }, voir firstHit)
+  // dernierImpact : ce que la dernière balle a touché ({ role, surface, part, sons }, voir firstHit ; sons : le
+  // calendrier joué à son arrivée, planShotSounds)
   window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,
     pnj: npcs.map(n => n.mesh.position.toArray().map(v => +v.toFixed(3))),
     chronoMs: Math.round(performance.now() - statStart), tirs: statShots, touches: statHits, alertes: statAlerts, score,

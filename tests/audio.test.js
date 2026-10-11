@@ -30,6 +30,8 @@ const param = () => ({
   setValueAtTime(v, t) { this.events.push(['set', v, t]) },
   linearRampToValueAtTime(v, t) { this.events.push(['linear', v, t]) },
   exponentialRampToValueAtTime(v, t) { this.events.push(['exp', v, t]) },
+  setTargetAtTime(v, t, tc) { this.events.push(['target', v, t, tc]) },
+  cancelScheduledValues(t) { this.events.push(['cancel', t]) },
 })
 // Nœuds créés depuis le début du test (sons du tir), dans l'ordre.
 const created = []
@@ -52,7 +54,11 @@ class ClockedAudioContext {
   createBufferSource() { return node('buffer') }
   createBiquadFilter() { return node('filter') }
   createStereoPanner() { return node('panner') }
-  createBuffer(ch, length) { return { length, getChannelData: () => new Float32Array(length) } }
+  createConvolver() { const n = node('convolver'); n.normalize = true; return n }
+  createBuffer(ch, length, sampleRate) {
+    const data = Array.from({ length: ch }, () => new Float32Array(length))
+    return { numberOfChannels: ch, length, sampleRate, getChannelData: i => data[i] }
+  }
 }
 
 beforeEach(() => {
@@ -218,4 +224,279 @@ describe('sons du coup de feu', () => {
       expect(pic(), 'plus discret que le tir').toBeLessThanOrEqual(tir / 2)
     })
   }
+})
+
+// Son du tir, tâche T6 (spec du lot 2, §3.5) : l'impact de ce que la balle touche, joué distance / 343 s après son
+// arrivée (le calendrier vient de src/shot/soundPlan.js) ; l'écho de la carte, une seule ConvolverNode par mission
+// (réponse de src/shot/acoustics.js), où partent le départ du coup et les impacts lointains, à SON.echoDb, libérée au
+// démontage ; plus de bip d'arcade ; la pluie de l'enquête reprise par la mission du port, avec fondus.
+//
+// Témoins (avant la tâche T6, commit ea35614) : aucun écho (mountEcho et unmountEcho n'existaient pas : sans effet),
+// l'arrivée de la balle ne sonnait que le bip d'une cible touchée, tout de suite (playKill), le décor rien, et la nappe
+// de mission n'avait jamais de pluie. Les tests tournent sur ces règles quand les fonctions manquent (vus rouges).
+const { SON } = await import('../src/shot/tuning.js')
+const { impulseResponse } = await import('../src/shot/acoustics.js')
+const avantT6 = audio => ({
+  mountEcho: audio.mountEcho ?? (() => {}),
+  unmountEcho: audio.unmountEcho ?? (() => {}),
+  playShotSounds: audio.playShotSounds ?? (plan => { if (plan.some(s => s.son === 'impact-chair')) audio.playKill() }),
+  audioState: audio.audioState ?? (() => ({})),
+})
+// Le signal de n atteint-il cible (par ses sorties, de proche en proche) ?
+const atteint = (n, cible, vus = new Set()) => n === cible || (!vus.has(n) && (vus.add(n), [...n.outputs].some(o => atteint(o, cible, vus))))
+const sources = () => created.filter(n => n.kind === 'oscillator' || n.kind === 'buffer')
+const convolvers = () => created.filter(n => n.kind === 'convolver')
+const IMPACTS = ['impact-chair', 'impact-metal', 'impact-pierre', 'impact-bois', 'impact-sol']
+
+describe("sons de l'arrivée de la balle", () => {
+  for (const son of IMPACTS) {
+    it(`${son} : joué à l'instant du calendrier (0,1 s plus tard), bref, vers le maître`, async () => {
+      const audio = await import('../src/audio.js')
+      const ctx = audio.audioContext(), master = audio.masterNode()
+      const a = avantT6(audio)
+      ctx.currentTime = 5
+      created.length = 0
+      a.playShotSounds([{ son, at: 0.1, echo: false }])
+      const s = sources()
+      expect(s.length, 'sons joués').toBeGreaterThan(0)
+      expect(Math.min(...s.map(n => n.startAt))).toBeCloseTo(5.1, 9)
+      for (const n of s) {
+        expect(n.startAt).toBeGreaterThanOrEqual(5.1 - 1e-9)
+        expect(n.stopAt - 5.1, 'bref').toBeLessThanOrEqual(0.6)
+        expect(atteint(n, master)).toBe(true)
+      }
+    })
+  }
+
+  // Composantes d'un son : [nature, forme d'onde ou filtre, fréquence], triées.
+  const freqDe = n => (n.kind === 'oscillator' ? (n.frequency.events[0]?.[1] ?? n.frequency.value)
+    : [...n.outputs].find(o => o.kind === 'filter')?.frequency.value ?? 0)
+  const composantes = () => sources().map(n => {
+    const f = [...n.outputs].find(o => o.kind === 'filter')
+    return n.kind === 'oscillator' ? `osc:${n.type}:${Math.round(freqDe(n))}` : `bruit:${f?.type}:${Math.round(freqDe(n))}`
+  }).sort().join(' ')
+  const ecoute = async son => {
+    const audio = await import('../src/audio.js')
+    audio.audioContext()
+    created.length = 0
+    avantT6(audio).playShotSounds([{ son, at: 0, echo: false }])
+    return { composantes: composantes(), s: sources() }
+  }
+
+  it('chaque matière a son propre son', async () => {
+    const vus = new Set()
+    for (const son of IMPACTS) vus.add((await ecoute(son)).composantes)
+    expect(vus.size).toBe(IMPACTS.length)
+  })
+
+  it('la chair : un son mat, sans note (rien de tonal au-dessus de 200 Hz, bruit filtré sous 1,5 kHz)', async () => {
+    const { s } = await ecoute('impact-chair')
+    expect(s.length).toBeGreaterThan(0)
+    for (const n of s) expect(freqDe(n), n.kind).toBeLessThanOrEqual(n.kind === 'oscillator' ? 200 : 1500)
+  })
+
+  it('le métal : un claquement aigu qui sonne (une note au-dessus de 1,5 kHz tenue 0,15 s au moins)', async () => {
+    const { s } = await ecoute('impact-metal')
+    const notes = s.filter(n => n.kind === 'oscillator' && freqDe(n) >= 1500 && n.stopAt - n.startAt >= 0.15)
+    expect(notes.length).toBeGreaterThan(0)
+  })
+
+  it('plan vide ou son inconnu : silence, sans erreur', async () => {
+    const audio = await import('../src/audio.js')
+    audio.audioContext()
+    created.length = 0
+    const a = avantT6(audio)
+    expect(() => { a.playShotSounds([]); a.playShotSounds([{ son: 'inconnu', at: 0 }]) }).not.toThrow()
+    expect(sources()).toEqual([])
+  })
+})
+
+describe("plus de bip d'arcade", () => {
+  it("audio.js n'a plus le bip de confirmation (880 puis 660 Hz) : c'est le son de l'impact qui confirme", async () => {
+    const audio = await import('../src/audio.js')
+    expect(audio.playKill).toBeUndefined()
+  })
+})
+
+describe('écho de la carte', () => {
+  const monte = async (acoustique = 'port') => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext(), master = audio.masterNode()
+    const a = avantT6(audio)
+    created.length = 0
+    a.mountEcho(acoustique)
+    return { audio, ctx, master, a, conv: convolvers()[0] }
+  }
+
+  it("une ConvolverNode, chargée de la réponse de l'acoustique (stéréo, à graine), vers le maître", async () => {
+    const { ctx, master, conv, a } = await monte('port')
+    expect(convolvers().length).toBe(1)
+    const ir = impulseResponse('port', ctx.sampleRate)
+    expect(conv.buffer.numberOfChannels).toBe(2)
+    expect(conv.buffer.length).toBe(ir.length)
+    expect(conv.buffer.getChannelData(0)).toEqual(ir.canaux[0])
+    expect(conv.buffer.getChannelData(1)).toEqual(ir.canaux[1])
+    expect(atteint(conv, master)).toBe(true)
+    expect(a.audioState().echo).toBe('port')
+  })
+
+  it(`l'envoi vers l'écho est à ${SON.echoDb} dB`, async () => {
+    const { conv } = await monte('rue')
+    const envois = [...(conv?.inputs ?? [])]
+    expect(envois.length).toBe(1)
+    expect(envois[0].kind).toBe('gain')
+    expect(envois[0].gain.value).toBeCloseTo(10 ** (SON.echoDb / 20), 6)
+  })
+
+  it('le départ du coup y part, détonation et crack, comme le tir au silencieux', async () => {
+    const { audio, conv, master } = await monte('place')
+    for (const tir of ['playShot', 'playSilencedShot']) {
+      created.length = 0
+      audio[tir]()
+      expect(sources().length).toBeGreaterThan(0)
+      for (const n of sources()) {
+        expect(atteint(n, conv), `${tir} : vers l'écho`).toBe(true)
+        expect(atteint(n, master), `${tir} : vers le maître`).toBe(true)
+      }
+    }
+  })
+
+  it('un impact lointain y part, pas un impact proche (il va seulement au maître)', async () => {
+    const { a, conv, master } = await monte('base')
+    created.length = 0
+    a.playShotSounds([{ son: 'impact-pierre', at: 0, echo: true }])
+    expect(sources().length).toBeGreaterThan(0)
+    for (const n of sources()) expect(atteint(n, conv)).toBe(true)
+    created.length = 0
+    a.playShotSounds([{ son: 'impact-pierre', at: 0, echo: false }])
+    expect(sources().length).toBeGreaterThan(0)
+    for (const n of sources()) { expect(atteint(n, conv)).toBe(false); expect(atteint(n, master)).toBe(true) }
+  })
+
+  it("une seule par mission : remontée (mission relancée), l'ancienne est débranchée et lâchée", async () => {
+    const { a, master, conv: premiere } = await monte('port')
+    expect(premiere).toBeDefined()
+    a.mountEcho('rue')
+    const [, seconde] = convolvers()
+    expect(seconde).toBeDefined()
+    expect(premiere.outputs.size + premiere.inputs.size).toBe(0)
+    expect(premiere.buffer).toBeNull()
+    expect(created.filter(n => n.kind === 'convolver' && atteint(n, master))).toEqual([seconde])
+    expect(a.audioState().echo).toBe('rue')
+  })
+
+  it("libérée au démontage : débranchée, réponse lâchée ; le tir suivant ne va plus qu'au maître", async () => {
+    const { audio, a, master, conv } = await monte('colline')
+    expect(conv).toBeDefined()
+    const [envoi] = [...conv.inputs]
+    expect(envoi).toBeDefined()
+    a.unmountEcho()
+    expect(conv.outputs.size + conv.inputs.size).toBe(0)
+    expect(envoi.outputs.size).toBe(0)
+    expect(conv.buffer).toBeNull()
+    expect(a.audioState().echo).toBeNull()
+    created.length = 0
+    audio.playShot()
+    for (const n of sources()) expect(atteint(n, master)).toBe(true)
+    expect(() => a.unmountEcho()).not.toThrow()   // démontage en double (menu après un échec)
+  })
+
+  it("acoustique inconnue (menu, PvP) : pas d'écho, le tir sonne quand même", async () => {
+    const { audio, a, master } = await monte('inconnue')
+    a.mountEcho(undefined)
+    expect(convolvers()).toEqual([])
+    expect(a.audioState().echo).toBeNull()
+    created.length = 0
+    audio.playShot()
+    expect(sources().length).toBeGreaterThan(0)
+    for (const n of sources()) expect(atteint(n, master)).toBe(true)
+  })
+})
+
+describe('pluie du port (M3)', () => {
+  // La pluie : une source de bruit qui boucle, démarrée et jamais arrêtée tant qu'elle tombe.
+  const pluies = () => created.filter(n => n.kind === 'buffer' && n.loop && n.startAt !== null)
+  // Son gain : source → passe-bande → passe-haut → gain.
+  const gainDe = src => [...[...[...src.outputs][0].outputs][0].outputs][0]
+
+  it("démarrée avec la mission : la pluie de l'enquête (bruit de 6 s en boucle), qui monte en fondu, vers le maître", async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext(), master = audio.masterNode()
+    ctx.currentTime = 3
+    created.length = 0
+    audio.startMissionAmbience({ rain: true })
+    const p = pluies()
+    expect(p.length).toBe(1)
+    expect(p[0].stopAt).toBeNull()
+    expect(p[0].buffer.length).toBeGreaterThanOrEqual(6 * ctx.sampleRate)
+    expect(atteint(p[0], master)).toBe(true)
+    const montee = gainDe(p[0]).gain.events.find(e => e[0] === 'linear')
+    expect(montee?.[1]).toBeGreaterThan(0)
+    expect(montee?.[2]).toBeGreaterThan(3)       // un fondu, pas un départ sec
+    expect(avantT6(audio).audioState().pluie).toBe(true)
+    audio.stopMissionAmbience()
+  })
+
+  it('coupée avec la mission : fondu, puis la source arrêtée et débranchée ; aucun minuteur ne reste', async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext(), master = audio.masterNode()
+    created.length = 0
+    audio.startMissionAmbience({ rain: true })
+    const [src] = pluies()
+    expect(src).toBeDefined()
+    const g = gainDe(src)
+    ctx.currentTime = 10
+    audio.stopMissionAmbience()
+    expect(g.gain.events.some(e => e[0] === 'target' && e[1] <= 0.001 && e[2] === 10)).toBe(true)   // fondu à l'arrêt
+    expect(atteint(src, master)).toBe(true)                                                          // pas de coupure sèche
+    ctx.currentTime = 12; vi.advanceTimersByTime(3000)
+    expect(src.stopAt).not.toBeNull()
+    expect(atteint(src, master)).toBe(false)
+    expect(avantT6(audio).audioState().pluie).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("contexte audio suspendu : la pluie ne tombe pas (et ne se dit pas tombée) ; le départ suivant la fait tomber", async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext()
+    created.length = 0
+    ctx.state = 'suspended'
+    audio.startMissionAmbience({ rain: true })
+    expect(pluies()).toEqual([])
+    expect(avantT6(audio).audioState().pluie).toBe(false)
+    audio.stopMissionAmbience()
+    ctx.state = 'running'
+    audio.startMissionAmbience({ rain: true })   // retour du briefing revu, contexte repris
+    expect(pluies().length).toBe(1)
+    expect(avantT6(audio).audioState().pluie).toBe(true)
+    audio.stopMissionAmbience()
+  })
+
+  it('sans pluie (les autres cartes) : la nappe seule', async () => {
+    const audio = await import('../src/audio.js')
+    audio.audioContext()
+    created.length = 0
+    audio.startMissionAmbience()
+    audio.startMissionAmbience({ rain: false })
+    expect(pluies()).toEqual([])
+    audio.stopMissionAmbience()
+  })
+
+  it('une seule pluie à la fois ; relancée après un arrêt (REVOIR LE BRIEFING puis retour), une nouvelle', async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext(), master = audio.masterNode()
+    created.length = 0
+    audio.startMissionAmbience({ rain: true })
+    audio.startMissionAmbience({ rain: true })
+    expect(pluies().length).toBe(1)
+    const [premiere] = pluies()
+    audio.stopMissionAmbience()
+    audio.startMissionAmbience({ rain: true })
+    const seconde = pluies().find(p => p !== premiere)
+    expect(seconde).toBeDefined()
+    ctx.currentTime = 5; vi.advanceTimersByTime(3000)
+    expect(atteint(premiere, master)).toBe(false)
+    expect(atteint(seconde, master)).toBe(true)
+    audio.stopMissionAmbience()
+  })
 })

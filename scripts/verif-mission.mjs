@@ -319,6 +319,46 @@ const SCENARIOS = {
     } finally { await c.close() }
   },
 
+  // Son du tir (spec du lot 2, §3.5) : au port, l'écho de la carte est monté (acoustique du port) et la pluie tombe ; une
+  // balle arrêtée par le conteneur rouge, à une trentaine de mètres, fait entendre le métal le temps que le son revienne
+  // (distance / 343 s, environ 0,09 s), envoyé vers l'écho ; revenu au menu, l'écho est libéré et la pluie coupée. En
+  // M1, l'écho de la rue, sans pluie, et une cible touchée sonne la chair, sans bip. Avant la tâche T6 : ni écho, ni
+  // pluie, ni son d'impact (le bip d'arcade pour une cible touchée seulement).
+  async son() {
+    const sons = c => js(c, '__son()')
+    const port = await play(3)
+    try {
+      const s = await sons(port)
+      check(s.contexte === 'running' && s.echo === 'port' && s.pluie && s.nappe, 'au port : écho du port monté, pluie et nappe', s)
+      check(await js(port, `__placer('cible', 0, -16.5, -3)`), 'cible posée derrière le conteneur rouge', null)
+      await frames(port, 3)
+      check(await aimAndShoot(port, 'cible', 0), 'tir dans le conteneur', null)
+      const { dernierImpact: i } = await mission(port)
+      const [son] = i?.sons || []
+      check(i?.surface === 'metal' && i.sons.length === 1 && son.son === 'impact-metal' && son.echo === true && son.at > 0.06 && son.at < 0.13,
+        'le métal, entendu distance / 343 s après l\'arrivée de la balle, vers l\'écho', i)
+      await escape(port)
+      await until(port, `__mission().phase === 'paused'`)
+      await click(port, 'btn-pause-menu')
+      await until(port, `__mission().phase === 'menu'`)
+      const menu = await sons(port)
+      check(menu.echo === null && !menu.pluie && !menu.nappe, 'au menu : écho libéré, pluie et nappe coupées', menu)
+    } finally { await port.close() }
+
+    const rue = await play(1)
+    try {
+      const s = await sons(rue)
+      check(s.echo === 'rue' && !s.pluie, 'en M1 : écho de la rue, sans pluie', s)
+      // au milieu de la rue, à découvert (une cible tirée au hasard peut se tenir derrière une poubelle ou une voiture)
+      check(await js(rue, `__placer('cible', 0, 0, 2)`), 'cible posée au milieu de la rue', null)
+      await frames(rue, 3)
+      check(await aimAndShoot(rue, 'cible', 0), 'cible visée au torse', null)
+      const { dernierImpact: i } = await mission(rue)
+      check(i?.role === 'target' && i.sons.length === 1 && i.sons[0].son === 'impact-chair',
+        'cible touchée : la chair confirme la touche, sans bip', i)
+    } finally { await rue.close() }
+  },
+
   // Civil abattu puis Échap dans les 600 ms : pas de pause, l'échec arrive seul.
   async 'civil-echap'() {
     const c = await play(1)

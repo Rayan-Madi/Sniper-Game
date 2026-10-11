@@ -9,6 +9,47 @@ import { estimate } from '../briefing/kit.js'
 export const BUZZ = { salve: 0.28, gap: 0.42 }
 const unplug = nodes => nodes.forEach(n => { try { n.disconnect() } catch (e) { /* déjà débranché */ } })
 
+// Pluie de l'enquête, reprise par la mission du port (M3, src/audio.js ; spec du lot 2, §3.5) : un bruit en boucle,
+// filtré en bruissement, qui monte en monteeS jusqu'à niveau, puis s'éteint en fonduS à l'arrêt, sur la destination
+// donnée (celle du jeu : son volume général s'applique). 6 s de bruit : une boucle de 2 s s'entendait se répéter. Une
+// pluie ne sert qu'une fois : start puis stop ; sans contexte audio en marche, elle reste muette (start rend faux).
+const RAIN_S = 6
+export function createRain(audio) {
+  const c = audio && audio.ctx ? audio.ctx : null
+  let rain = null, over = false
+  return {
+    start({ niveau = 0.06, monteeS = 2 } = {}) {
+      if (over || rain || !c || c.state !== 'running') return false
+      const buf = c.createBuffer(1, c.sampleRate * RAIN_S, c.sampleRate)
+      const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
+      const src = c.createBufferSource(); src.buffer = buf; src.loop = true
+      const band = c.createBiquadFilter(); band.type = 'bandpass'; band.frequency.value = 1400; band.Q.value = 0.5
+      const high = c.createBiquadFilter(); high.type = 'highpass'; high.frequency.value = 380
+      const g = c.createGain(); g.gain.value = 0.0001
+      src.connect(band); band.connect(high); high.connect(g); g.connect(audio.dest)
+      try { g.gain.linearRampToValueAtTime(niveau, c.currentTime + monteeS) } catch (e) { /* contexte fermé */ }
+      src.start()
+      rain = { src, g }
+      return true
+    },
+    // fonduS : 0,3 s pour l'enquête (constante de temps de 0,08 s), le temps du fondu de la nappe pour une mission
+    stop({ fonduS = 0.3 } = {}) {
+      over = true
+      if (!rain) return
+      const { src, g } = rain; rain = null
+      // la montée peut être encore programmée : l'annuler d'abord, sinon elle reprend le dessus sur le fondu, mais en
+      // gardant le niveau déjà atteint (cancelScheduledValues seul ramènerait le gain à 0,0001 : coupure sèche au lieu d'un fondu)
+      try {
+        const t = c.currentTime
+        if (g.gain.cancelAndHoldAtTime) g.gain.cancelAndHoldAtTime(t)
+        else { const v = g.gain.value; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(v, t) }   // Firefox n'a pas cancelAndHoldAtTime
+        g.gain.setTargetAtTime(0.0001, t, fonduS / 3.75)
+      } catch (e) { /* contexte fermé */ }
+      setTimeout(() => { try { src.stop() } catch (e) { /* déjà arrêtée */ } try { g.disconnect() } catch (e) { /* déjà débranché */ } }, fonduS * 1000)
+    },
+  }
+}
+
 export function createAmbience(audio) {
   const timers = new Set(), intervals = new Set()
   const buzzing = new Set()   // nœuds des salves en cours : débranchés à la fin de leur salve, ou à l'arrêt
@@ -20,22 +61,8 @@ export function createAmbience(audio) {
   const c = audio && audio.ctx ? audio.ctx : null
   const live = () => !dead && !!c && c.state === 'running'
 
-  // pluie : bruit en boucle filtré, tenu tant que l'enquête dure ; 6 s de bruit (une boucle de 2 s s'entendait se répéter)
-  const RAIN_S = 6
-  let rain = null
-  function startRain() {
-    if (!live() || rain) return
-    const buf = c.createBuffer(1, c.sampleRate * RAIN_S, c.sampleRate)
-    const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
-    const src = c.createBufferSource(); src.buffer = buf; src.loop = true
-    const band = c.createBiquadFilter(); band.type = 'bandpass'; band.frequency.value = 1400; band.Q.value = 0.5
-    const high = c.createBiquadFilter(); high.type = 'highpass'; high.frequency.value = 380
-    const g = c.createGain(); g.gain.value = 0.0001
-    src.connect(band); band.connect(high); high.connect(g); g.connect(audio.dest)
-    try { g.gain.linearRampToValueAtTime(0.06, c.currentTime + 2) } catch (e) { /* contexte fermé */ }
-    src.start()
-    rain = { src, g }
-  }
+  // pluie : tenue tant que l'enquête dure (createRain, ci-dessus)
+  const rain = createRain(audio)
 
   // cœur : un battement, puis le suivant d'autant plus tôt qu'on est près (1,15 s → 0,65 s)
   const heartLoop = () => { if (dead) return; S.heart(); at(1150 - 500 * proximity, heartLoop) }
@@ -44,7 +71,7 @@ export function createAmbience(audio) {
     start() {
       if (dead || started) return
       started = true
-      startRain()
+      rain.start({ niveau: 0.06, monteeS: 2 })
       S.noise(1.6, 0.07, 520, 'bandpass', 0, 9, 240); S.tone(95, 'sawtooth', 1.3, 0.03, 0, 70)   // la porte grince
       at(900, heartLoop)
     },
@@ -89,18 +116,7 @@ export function createAmbience(audio) {
         const left = [...buzzing]; buzzing.clear()
         setTimeout(() => left.forEach(unplug), BUZZ.salve * 1000 + 40)
       }
-      if (rain) {
-        const { src, g } = rain; rain = null
-        // la montée de 2 s peut être encore programmée : l'annuler d'abord, sinon elle reprend le dessus sur le fondu, mais en
-        // gardant le niveau déjà atteint (cancelScheduledValues seul ramènerait le gain à 0,0001 : coupure sèche au lieu d'un fondu)
-        try {
-          const t = c.currentTime
-          if (g.gain.cancelAndHoldAtTime) g.gain.cancelAndHoldAtTime(t)
-          else { const v = g.gain.value; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(v, t) }   // Firefox n'a pas cancelAndHoldAtTime
-          g.gain.setTargetAtTime(0.0001, t, 0.08)
-        } catch (e) { /* contexte fermé */ }
-        setTimeout(() => { try { src.stop() } catch (e) { /* déjà arrêtée */ } try { g.disconnect() } catch (e) { /* déjà débranché */ } }, 300)
-      }
+      rain.stop({ fonduS: 0.3 })
     },
   }
   return api

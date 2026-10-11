@@ -351,7 +351,9 @@ export function buildMapStreet() {
   }
 
   // groundY : hauteur du dessus du sol dans la zone d'apparition (pieds des PNJ, impacts des tirs manqués)
-  return { spawnBounds: { minX: -10, maxX: 10, minZ: -12, maxZ: 12 }, groundY: 0, cameraPos: [0, 8, 30], indoors: false }
+  // acoustics : l'écho de la carte (src/shot/acoustics.js, que main.js monte avec elle) : réflexions serrées entre façades
+  return { spawnBounds: { minX: -10, maxX: 10, minZ: -12, maxZ: 12 }, groundY: 0, cameraPos: [0, 8, 30], indoors: false,
+    acoustics: 'rue' }
 }
 
 // ─── MAP 2 : Plaza de nuit — toit d'immeuble, vue plongeante ─────────
@@ -445,7 +447,8 @@ export function buildMapWarehouse() {
     groundY:     0,                    // la place dallée
     cameraPos:   [0, 22.5, 22],        // sur le toit de l'immeuble nord
     cameraTarget: [0, 0, 0],           // regarde le centre de la place en bas
-    indoors: false
+    indoors: false,
+    acoustics: 'place',                // écho de la place, entourée d'immeubles
   }
 }
 
@@ -591,6 +594,8 @@ export function buildMapDocks() {
     cameraPos:    [0, 10, 28],
     cameraTarget: [0, 1, -2],    // vise le quai en contrebas
     indoors: false,
+    acoustics: 'port',           // écho long et métallique, entre conteneurs et hangars
+    rain: true,                  // la pluie s'entend pendant la mission (nappe de src/audio.js)
     // CHOIX MORAL : tirer sur le cadenas du conteneur rouge libère les victimes
     moralLock: { pos: [-16.5, 1.35, 5.15] },
   }
@@ -702,7 +707,8 @@ export function buildMapMilitary() {
     groundY:      0.2,             // dessus du tarmac (0,1 + 0,2 / 2)
     cameraPos:    [0, 14.5, 21],   // bord AVANT de la tour, rien devant
     cameraTarget: [0, 1, -6],      // plonge vers la cour
-    indoors: false
+    indoors: false,
+    acoustics: 'base',             // champ ouvert : écho court
   }
 }
 
@@ -809,6 +815,7 @@ export function buildMapConvoy() {
     cameraPos:    [0, 7, 24],
     cameraTarget: [0, 1, -4],     // vise la route
     indoors: false,
+    acoustics: 'colline',          // désert et collines, très ouvert : des retours lointains qui roulent
     convoy: true,                  // active le véhicule mobile dans main.js
   }
 }
@@ -989,6 +996,7 @@ export function buildMapParty() {
     cameraPos:   [0, 9, 5],           // fenêtre de l'immeuble d'en face
     cameraTarget: [0, 3, -20],        // vise l'appartement
     indoors: true,
+    acoustics: 'interieur',           // le tireur est dans l'appartement d'en face : écho court et sourd
     sideExit: true,                   // les PNJ fuient vers les côtés (sorties latérales)
     party: true,                      // la foule danse (ambiance fête)
     // Cible à identifier : AUCUN signe distinctif visuel — même allure que la foule.

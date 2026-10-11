@@ -1,4 +1,8 @@
 // Sons synthétiques via Web Audio API — pas de fichiers externes
+import { SON } from './shot/tuning.js'
+import { impulseResponse } from './shot/acoustics.js'
+import { createRain } from './prologue/ambience.js'
+
 let ctx = null
 let master = null
 let masterVolume = 0.7
@@ -24,12 +28,13 @@ export function setMasterVolume(v) {
   if (master) master.gain.value = masterVolume
 }
 
-function tone(freq, type, duration, gainStart, gainEnd, delay = 0) {
+// vers : les nœuds où le son part (le maître seul par défaut ; le maître et l'écho de la carte, sorties()).
+function tone(freq, type, duration, gainStart, gainEnd, delay = 0, vers = null) {
   const c   = getCtx()
   const osc = c.createOscillator()
   const g   = c.createGain()
   osc.connect(g)
-  g.connect(out())
+  for (const d of vers || [out()]) g.connect(d)
   osc.type = type
   osc.frequency.setValueAtTime(freq, c.currentTime + delay)
   g.gain.setValueAtTime(gainStart, c.currentTime + delay)
@@ -38,7 +43,7 @@ function tone(freq, type, duration, gainStart, gainEnd, delay = 0) {
   osc.stop(c.currentTime + delay + duration + 0.01)
 }
 
-function noise(duration, gainStart, delay = 0, filterFreq = 800, filterType = 'bandpass') {
+function noise(duration, gainStart, delay = 0, filterFreq = 800, filterType = 'bandpass', vers = null) {
   const c    = getCtx()
   const size = Math.max(1, Math.floor(c.sampleRate * duration))
   const buf  = c.createBuffer(1, size, c.sampleRate)
@@ -50,7 +55,8 @@ function noise(duration, gainStart, delay = 0, filterFreq = 800, filterType = 'b
   filt.type  = filterType
   filt.frequency.value = filterFreq
   src.buffer = buf
-  src.connect(filt); filt.connect(g); g.connect(out())
+  src.connect(filt); filt.connect(g)
+  for (const d of vers || [out()]) g.connect(d)
   g.gain.setValueAtTime(gainStart, c.currentTime + delay)
   g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + delay + duration)
   src.start(c.currentTime + delay)
@@ -81,16 +87,92 @@ function breathPuff(duration, peakGain, filterFreq) {
   src.stop(t + duration + 0.01)
 }
 
+// ─── Écho de la carte (spec du lot 2, §3.5) ───────────────────────────
+// Une ConvolverNode par mission, montée avec sa carte (mountEcho, main.js) et chargée de la réponse impulsionnelle de
+// son acoustique (src/shot/acoustics.js) : le départ du coup et les impacts lointains y sont envoyés à SON.echoDb, sa
+// sortie va au maître. Démontée avec la mission (unmountEcho) : nœuds débranchés, réponse lâchée.
+let echo = null   // { acoustique, envoi, conv }
+
+export function mountEcho(acoustique) {
+  unmountEcho()
+  const c = getCtx()
+  const ir = impulseResponse(acoustique, c.sampleRate)
+  if (!ir) return   // menu, PvP : pas d'écho
+  const buf = c.createBuffer(ir.canaux.length, ir.length, c.sampleRate)
+  ir.canaux.forEach((d, i) => buf.getChannelData(i).set(d))
+  const conv = c.createConvolver()
+  conv.buffer = buf
+  const envoi = c.createGain()
+  envoi.gain.value = 10 ** (SON.echoDb / 20)
+  envoi.connect(conv); conv.connect(master)
+  echo = { acoustique, envoi, conv }
+}
+
+export function unmountEcho() {
+  if (!echo) return
+  const { envoi, conv } = echo
+  echo = null
+  envoi.disconnect(); conv.disconnect()
+  try { conv.buffer = null } catch (e) { /* navigateur qui refuse : la réponse part avec le nœud */ }
+}
+
+// Où part un son du tir : le maître, et l'écho de la carte s'il y en a un et que le son y va.
+const sorties = versEcho => (versEcho && echo ? [out(), echo.envoi] : [out()])
+
 // ─── Sons du jeu ───────────────────────────────────────────────────────
+// Le départ du coup part aussi vers l'écho de la carte, détonation comme crack ; au silencieux de même.
 export function playShot() {
+  const vers = sorties(true)
   // Détonation grave + crack haute fréquence
-  noise(0.08, 1.2)
-  tone(80,  'sawtooth', 0.15, 0.6, 0.001)
-  tone(220, 'square',   0.04, 0.3, 0.001)
+  noise(0.08, 1.2, 0, 800, 'bandpass', vers)
+  tone(80,  'sawtooth', 0.15, 0.6, 0.001, 0, vers)
+  tone(220, 'square',   0.04, 0.3, 0.001, 0, vers)
   // « Crack » supersonique (spec du lot 2, §3.5) : la balle franchit le mur du son, un claquement sec et aigu de 20 ms
-  noise(0.02, 0.5, 0, 3500, 'highpass')
+  noise(0.02, 0.5, 0, 3500, 'highpass', vers)
   // Queue de réverbération simulée
-  noise(0.3, 0.15, 0.08)
+  noise(0.3, 0.15, 0.08, 800, 'bandpass', vers)
+}
+
+// Sons de l'arrivée de la balle (spec du lot 2, §3.5), au niveau d'un impact entendu de loin : bien sous le tir. Le
+// calendrier (src/shot/soundPlan.js) dit lequel, quand (delay, s) et s'il part vers l'écho (vers).
+const IMPACTS = {
+  // chair : un coup mat et sourd, sans note
+  'impact-chair': (delay, vers) => {
+    noise(0.025, 0.3, delay, 1100, 'bandpass', vers)        // la claque de l'impact
+    noise(0.11, 0.45, delay, 380, 'lowpass', vers)          // le corps, sourd
+    tone(95, 'sine', 0.12, 0.35, 0.001, delay, vers)
+  },
+  // métal : claquement sec, puis la tôle qui sonne (trois notes inharmoniques qui s'éteignent)
+  'impact-metal': (delay, vers) => {
+    noise(0.012, 0.45, delay, 4200, 'highpass', vers)
+    tone(1870, 'sine', 0.35, 0.12, 0.001, delay, vers)
+    tone(2710, 'sine', 0.25, 0.08, 0.001, delay, vers)
+    tone(4130, 'sine', 0.16, 0.05, 0.001, delay, vers)
+  },
+  // pierre : éclat sec, puis les débris qui s'effritent
+  'impact-pierre': (delay, vers) => {
+    noise(0.04, 0.45, delay, 2600, 'bandpass', vers)
+    noise(0.14, 0.16, delay + 0.012, 900, 'bandpass', vers)
+  },
+  // bois : un « toc » creux
+  'impact-bois': (delay, vers) => {
+    noise(0.05, 0.38, delay, 1100, 'bandpass', vers)
+    tone(260, 'triangle', 0.09, 0.25, 0.001, delay, vers)
+  },
+  // sol : un souffle de terre et de poussière
+  'impact-sol': (delay, vers) => {
+    noise(0.18, 0.3, delay, 700, 'lowpass', vers)
+    noise(0.05, 0.1, delay, 1800, 'bandpass', vers)
+  },
+}
+
+// Joue le calendrier de l'arrivée d'une balle (planShotSounds, src/shot/soundPlan.js) : [{ son, at, echo }], at en
+// secondes à partir de maintenant. Un son inconnu est ignoré.
+export function playShotSounds(plan) {
+  for (const { son, at, echo: versEcho } of plan) {
+    const jouer = IMPACTS[son]
+    if (jouer) jouer(Math.max(0, at), sorties(versEcho))
+  }
 }
 
 // Culasse (spec du lot 2, §3.3) : la boucle de main.js joue l'ouverture puis la fermeture aux instants de
@@ -109,14 +191,9 @@ export function playBoltClose() {
 
 export function playSilencedShot() {
   // Son mat, court
-  noise(0.04, 0.35)
-  tone(120, 'sine', 0.06, 0.2, 0.001)
-}
-
-export function playKill() {
-  // Deux tons descendants — confirmation
-  tone(880, 'sine', 0.07, 0.4, 0.001)
-  tone(660, 'sine', 0.12, 0.3, 0.001, 0.07)
+  const vers = sorties(true)
+  noise(0.04, 0.35, 0, 800, 'bandpass', vers)
+  tone(120, 'sine', 0.06, 0.2, 0.001, 0, vers)
 }
 
 export function playAlert() {
@@ -198,8 +275,17 @@ export function updateStressAudio(dt, stress, scoped) {
 
 // ─── Ambiance de mission (nappe grave discrète pendant le gameplay) ────
 let ambTimer = null, ambGain = null
+// Pluie de la mission du port (spec du lot 2, §3.5) : celle de l'enquête (createRain), démarrée et coupée avec la
+// nappe, en fondu aux deux bouts.
+let rain = null
+const RAIN = { niveau: 0.06, monteeS: 2 }
 
-export function startMissionAmbience() {
+// rain : la carte a sa pluie (le port, maps.js) ; REVOIR LE BRIEFING la coupe avec la nappe, le retour la relance.
+export function startMissionAmbience({ rain: pluie = false } = {}) {
+  if (pluie && !rain) {
+    const r = createRain({ ctx: getCtx(), dest: out() })
+    if (r.start(RAIN)) rain = r   // contexte suspendu : pas de pluie, le départ suivant la relancera
+  }
   if (ambTimer) return
   const c = getCtx()
   ambGain = c.createGain()
@@ -228,6 +314,7 @@ export function startMissionAmbience() {
 // Fondu de sortie (s), puis le gain est débranché du maître : sans cela, chaque mission laissait un nœud branché.
 const AMB_FADE = 1.2
 export function stopMissionAmbience() {
+  if (rain) { rain.stop({ fonduS: AMB_FADE }); rain = null }
   if (ambTimer) { clearInterval(ambTimer); ambTimer = null }
   if (ambGain) {
     const c = getCtx(), g = ambGain
@@ -252,3 +339,9 @@ function disconnectAt(c, node, end) {
 // Contexte et nœud maître partagés : les cinématiques s'y branchent pour suivre le volume du jeu.
 export function audioContext() { return getCtx() }
 export function masterNode() { return out() }
+
+// État du son de la mission, pour les vérifications (__son() en développement, scripts/verif-mission.mjs) : l'écho
+// monté (son acoustique, ou null), la pluie, la nappe, l'état du contexte (sans le créer).
+export function audioState() {
+  return { contexte: ctx ? ctx.state : null, echo: echo ? echo.acoustique : null, pluie: !!rain, nappe: !!ambTimer }
+}

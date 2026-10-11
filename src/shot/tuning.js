@@ -107,6 +107,30 @@ export const OCCLUSION = {
 export const SON = {
   vitesse: 343,         // vitesse du son (m/s) : le son de l'impact arrive distance / 343 s après la balle
   echoDb: -18,          // niveau de l'envoi vers l'écho de la carte : plus haut, l'écho se fait plus présent
+  echoImpactM: 10,      // un impact plus loin que cela part aussi vers l'écho ; plus près, on n'entend que le coup sec
+}
+
+// ─── Écho de chaque carte (src/shot/acoustics.js) ──────────────────
+// Réponse impulsionnelle générée au montage de la carte : quelques réflexions franches, puis un bruit qui décroît de
+// façon exponentielle. dureeS : longueur de la réponse (la queue doit s'y éteindre) ; tr60S : temps pour perdre 60 dB
+// (plus long, l'écho traîne) ; predelaiS : silence avant la première réflexion (plus long, les murs ou les collines
+// paraissent plus loin) ; reflexions : nombre de réflexions franches, réparties sur etendueS, à niveau du bruit de
+// fond près (plus serrées, plus l'espace est étroit) ; diffus : niveau de la traîne (bas : espace ouvert, peu de
+// surfaces) ; clarte : 0 sourd (aigus coupés) à 1 brillant ; resonance : sonorité métallique, un écho très court qui
+// se répète (gain gardé à chaque retour, periodeS entre deux retours), null sans.
+export const ACOUSTIQUES = {
+  // M1 : rue étroite entre deux façades, réflexions serrées
+  rue: { dureeS: 1.3, tr60S: 1.0, predelaiS: 0.004, reflexions: 10, etendueS: 0.06, diffus: 1, clarte: 0.65, resonance: null },
+  // M2 : place entourée d'immeubles, réflexions plus espacées
+  place: { dureeS: 1.9, tr60S: 1.5, predelaiS: 0.015, reflexions: 6, etendueS: 0.16, diffus: 1, clarte: 0.6, resonance: null },
+  // M3 : port, entre conteneurs et hangars, long et métallique
+  port: { dureeS: 3.0, tr60S: 2.4, predelaiS: 0.02, reflexions: 6, etendueS: 0.2, diffus: 1, clarte: 0.8, resonance: { gain: 0.55, periodeS: 0.0031 } },
+  // M4 : base militaire, champ ouvert : court
+  base: { dureeS: 0.9, tr60S: 0.7, predelaiS: 0.03, reflexions: 3, etendueS: 0.12, diffus: 0.6, clarte: 0.7, resonance: null },
+  // M5 : désert et collines, très ouvert : peu de traîne, des retours lointains qui roulent longtemps
+  colline: { dureeS: 2.6, tr60S: 2.0, predelaiS: 0.12, reflexions: 3, etendueS: 0.8, diffus: 0.25, clarte: 0.45, resonance: null },
+  // M6 : le tireur est dans un appartement, à sa fenêtre : court et sourd
+  interieur: { dureeS: 0.5, tr60S: 0.35, predelaiS: 0.003, reflexions: 8, etendueS: 0.025, diffus: 1, clarte: 0.15, resonance: null },
 }
 
 // ─── Marques d'impact ──────────────────────────────────────────────
