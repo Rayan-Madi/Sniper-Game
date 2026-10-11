@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CLUES, PHONE } from '../../src/prologue/clues.js'
-import { createInvestigationState } from '../../src/prologue/state.js'
+import { createInvestigationState, ENDING } from '../../src/prologue/state.js'
 import { estimate } from '../../src/briefing/kit.js'
 
 describe('données de l\'enquête', () => {
@@ -272,7 +272,8 @@ describe('fin de l\'enquête', () => {
     expect(s.mode).toBe('done')
   })
 
-  it('effets atténués : pas de regard, la fiche s\'ouvre à la fin de la vibration (réglage lu au début de la séquence)', () => {
+  // §3.1 : « pas de pivot, la fiche s'ouvre directement après la vibration », qui dure 2,5 s
+  it('effets atténués : pas de regard, la fiche s\'ouvre quand le téléphone a fini de vibrer (réglage lu au début de la séquence)', () => {
     const t = atLastFiche(); t.close()
     t.tick(4.11)
     expect(t.ending.step).toBe('turn')                          // témoin : effets normaux, le regard pivote à 4,11 s
@@ -281,13 +282,58 @@ describe('fin de l\'enquête', () => {
     const s = atLastFiche({ reducedMotion: () => reduced })
     reduced = true                                              // changé après la création : c'est la valeur du moment qui compte
     s.close()
-    s.tick(4.09)
-    expect(s.ending.step).toBe('buzz')
+    s.tick(2.91)
+    expect(s.ending.step).toBe('buzz')                          // 2,91 s : le téléphone vibre, comme en effets normaux
+    s.tick(2.48)
+    expect(s.ending.step).toBe('buzz')                          // 5,39 s : il vibre encore
     s.tick(0.02)
-    expect(s.ending.step).toBe('phone')
+    expect(s.ending.step).toBe('phone')                         // 5,41 s : 2,5 s de vibration finies, la fiche s'ouvre
     expect(s.mode).toBe('examining')
     expect(s.current).toBe(PHONE.id)
     expect(s.ending.steps).toEqual(['silence', 'line', 'breath', 'buzz', 'phone'])
+  })
+
+  it('effets atténués, avec la vraie réplique : la fiche s\'ouvre à la fin de la vibration, en moins de 6 s', () => {
+    const s = createInvestigationState({ found: IDS.slice(0, 5), reducedMotion: true })
+    s.examine('doudou'); s.close()
+    const expected = 0.8 + estimate(PHONE.fin) / 1000 + 0.6 + 2.5
+    let t = 0
+    while (s.mode === 'ending' && t < 10) { s.tick(0.01); t += 0.01 }
+    expect(s.current).toBe(PHONE.id)
+    expect(t).toBeGreaterThanOrEqual(expected - 1e-6)
+    expect(t).toBeLessThan(expected + 0.02)
+    expect(t).toBeLessThan(6)
+  })
+
+  // une durée de réplique invalide ne doit ni figer le joueur (séquence arrêtée sur la réplique) ni raccourcir la suite
+  it('une réplique sans durée valable compte pour zéro : la séquence va au bout, à 3,8 s, l\'avancement reste entre 0 et 1', () => {
+    for (const d of [0, NaN, undefined, -1]) {                  // 0 : témoin, une réplique instantanée
+      const s = atLastFiche({ speechTime: () => d }); s.close()
+      const seen = []
+      while (s.mode === 'ending' && seen.length < 200) { seen.push(s.ending.progress); s.tick(0.05) }
+      expect(seen.every(p => p >= 0 && p <= 1), `réplique de ${d} s`).toBe(true)
+      expect(s.ending.steps, `réplique de ${d} s`).toEqual(['silence', 'line', 'breath', 'buzz', 'turn', 'phone'])
+
+      const r = atLastFiche({ speechTime: () => d }); r.close()
+      r.tick(3.79)
+      expect(r.mode, `réplique de ${d} s`).toBe('ending')        // silence 0,8 + souffle 0,6 + vibration 1,2 + regard 1,2
+      r.tick(0.02)
+      expect(r.mode, `réplique de ${d} s`).toBe('examining')
+    }
+  })
+
+  it('une étape réglée à zéro (ENDING modifié) ne rend pas l\'avancement indéfini', () => {
+    const t = atLastFiche(); t.close()
+    expect(t.ending.progress).toBe(0)                           // témoin : silence de 0,8 s, rien n'est encore fait
+    const silence = ENDING.silence
+    try {
+      ENDING.silence = 0
+      const s = atLastFiche(); s.close()
+      expect(s.ending.step).toBe('silence')
+      expect(s.ending.progress).toBe(1)                         // une étape sans durée est finie dès qu'elle commence
+      s.tick(0.01)
+      expect(s.ending.step).toBe('line')
+    } finally { ENDING.silence = silence }
   })
 
   it('avant le sixième indice, le téléphone se repose ; un indice ne se « repose » pas', () => {

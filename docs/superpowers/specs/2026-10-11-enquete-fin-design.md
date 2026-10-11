@@ -71,9 +71,11 @@ Les répliques restent modifiables à un seul endroit (Rayan avait proposé « j
 - `enquete.css` : anneau de maintien, deuxième action de la fiche.
 
 Précisions arrêtées à la tâche E1 (`state.js`) :
-- le mode `ending` couvre la séquence ; ses étapes : `silence` (0,8 s), `line` (la réplique, le temps de sa voix, `estimate` des cinématiques), `breath` (0,6 s), `buzz` (1,2 s), `turn` (1,2 s, absente en effets atténués), puis `phone` (mode `examining` sur le téléphone). Avec la vraie réplique, la fiche s'ouvre à 5,2 s (4,0 s en effets atténués) ;
+- le mode `ending` couvre la séquence ; ses étapes : `silence` (0,8 s), `line` (la réplique, le temps de sa voix, `estimate` des cinématiques), `breath` (0,6 s), `buzz` (1,2 s, toute la vibration de 2,5 s en effets atténués), `turn` (1,2 s, absente en effets atténués), puis `phone` (mode `examining` sur le téléphone). Avec la vraie réplique, la fiche s'ouvre à 5,2 s (5,3 s en effets atténués) ;
 - `state.ending` donne l'étape, le temps écoulé, l'avancement de l'étape (le pivot s'en sert) et la liste des étapes entrées, dans l'ordre : aucune n'est sautée, même par une image très longue ;
-- effets atténués : la fiche s'ouvre à la fin de l'étape `buzz`, 1,2 s après le début de la vibration ; le réglage est lu au début de la séquence (`reducedMotion` accepte une fonction) ;
+- effets atténués : la fiche s'ouvre quand le téléphone a fini de vibrer (2,5 s après le début de la vibration, `ENDING.vibration`), à la lettre du §3.1 « directement après la vibration » : on retire le mouvement, pas le son ; le réglage est lu au début de la séquence (`reducedMotion` accepte une fonction) ;
+- la vibration n'est pas coupée par l'ouverture de la fiche : en effets normaux, la fiche s'ouvre à 2,4 s de vibration et la dernière salve finit (0,1 s) fiche ouverte ; seul `stop()` coupe une vibration en cours ;
+- une durée de réplique invalide (NaN, absente, négative) compte pour zéro : la séquence ne reste jamais bloquée sur la réplique ; une étape sans durée a un avancement de 1 ;
 - les 6 indices trouvés, la fiche du téléphone ne se ferme plus, même par `close()` : on en sort en écoutant, ou par PASSER L'ENQUÊTE depuis la pause ;
 - route `?indices=6` : la séquence part à la fermeture de la première fiche d'indice relue.
 

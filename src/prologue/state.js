@@ -5,9 +5,13 @@ import { estimate } from '../briefing/kit.js'
 
 // Séquence de fin (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md §3.1), en secondes de temps de jeu.
 // Elle part à la fermeture d'une fiche d'indice quand les 6 sont trouvés : silence, réplique (« J'en ai assez vu. », le
-// temps de sa voix), souffle, vibration du téléphone, regard qui pivote vers lui (sauté en effets atténués), puis la
-// fiche du téléphone ('phone' : mode 'examining' sur le téléphone).
-export const ENDING = { silence: 0.8, breath: 0.6, buzz: 1.2, turn: 1.2 }
+// temps de sa voix), souffle, vibration du téléphone, regard qui pivote vers lui, puis la fiche du téléphone ('phone' :
+// mode 'examining' sur le téléphone). La vibration dure 2,5 s : le regard part après 1,2 s de vibration ; en effets
+// atténués, pas de regard, l'étape 'buzz' dure toute la vibration et la fiche s'ouvre quand le téléphone se tait.
+export const ENDING = { silence: 0.8, breath: 0.6, buzz: 1.2, turn: 1.2, vibration: 2.5 }
+// une durée invalide (NaN, absente, négative) compte pour zéro : la séquence ne reste pas bloquée et les étapes
+// suivantes gardent leur durée
+const seconds = d => (Number.isFinite(d) && d > 0 ? d : 0)
 
 // speechTime : durée d'une réplique dite (secondes) ; reducedMotion : booléen ou fonction, lu au début de la séquence
 export function createInvestigationState({ clues = CLUES, phone = PHONE, anchors = {}, hintDelay = 40, found = [],
@@ -18,10 +22,11 @@ export function createInvestigationState({ clues = CLUES, phone = PHONE, anchors
   // la séquence de fin : ses étapes datées, le temps écoulé, les étapes entrées (dans l'ordre, aucune sautée)
   function startEnding() {
     const reduced = typeof reducedMotion === 'function' ? !!reducedMotion() : !!reducedMotion
-    const durations = [['silence', ENDING.silence], ['line', speechTime(phone.fin)], ['breath', ENDING.breath], ['buzz', ENDING.buzz]]
+    const durations = [['silence', ENDING.silence], ['line', speechTime(phone.fin)], ['breath', ENDING.breath],
+      ['buzz', reduced ? ENDING.vibration : ENDING.buzz]]
     if (!reduced) durations.push(['turn', ENDING.turn])
     let from = 0
-    const plan = durations.map(([step, d]) => { const p = { step, from, to: from + d }; from = p.to; return p })
+    const plan = durations.map(([step, d]) => { const p = { step, from, to: from + seconds(d) }; from = p.to; return p })
     s.end = { plan, t: 0, i: 0, steps: [plan[0].step] }
     s.mode = 'ending'; s.current = null
   }
@@ -51,7 +56,8 @@ export function createInvestigationState({ clues = CLUES, phone = PHONE, anchors
       const e = s.end
       if (!e) return null
       const p = e.plan[e.i]
-      return { step: p ? p.step : 'phone', t: e.t, progress: p ? Math.min(1, (e.t - p.from) / (p.to - p.from)) : 1, steps: [...e.steps] }
+      const progress = p && p.to > p.from ? Math.min(1, (e.t - p.from) / (p.to - p.from)) : 1
+      return { step: p ? p.step : 'phone', t: e.t, progress, steps: [...e.steps] }
     },
     has: id => s.found.has(id),
 
