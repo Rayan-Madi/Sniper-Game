@@ -8,7 +8,7 @@ import { estimate } from '../briefing/kit.js'
 // Pluie : gain atteint au bout de sa montée de 2 s ; 0,03 est la moitié des 0,06 d'avant la recette (−6 dB).
 const RAIN_GAIN = 0.03
 // Cœur : facteur appliqué au battement du kit des cinématiques (heart, src/briefing/sound.js), qui lui ne change pas ;
-// 0,6 au lieu de 1 avant la recette (−4,4 dB).
+// 0,6 au lieu de 1 avant la recette (−4,4 dB, soit les −4,5 dB environ de la spec).
 const HEART_GAIN = 0.6
 
 // Vibration du téléphone posé sur la console (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md §3.1) : une
