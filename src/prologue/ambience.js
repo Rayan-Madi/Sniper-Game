@@ -3,6 +3,14 @@
 import { createSound } from '../briefing/sound.js'
 import { estimate } from '../briefing/kit.js'
 
+// Niveaux de l'ambiance, à régler ici d'une ligne (spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §4 : la
+// pluie et le cœur couvraient tout le reste).
+// Pluie : gain atteint au bout de sa montée de 2 s ; 0,03 est la moitié des 0,06 d'avant la recette (−6 dB).
+const RAIN_GAIN = 0.03
+// Cœur : facteur appliqué au battement du kit des cinématiques (heart, src/briefing/sound.js), qui lui ne change pas ;
+// 0,6 au lieu de 1 avant la recette (−4,4 dB).
+const HEART_GAIN = 0.6
+
 // Vibration du téléphone posé sur la console (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md §3.1) : une
 // salve dure `salve` secondes ; à la fin, deux salves séparées de `gap`, deux fois (l'enquête les déclenche une à une,
 // au temps de jeu).
@@ -32,13 +40,15 @@ export function createAmbience(audio) {
     const high = c.createBiquadFilter(); high.type = 'highpass'; high.frequency.value = 380
     const g = c.createGain(); g.gain.value = 0.0001
     src.connect(band); band.connect(high); high.connect(g); g.connect(audio.dest)
-    try { g.gain.linearRampToValueAtTime(0.06, c.currentTime + 2) } catch (e) { /* contexte fermé */ }
+    try { g.gain.linearRampToValueAtTime(RAIN_GAIN, c.currentTime + 2) } catch (e) { /* contexte fermé */ }
     src.start()
     rain = { src, g }
   }
 
-  // cœur : un battement, puis le suivant d'autant plus tôt qu'on est près (1,15 s → 0,65 s)
-  const heartLoop = () => { if (dead) return; S.heart(); at(1150 - 500 * proximity, heartLoop) }
+  // cœur : le battement du kit (deux coups sourds, mêmes fréquences et durées) à HEART_GAIN de son niveau, puis le suivant
+  // d'autant plus tôt qu'on est près (1,15 s → 0,65 s)
+  const heartbeat = () => { S.tone(58, 'sine', 0.16, 0.8 * HEART_GAIN, 0, 40); S.tone(52, 'sine', 0.2, 0.6 * HEART_GAIN, 0.22, 36) }
+  const heartLoop = () => { if (dead) return; heartbeat(); at(1150 - 500 * proximity, heartLoop) }
 
   const api = {
     start() {

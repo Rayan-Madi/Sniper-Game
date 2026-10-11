@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createAmbience, BUZZ } from '../../src/prologue/ambience.js'
 import { estimate } from '../../src/briefing/kit.js'
+import { createSound } from '../../src/briefing/sound.js'
 
 const FAKE = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] }
 beforeEach(() => vi.useFakeTimers(FAKE))
@@ -55,15 +56,30 @@ describe('le son de l\'enquête', () => {
       .filter(s => s.loop && s.start.mock.calls.length && !s.stop.mock.calls.length)
     return rain.connect.mock.calls[0][0].connect.mock.calls[0][0].connect.mock.calls[0][0].gain
   }
+  // écart en décibels entre deux niveaux de gain
+  const dB = (v, ref) => 20 * Math.log10(v / ref)
+
+  // spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §4 : la pluie était trop forte (montée à 0,06)
+  it('la pluie monte à la moitié de son ancien niveau (−6 dB environ), toujours audible', () => {
+    const audio = fakeAudio()
+    const a = createAmbience(audio); a.start()
+    const g = rainGain(audio)
+    expect(g.linearRampToValueAtTime).toHaveBeenCalledTimes(1)
+    const [[level, at]] = g.linearRampToValueAtTime.mock.calls
+    expect(at).toBe(2)                                               // la montée de 2 s ne change pas
+    expect(dB(level, 0.06)).toBeGreaterThan(-7)                      // baissée d'environ 6 dB, pas éteinte
+    expect(dB(level, 0.06)).toBeLessThan(-5)
+    a.stop()
+  })
 
   it("à l'arrêt, sans cancelAndHoldAtTime, le fondu de la pluie annule la montée puis repart du niveau atteint (pas de coupure sèche)", () => {
     const audio = fakeAudio()
     const a = createAmbience(audio); a.start()
     const g = rainGain(audio)
-    audio.ctx.currentTime = 0.7; g.value = 0.03                      // en pleine montée de 2 s : la valeur lue est celle atteinte
+    audio.ctx.currentTime = 0.7; g.value = 0.01                      // en pleine montée de 2 s : la valeur lue est celle atteinte
     a.stop()
     expect(g.cancelScheduledValues).toHaveBeenCalledWith(0.7)
-    expect(g.setValueAtTime).toHaveBeenCalledWith(0.03, 0.7)         // sans cela, cancelScheduledValues ramènerait le gain à 0,0001
+    expect(g.setValueAtTime).toHaveBeenCalledWith(0.01, 0.7)         // sans cela, cancelScheduledValues ramènerait le gain à 0,0001
     expect(g.setTargetAtTime).toHaveBeenCalledWith(0.0001, 0.7, expect.any(Number))
     const order = f => f.mock.invocationCallOrder[0]
     expect(order(g.cancelScheduledValues)).toBeLessThan(order(g.setValueAtTime))
@@ -74,7 +90,7 @@ describe('le son de l\'enquête', () => {
     const audio = fakeAudio('running', { hold: true })
     const a = createAmbience(audio); a.start()
     const g = rainGain(audio)
-    audio.ctx.currentTime = 0.7; g.value = 0.03
+    audio.ctx.currentTime = 0.7; g.value = 0.01
     a.stop()
     expect(g.cancelAndHoldAtTime).toHaveBeenCalledWith(0.7)
     expect(g.cancelScheduledValues).not.toHaveBeenCalled()           // il remettrait le gain à sa valeur intrinsèque
@@ -92,6 +108,29 @@ describe('le son de l\'enquête', () => {
       return n
     }
     expect(await count(1)).toBeGreaterThan(await count(0))
+  })
+
+  // spec prologue v2 §4 : le cœur était trop fort ; celui des cinématiques (le battement du kit) ne change pas
+  it('le cœur bat à 0,6 fois le niveau du battement des cinématiques (−4,5 dB environ), toujours audible', async () => {
+    // les deux coups d'un battement : les gains créés pendant le battement, leur niveau de crête
+    const peaks = (audio, beat) => {
+      const before = audio.ctx.createGain.mock.results.length
+      return beat().then(() => audio.ctx.createGain.mock.results.slice(before).map(r => r.value.gain.linearRampToValueAtTime.mock.calls[0][0]))
+    }
+    const ref = fakeAudio()
+    const kit = createSound(ref, { every: () => 0, stopEvery: () => {} })
+    const cine = await peaks(ref, async () => kit.heart())
+    const audio = fakeAudio(); const a = createAmbience(audio); a.start()
+    const oscs = audio.ctx.createOscillator.mock.results.length
+    const inv = await peaks(audio, () => vi.advanceTimersByTimeAsync(950))   // premier battement à 0,9 s, le suivant 1,15 s après
+    expect(cine).toHaveLength(2)
+    expect(inv).toHaveLength(2)
+    inv.forEach((p, i) => {
+      expect(dB(p, cine[i])).toBeGreaterThan(-5.5)                   // baissé d'environ 4,5 dB, pas éteint
+      expect(dB(p, cine[i])).toBeLessThan(-3.5)
+    })
+    for (const o of audio.ctx.createOscillator.mock.results.slice(oscs).map(r => r.value)) expect(reaches(o, audio.dest)).toBe(true)
+    a.stop(); kit.destroy(); await vi.advanceTimersByTimeAsync(500)
   })
 
   it('speak fait parler Viktor le temps estimé, puis se tait', async () => {
