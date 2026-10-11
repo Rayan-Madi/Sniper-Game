@@ -183,6 +183,39 @@ describe('solidHit : le décor solide sur le rayon', () => {
     expect(hit.point.z).toBeCloseTo(-2.8, 6)
   })
 
+  // Relecture de T5 : solidHit recalculait la chaîne des parents de chaque maillage listé ; les pièces d'une voiture,
+  // que solidMeshes() rend une à une, recalculaient ainsi leur groupe autant de fois qu'elles sont nombreuses, et la
+  // scène une fois par maillage. Témoin : au commit bd5f820, le groupe de la voiture est recalculé 20 fois, la scène 22
+  // (vu rouge).
+  it('chaque objet recalculé une seule fois par tir : la voiture listée pièce par pièce, la jeep entière, un mur, sous une scène', () => {
+    const scene = new THREE.Scene()
+    const voiture = new THREE.Group()
+    const pieces = Array.from({ length: 20 }, (_, i) => boite(0.2, 0.6, 2, [-2 + i * 0.2, 0.8, 0], { surface: 'metal' }))
+    voiture.add(...pieces)
+    const jeep = new THREE.Group()
+    jeep.add(boite(5, 0.7, 2.4, [0, 0.75, 0], { surface: 'metal' }), boite(0.05, 0.8, 1.9, [1.2, 1.6, 0], { solid: false }))
+    jeep.position.set(30, 0, 0)
+    const mur = boite(4, 3, 0.3, [-30, 1.5, 0])
+    scene.add(voiture, jeep, mur)
+    scene.updateMatrixWorld(true)
+    voiture.position.set(10, 0.2, -4)   // la voiture a bougé, aucun rendu n'a recalculé ses matrices
+
+    const calculs = new Map()
+    scene.traverse(o => {
+      const updateMatrix = o.updateMatrix
+      o.updateMatrix = function () { calculs.set(o, (calculs.get(o) || 0) + 1); return updateMatrix.call(this) }
+    })
+    const hit = solidHit(rayon(v(10, 1, 20), v(0, 0, -1)), [...pieces, jeep, mur])
+
+    expect(calculs.get(voiture), 'le groupe de la voiture').toBe(1)
+    expect(calculs.get(scene), 'la scène').toBe(1)
+    expect(Math.max(...calculs.values()), 'aucun objet recalculé deux fois').toBe(1)
+    expect(calculs.size, 'tous recalculés : scène, voiture et ses 20 pièces, jeep et ses 2 pièces, mur').toBe(26)
+    // Les matrices sont à jour : la balle trouve la voiture là où elle est maintenant
+    expect(pieces).toContain(hit?.objet)
+    expect(hit.point.z).toBeCloseTo(-3, 6)
+  })
+
   // En M6, l'œil est sur la face arrière du rebord (z = 5) : à l'arrondi près, le rayon part de dedans (rien) ou de la
   // face (touchée à 0 m). Ici le rebord est posé 1 cm devant l'œil : il est toujours touché, à 1 cm.
   it(`les ${DEPART} premiers mètres devant l'œil ne comptent pas : l'appui du poste (rebord de sa fenêtre, à 1 cm) n'arrête pas le tir`, () => {

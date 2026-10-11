@@ -23,6 +23,28 @@ function boxNormal(box, p) {
   return n
 }
 
+// Matrices du monde à jour pour `objets`, leurs enfants et leurs parents, chacun recalculé une seule fois : les pièces
+// d'une voiture, que solidMeshes() rend une à une, ne recalculent pas leur groupe chacune (relecture de T5). Un objet
+// dont un parent est dans la liste vient avec lui ; les parents des autres passent une fois, de la racine vers le bas.
+function updateMatrices(objets) {
+  const liste = new Set(objets)
+  const faits = new Set()
+  const parents = o => {
+    const p = o.parent
+    if (!p || faits.has(p)) return
+    parents(p)
+    p.updateWorldMatrix(false, false)
+    faits.add(p)
+  }
+  for (const o of liste) {
+    let couvert = false
+    for (let p = o.parent; p && !couvert; p = p.parent) couvert = liste.has(p)
+    if (couvert) continue
+    parents(o)
+    o.updateWorldMatrix(false, true)
+  }
+}
+
 // Le décor solide que le rayon (THREE.Ray, direction unitaire) rencontre en premier : parmi `objets` (maillages et
 // groupes, leurs enfants compris ; seuls comptent les maillages marqués userData.solid, le reste est traversé) et parmi
 // `boites` ({ box: THREE.Box3, surface, … } : le cadenas du port, dont les autres champs passent au résultat).
@@ -35,7 +57,7 @@ export function solidHit(ray, objets = [], boites = []) {
   _raycaster.set(ray.origin, ray.direction)
   _raycaster.near = OCCLUSION.departM
   _raycaster.far = Infinity
-  for (const o of objets) o.updateWorldMatrix(true, true)
+  updateMatrices(objets)
   for (const h of _raycaster.intersectObjects(objets, true)) {
     if (!h.object.isMesh || !h.object.userData.solid) continue
     const normal = h.face.normal.clone().applyNormalMatrix(_normalMatrix.getNormalMatrix(h.object.matrixWorld)).normalize()

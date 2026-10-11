@@ -106,6 +106,20 @@ describe('impact sur le décor', () => {
     for (const f of ['fleeNearby', 'reactNearby', 'checkGuardAlert']) expect(c, f).toContain(f)
   })
 
+  // Relecture de T5 : une balle partie au loin (point à 1 km) ne fait fuir personne, le fil disait pourtant « cibles en
+  // fuite ». Témoin : au commit bd5f820, le texte est écrit en dur dans resolveBullet et fleeNearby ne rend rien (vu
+  // rouge).
+  it('le fil d\'un tir manqué ne parle de fuite que si des PNJ fuient (missFeed, du nombre rendu par fleeNearby)', () => {
+    expect(a.imports.get('missFeed')?.from).toBe('./shot/score.js')
+    expect(texteFn('fleeNearby')).toMatch(/\breturn\s+\w+/)
+    const rb = texteFn('resolveBullet')
+    const fuyards = rb.match(/(\w+)\s*=[^\n;]*\bfleeNearby\(/)?.[1]
+    expect(fuyards, 'le nombre de fuyards, rendu par fleeNearby').toBeTruthy()
+    const fils = (callsIn(a, 'resolveBullet') || []).filter(c => c.callee === 'addKillFeed').map(c => a.source.slice(c.start, c.end))
+    expect(fils.some(t => new RegExp(`missFeed\\(\\s*${fuyards}\\s*\\)`).test(t)), fils.join('\n')).toBe(true)
+    expect(MAIN_SRC).not.toMatch(/cibles en fuite/)
+  })
+
   it('une marque sur une jeep la suit (rattachée à la jeep touchée)', () => {
     const t = texteAppel('resolveBullet', 'spawnBulletHole')
     expect(t.split(',').length, 'spawnBulletHole(point, normale, support)').toBeGreaterThanOrEqual(3)

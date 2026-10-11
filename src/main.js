@@ -17,7 +17,7 @@ import { createRecoil } from './shot/recoil.js'
 import { createBolt } from './shot/bolt.js'
 import { npcHit } from './shot/hitzones.js'
 import { solidHit, resolveImpact } from './shot/occlusion.js'
-import { targetScore, guardHit } from './shot/score.js'
+import { targetScore, guardHit, missFeed } from './shot/score.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
 import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
 import { rankFor, precisionOf, isHit } from './campaign/rank.js'
@@ -1001,7 +1001,8 @@ function resolveBullet() {
   }
 
   // Tir raté : la balle s'arrête dans le décor (gerbe de sa matière, marque persistante sur la surface, qui roule avec
-  // une jeep touchée), ou part au loin. Les PNJ proches du point d'impact réagissent.
+  // une jeep touchée), ou part au loin. Les PNJ proches du point d'impact réagissent (personne pour une balle partie au
+  // loin : son point est à 1 km) ; le fil ne parle de fuite que si des PNJ fuient.
   if (role === 'decor' || role === 'rien') {
     const shotPos = closestPt
     if (role === 'decor') {
@@ -1009,13 +1010,14 @@ function resolveBullet() {
       spawnBulletHole(shotPos, hit.normal, jeepOf(hit.objet))
     }
 
+    let fuyards = 0
     if (!stats.silenced) {
       stress = Math.min(1, stress + STRESS.tirManque)
-      fleeNearby(shotPos, 20)
+      fuyards = fleeNearby(shotPos, 20)
       reactNearby(shotPos, 28)
       checkGuardAlert(shotPos, stats)
     }
-    addKillFeed('Tir manqué : cibles en fuite')
+    addKillFeed(missFeed(fuyards))
   }
 
   updateHUD()
@@ -1107,13 +1109,18 @@ function checkGuardAlert(shotPos, stats) {
   }
 }
 
+// Fait fuir les PNJ vivants à moins de `radius` de `pos` ; rend le nombre de ceux qui fuient (une cible à bord d'un
+// véhicule ne fuit pas à pied).
 function fleeNearby(pos, radius) {
+  let fuyards = 0
   for (const npc of npcs) {
     if (!npc.alive) continue
     if (npc.mesh.position.distanceTo(pos) < radius) {
       npc.flee(pos)
+      if (npc.state === 'flee') fuyards++
     }
   }
+  return fuyards
 }
 
 function reactNearby(pos, radius) {
