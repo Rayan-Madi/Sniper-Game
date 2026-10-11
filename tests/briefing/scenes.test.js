@@ -74,7 +74,8 @@ describe('prologue B : le message de sa femme, l\'appel d\'Anton, le dossier', (
     const root = document.getElementById('briefing-root')
     const $ = sel => root.querySelector(sel)
     // au début de chaque réplique : le texte du téléphone et les fiches épinglées / toutes les fiches
-    const obs = { repliques: [], auDebut: [], appel: [], ecranQuiSonne: null, vm: null, journaux: [], dossier: null, ph1Fin: null }
+    const obs = { repliques: [], auDebut: [], appel: [], ecranQuiSonne: null, vm: null, journaux: [], dossier: null, ph1Fin: null,
+      radioPendantLAppel: false, radioApresRaccroche: [] }
     let tx = null
     const appelDe = ph => ['end', 'ans', 'ring', 'dial', 'vm'].find(c => ph.classList.contains(c)) || null
     const journal = () => [...root.querySelectorAll('.p-log .lr')].map(r =>
@@ -96,7 +97,16 @@ describe('prologue B : le message de sa femme, l\'appel d\'Anton, le dossier', (
       if (etat === 'ring' && !obs.ecranQuiSonne) obs.ecranQuiSonne = `${$('#ph1n').textContent} | ${$('#ph1i').textContent} | ${$('#ph1 .p-st').textContent.includes('APPEL ENTRANT')}`
       if (etat === 'vm' && !obs.vm) obs.vm = `${$('.p-vm b').textContent} | ${$('.p-vm small').textContent}`
       if (ph.classList.contains('log')) { const j = journal(); if (j.join() !== obs.journaux.at(-1)?.join()) obs.journaux.push(j) }
-      if (obs.dossier === null && ph.classList.contains('sms') && /DOSSIER/.test($('.p-sms').textContent)) obs.dossier = root.querySelectorAll('.fc.on').length
+      // la bulle de la pièce jointe est dans le fil dès le départ, cachée : on attend qu'elle s'affiche
+      if (obs.dossier === null && ph.classList.contains('sms') && getComputedStyle($('#batt')).display !== 'none') obs.dossier = root.querySelectorAll('.fc.on').length
+      // l'indicateur radio (le canal ouvert) : relevé pendant que l'inconnu parle, puis après le raccrochage (écran du téléphone)
+      if ($('#radio').classList.contains('on')) {
+        if (spk?.textContent === 'INCONNU') obs.radioPendantLAppel = true
+        if (obs.appel.includes('end')) {
+          const ecran = ['end', 'log', 'sms'].filter(c => ph.classList.contains(c)).join('+') + ($('#rig').classList.contains('on') ? '' : ' (tableau)')
+          if (!obs.radioApresRaccroche.includes(ecran)) obs.radioApresRaccroche.push(ecran)
+        }
+      }
       obs.ph1Fin = ph.textContent
     }
     expect(handle.kit.errors).toEqual([])
@@ -153,6 +163,12 @@ describe('prologue B : le message de sa femme, l\'appel d\'Anton, le dossier', (
     expect(auDebut[noms].fiches).toBe('8 / 8')
     expect(auDebut[anton].ph1).not.toContain('ANTON')
     expect(ph1Fin).toContain('« ANTON »')
+  })
+
+  it('l\'indicateur radio (canal ouvert) s\'allume pendant l\'appel et s\'éteint quand il raccroche : plus de canal sur le journal, le dossier ni les messages', async () => {
+    const { radioPendantLAppel, radioApresRaccroche } = await lecture()
+    expect(radioPendantLAppel).toBe(true)
+    expect(radioApresRaccroche).toEqual([])
   })
 })
 

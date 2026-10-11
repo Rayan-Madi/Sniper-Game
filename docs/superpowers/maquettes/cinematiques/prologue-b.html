@@ -265,11 +265,9 @@
       -webkit-mask-image: linear-gradient(90deg, transparent, #000 75%); mask-image: linear-gradient(90deg, transparent, #000 75%); }
   .pro .bvig { position: absolute; inset: 0; z-index: 5; pointer-events: none; background: radial-gradient(ellipse at 45% 40%, transparent 50%, rgba(0,0,0,.6) 100%); }
 
-  /* ── radio : canal inconnu, puis « Anton » ── */
+  /* ── radio : le canal de l'appel, allumé quand l'inconnu parle, éteint quand il raccroche
+        (le nom « ANTON » ne s'affiche que sur le téléphone, une fois le contact enregistré) ── */
   .pro .radio { background: rgba(4,5,8,.72); padding: .35cqw .8cqw; border-radius: .3cqw; }
-  .pro .radio .lb2 { display: none; }
-  .pro .radio.named .lb { display: none; }
-  .pro .radio.named .lb2 { display: inline; }
   .pro .radio .dot { color: var(--red); }
   .pro .radio .eq i { background: var(--amb); }
 
@@ -484,7 +482,7 @@
         </div>
       </div>
 
-      <div class="radio" id="radio"><span class="dot">●</span><span class="lb">CANAL INCONNU · NUMÉRO JETABLE</span><span class="lb2">CANAL INCONNU · « ANTON »</span><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></div>
+      <div class="radio" id="radio"><span class="dot">●</span><span class="lb">CANAL INCONNU · NUMÉRO JETABLE</span><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></div>
       <div class="sub" id="sub"></div>
       <div class="title" id="title"><div class="t1">PROLOGUE</div><div class="ln"></div><div class="t2">SNIPER</div></div>
     </div>
@@ -623,7 +621,7 @@
   const VM = 'MESSAGERIE · MAISON · 19:04'
   K.run({
     music: 'somber',
-    stateClasses: ['press', 'take', 'low', 'aside', 'vm', 'ring', 'ans', 'end', 'ant', 'log', 'sms', 'dim', 'bz', 'open', 'play', 'red', 'later', 'named', 'in', 'set', 'q', 'go'],
+    stateClasses: ['press', 'take', 'low', 'aside', 'vm', 'ring', 'ans', 'end', 'ant', 'log', 'sms', 'dim', 'bz', 'open', 'play', 'red', 'later', 'in', 'set', 'q', 'go'],
     reset: K => {
       ;['ph1n', 'ph1sn', 'lg1n', 'lg2n'].forEach(id => { $(id).textContent = NUM })
       ;['ph1i', 'ph1si'].forEach(id => { $(id).textContent = 'NUMÉRO INCONNU' })
@@ -662,9 +660,10 @@
         cues: [[400, talk], [1700, K => { K.on('sWin', 'red'); K.glitch(320, .85); H(K) }]] },
       { label: 'qui', who: 'VIKTOR', pre: 500, post: 450, say: 'Qui êtes-vous ?' },
       { label: 'demain', who: 'INCONNU', pre: 700, post: 250, say: 'Demain, tu sauras qui.', cues: [[700, talk]] },
-      // 5 · il raccroche ; le journal : l'appel entrant de 22:41, le même numéro qu'à 18:52, le refus du 21 février
+      // 5 · il raccroche (le canal se ferme : l'indicateur radio s'éteint) ; le journal : l'appel entrant de 22:41,
+      //     le même numéro qu'à 18:52, le refus du 21 février
       { label: 'raccroché', min: 1400, cues: [
-          [0, K => { K.on('ph1', 'end'); hangup(K) }],
+          [0, K => { K.on('ph1', 'end'); K.off('radio'); hangup(K) }],
           [1100, K => { K.$('sub').textContent = '' }]] },
       { label: 'le journal', min: 2800, cues: [
           [0, K => { K.on('ph1', 'log'); K.snd.paper() }],
@@ -698,7 +697,7 @@
       { label: 'Anton', min: 4300, cues: [
           [0, K => { K.on('ph1', 'bz'); buzz(K) }],
           [300, K => { K.off('ph1', 'bz'); K.on('bm2'); K.snd.ping(); typed(K, 'sm2', 'Appelle-moi Anton.') }],
-          [1800, K => { K.type('ph1sn', '« ANTON »', 520, true); K.$('lg1n').textContent = K.$('lg2n').textContent = '« ANTON »'; K.on('radio', 'named'); K.glitch(160, .6) }],
+          [1800, K => { K.type('ph1sn', '« ANTON »', 520, true); K.$('lg1n').textContent = K.$('lg2n').textContent = '« ANTON »'; K.glitch(160, .6) }],
           [2500, K => K.type('ph1si', 'IDENTITÉ INCONNUE', 650, true)],
           [3500, K => { K.off('ph1', 'sms'); H(K) }]] },
       // 9 · la vengeance : le téléphone baisse, travelling sur « ? »
@@ -709,7 +708,7 @@
           [1100, H], [2050, H], [3000, H], [3500, G(220, .75)], [3900, H]] },
       // 10 · carton-titre
       { label: 'carton-titre', min: 3300, cues: [
-          [0, K => { K.$('sub').textContent = ''; K.off('radio'); K.music(null); K.lost(500) }],
+          [0, K => { K.$('sub').textContent = ''; K.music(null); K.lost(500) }],
           [500, K => K.on('sBoard', 'out')], [750, K => K.title()], [2100, K => K.black()]] },
     ],
   })

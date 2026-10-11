@@ -36,7 +36,7 @@ On garde le décor, le téléphone à l'écran, le tableau et le carton-titre ; 
 | la vengeance | VIKTOR | « Ils voulaient mon silence. Ils auront ma vengeance. » |
 | carton-titre | | inchangé |
 
-Retirés : le rappel par Viktor, « Tu as eu mon message. Trop tard, je sais. », « Tu ne me connais pas… », « Appelle-moi Anton. Je vends des infos… », « On t'a offert du travail… » (le prologue A montre déjà l'offre et le refus). Le journal des appels montre désormais « 06 39 98 41 07 · 22:41 · ENTRANT » puis « ANTON » une fois le contact enregistré.
+Retirés : le rappel par Viktor, « Tu as eu mon message. Trop tard, je sais. », « Tu ne me connais pas… », « Appelle-moi Anton. Je vends des infos… », « On t'a offert du travail… » (le prologue A montre déjà l'offre et le refus). Le journal des appels montre désormais « 06 39 98 41 07 · 22:41 · ENTRANT » puis « ANTON » une fois le contact enregistré. L'indicateur radio (« CANAL INCONNU · NUMÉRO JETABLE ») n'est allumé que pendant l'appel : il s'éteint au raccrochage, le dossier et les messages arrivent sans canal ouvert ; « ANTON » ne s'affiche que sur le téléphone (contact et journal). Décidé à la relecture de N1.
 
 La scène `src/briefing/scenes/prologue-b.js` est **régénérée** par `node scripts/port-maquette.mjs` (jamais éditée à la main). Les durées des temps suivent la longueur des répliques comme ailleurs dans le kit. Captures de la maquette et du jeu aux temps clés.
 
