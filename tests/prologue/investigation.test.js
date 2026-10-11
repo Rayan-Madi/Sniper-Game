@@ -4,6 +4,8 @@ import { startInvestigation, develop, photoFrame } from '../../src/prologue/inve
 import { CLUES, PHONE } from '../../src/prologue/clues.js'
 import { settings } from '../../src/settings.js'
 import { buildApartment } from '../../src/prologue/apartment.js'
+import { BUZZ } from '../../src/prologue/ambience.js'
+import { ENDING } from '../../src/prologue/state.js'
 import { readFileSync } from 'node:fs'
 
 // la feuille de style telle qu'écrite (sous Vitest, un import ?raw de CSS revient vide)
@@ -23,6 +25,7 @@ const fakeRenderer = () => {
   return { domElement: canvas, render: vi.fn(), compile: vi.fn(), shadowMap: { autoUpdate: true, needsUpdate: false }, info: { render: { calls: 0, triangles: 0 } } }
 }
 const keyE = () => document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }))
+const keyUp = code => document.dispatchEvent(new KeyboardEvent('keyup', { code }))
 const $ = sel => document.querySelector(sel)
 // pose la caméra sur un point accessible proche d'un indice (mêmes points que tests/prologue/apartment.test.js), en
 // visant le centre de son objet (lacet = atan2(−dx, −dz), convention du contrôleur)
@@ -92,8 +95,9 @@ describe('l\'enquête', () => {
     expect($('#enq-fiche').textContent).toContain('06 39 98 41 07')
     expect($('#enq-fiche').textContent).toContain('MAISON')
     expect($('#enq-fiche').textContent).toContain('ÉCOUTER LE MESSAGE')
-    await vi.advanceTimersByTimeAsync(700)             // la fiche lue, on écoute
+    await vi.advanceTimersByTimeAsync(700)             // la fiche lue, on écoute : E maintenu 1 s
     keyE()
+    for (let i = 0; i < 10; i++) h.update(0.1)
     expect(onDone).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(800)
     expect(onDone).toHaveBeenCalledTimes(1)
@@ -101,48 +105,48 @@ describe('l\'enquête', () => {
     expect($('#enq-root')).toBeNull()
   })
 
-  it('un double-clic sur le téléphone ouvre la fiche sans écouter le message', async () => {
+  // Écouter demande de maintenir 1 s (spec 2026-10-11 §3.2) : un double-clic sur le téléphone n'écoute plus jamais, sans
+  // la garde de 600 ms du lot 0.
+  it('un double-clic sur le téléphone ouvre la fiche sans écouter le message ; un clic maintenu 1 s écoute', async () => {
     const renderer = fakeRenderer(), camera = new THREE.PerspectiveCamera()
     const probe = startInvestigation({ renderer, camera, onDone: vi.fn() })
     const cam = lookAt(probe.debug.apartment, 'telephone'); probe.stop()
     const onDone = vi.fn()
     const h = startInvestigation({ renderer, camera, onDone, options: { cam, indices: 4 } })
     lockEl = renderer.domElement                          // pointeur verrouillé : le clic gauche agit
-    const click = () => document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    const down = () => document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
+    const up = () => document.dispatchEvent(new MouseEvent('mouseup', { button: 0 }))
+    const frames = async (n, dt = 0.05) => { for (let i = 0; i < n; i++) { h.update(dt); await vi.advanceTimersByTimeAsync(dt * 1000) } }
     h.update(0.016)
-    click()
+    down(); await frames(2); up()                         // premier clic : la fiche s'ouvre
     expect($('#enq-fiche').classList.contains('on')).toBe(true)
-    await vi.advanceTimersByTimeAsync(150)
-    click()                                               // le second clic du double-clic
-    await vi.advanceTimersByTimeAsync(400)
-    click()                                               // 550 ms après l'ouverture : encore dans la garde de 600 ms
-    await vi.advanceTimersByTimeAsync(150)                // 700 ms après l'ouverture
+    await frames(1)
+    down(); await frames(2); up()                         // le second clic du double-clic
+    await frames(8)
+    down(); await frames(3); up()                         // et un troisième, pour faire bonne mesure
+    await frames(30)
     expect(onDone).not.toHaveBeenCalled()
-    expect(h.debug.state.mode).toBe('examining')          // aucun des trois clics n'a lancé l'écoute
+    expect(h.debug.state.mode).toBe('examining')          // aucun des clics n'a lancé l'écoute
     expect($('#enq-fiche').classList.contains('on')).toBe(true)
-    click()                                               // 700 ms : la garde est passée, ce clic écoute
+    down(); await frames(21)                              // maintenu un peu plus d'1 s : il écoute
     expect(h.debug.state.mode).toBe('done')
     await vi.advanceTimersByTimeAsync(800)
     expect(onDone).toHaveBeenCalledWith({ result: 'listened' })
   })
 
-  // Pendant la garde, E et le clic sont ignorés : l'invite n'apparaît qu'à sa fin, pour qu'aucune touche ne paraisse
-  // perdue (une invite affichée répond toujours).
-  it('fiche du téléphone : l\'invite « ÉCOUTER LE MESSAGE » n\'apparaît qu\'à la fin de la garde, et répond aussitôt', async () => {
+  // Plus de garde : l'invite est là dès l'ouverture, et un appui bref ne fait rien (il faut maintenir).
+  it('fiche du téléphone : l\'invite « MAINTENIR E : ÉCOUTER LE MESSAGE » est là dès l\'ouverture ; un appui bref n\'écoute pas', async () => {
     const renderer = fakeRenderer(), camera = new THREE.PerspectiveCamera()
     const probe = startInvestigation({ renderer, camera, onDone: vi.fn() })
     const cam = lookAt(probe.debug.apartment, 'telephone'); probe.stop()
     const h = startInvestigation({ renderer, camera, onDone: vi.fn(), options: { cam, indices: 4 } })
     h.update(0.016); keyE()
     const act = $('#enq-fiche .enq-act')
-    expect(act.textContent).toContain('ÉCOUTER LE MESSAGE')
-    expect(getComputedStyle(act).visibility).toBe('hidden')
-    await vi.advanceTimersByTimeAsync(599)
-    expect(getComputedStyle(act).visibility).toBe('hidden')
-    await vi.advanceTimersByTimeAsync(1)
+    expect(act.textContent).toMatch(/MAINTENIR\s*E\s*:\s*ÉCOUTER LE MESSAGE/)
     expect(getComputedStyle(act).visibility).toBe('visible')
-    keyE()
-    expect(h.debug.state.mode).toBe('done')
+    keyE(); keyUp('KeyE')
+    for (let i = 0; i < 20; i++) h.update(0.1)
+    expect(h.debug.state.mode).toBe('examining')
     h.stop()
   })
 
@@ -559,5 +563,303 @@ describe('l\'enquête — le cadre suit le volume de visée', () => {
     expect(Math.abs(f.x + f.w / 2 - (c.x + 1) / 2 * 1600)).toBeLessThan(6)   // à la perspective près
     expect(Math.abs(f.y + f.h / 2 - (1 - c.y) / 2 * 900)).toBeLessThan(6)
     expect(f.h).toBeCloseTo(0.35 * 900, 5)                           // petit volume : le cadre le plus serré
+  })
+})
+
+// ── la fin qui vient d'elle-même (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md, tâche E2) ──
+describe('l\'enquête : la fin, écouter, reposer, le coup de pouce', () => {
+  afterEach(() => { settings.reducedMotion = 'auto'; delete navigator.keyboard })
+
+  const FWD = () => settings.pvpKeys.forward
+  // fait tourner l'enquête par images de dt secondes, les minuteurs (frappe, voix) avançant d'autant ; d.t : temps écoulé
+  const driver = h => {
+    const d = { t: 0, async frames(seconds, dt = 0.05, each = null) {
+      const n = Math.round(seconds / dt)
+      for (let i = 0; i < n; i++) { h.update(dt); d.t += dt; if (each) each(d.t); await vi.advanceTimersByTimeAsync(dt * 1000) }
+    } }
+    return d
+  }
+  // espionne une méthode du son de l'enquête, avec l'instant de chaque appel (sans son exposé : rien n'est noté)
+  const spy = (h, d, name) => {
+    const a = h.debug.ambience || {}, calls = [], orig = a[name]
+    a[name] = (...args) => { calls.push({ args, t: d.t }); return typeof orig === 'function' ? orig.apply(a, args) : undefined }
+    return calls
+  }
+  const phoneTarget = h => h.debug.apartment.targets.find(t => t.userData.clueId === PHONE.id)
+  const screenOf = h => { let s = null; phoneTarget(h).traverse(o => { for (const m of [].concat(o.material || [])) if (m.userData.baseEmissive === 0x0b1220) s = m }); return s }
+  const phoneCenter = h => new THREE.Box3().setFromObject(phoneTarget(h)).getCenter(new THREE.Vector3())
+  const ficheOn = () => $('#enq-fiche').classList.contains('on')
+  const IDLE_PEAK = 14   // clignotement de repos de l'écran : 3 + 11 au plus fort (apartment.js)
+  // le doudou, sixième indice, ouvert au départ ; pointeur verrouillé, caméra libre (le regard peut pivoter)
+  function lastClue({ audio = null, indices = 5 } = {}) {
+    const renderer = fakeRenderer(), camera = new THREE.PerspectiveCamera(), onDone = vi.fn()
+    const h = startInvestigation({ renderer, camera, audio, onDone, options: { indices, ouvrir: 'doudou' } })
+    clickOn('#enq-card')
+    return { h, renderer, camera, onDone, d: driver(h) }
+  }
+  const closeIt = () => { keyE(); keyUp('KeyE') }
+
+  it('le sixième indice fermé, le contrôleur reste figé ; une fiche ordinaire refermée rend le déplacement', async () => {
+    let { h } = lastClue({ indices: 4 })                       // témoin : le doudou en cinquième
+    closeIt()
+    let p = h.debug.controller.position, z0 = p.z
+    press(FWD()); h.update(0.1); keyUp(FWD())
+    expect(p.z).toBeLessThan(z0)
+    h.stop()
+    ;({ h } = lastClue())
+    expect($('#enq-fiche').textContent).toMatch(/INDICE 06 \/ 06/)
+    closeIt()
+    expect(ficheOn()).toBe(false)
+    expect(h.debug.state.mode).toBe('ending')
+    p = h.debug.controller.position; z0 = p.z
+    press(FWD())
+    for (let i = 0; i < 20; i++) h.update(0.1)
+    keyUp(FWD())
+    expect(p.z).toBe(z0)
+    expect(h.debug.controller.frozen).toBe(true)
+    h.stop()
+  })
+
+  it('« J\'en ai assez vu. » dite une fois, « Le téléphone… », puis la fiche du téléphone s\'ouvre d\'elle-même en moins de 6 s', async () => {
+    const { h, d } = lastClue()
+    const said = spy(h, d, 'speak')
+    closeIt()
+    let opened = null
+    const subs = new Set()
+    await d.frames(8, 0.05, t => { subs.add($('#enq-sub .tx').textContent); if (opened === null && ficheOn()) opened = t })
+    expect(said.filter(c => c.args[0] === PHONE.fin)).toHaveLength(1)
+    expect([...subs]).toContain(PHONE.fin)                     // tapée en entier dans le sous-titre
+    expect([...subs]).toContain(PHONE.vibre)
+    expect(opened).not.toBeNull()
+    expect(opened).toBeLessThan(6)
+    expect(h.debug.state.mode).toBe('examining')
+    expect(h.debug.state.current).toBe(PHONE.id)
+    expect($('#enq-fiche h3').textContent).toBe('2 APPELS MANQUÉS')
+    expect($('#enq-fiche').textContent).toContain('06 39 98 41 07')
+    expect($('#enq-fiche .enq-act').textContent).toMatch(/MAINTENIR\s*E\s*:\s*ÉCOUTER LE MESSAGE/)
+    expect($('#enq-fiche .enq-act').textContent).not.toContain(PHONE.reposer)
+    h.stop()
+  })
+
+  it('le téléphone vibre deux salves à 0,42 s d\'écart, deux fois en 2,5 s ; son écran s\'allume, puis revient à sa valeur de base', async () => {
+    const { h, d } = lastClue()
+    const buzzed = spy(h, d, 'buzz'), screen = screenOf(h)
+    closeIt()
+    const glow = []
+    await d.frames(9, 0.05, t => glow.push([t, screen.emissiveIntensity]))
+    const at = buzzed.map(c => c.t)
+    expect(at).toHaveLength(4)
+    expect(at[1] - at[0]).toBeCloseTo(BUZZ.salve + 0.42, 1)
+    expect(at[3] - at[2]).toBeCloseTo(BUZZ.salve + 0.42, 1)
+    expect(at[3] + BUZZ.salve - at[0]).toBeCloseTo(ENDING.vibration, 1)
+    // l'espion note l'instant d'avant l'image où la salve part, le relevé de la lueur celui d'après : t > at[0]
+    const during = glow.filter(([t]) => t > at[0] && t < at[3] + BUZZ.salve).map(([, v]) => v)
+    expect(Math.min(...during)).toBeGreaterThan(8)             // allumé toute la vibration
+    expect(Math.max(...during)).toBeGreaterThan(IDLE_PEAK)     // plus vif qu'au repos, à chaque salve
+    const after = glow.filter(([t]) => t > at[3] + BUZZ.salve + 0.7).map(([, v]) => v)
+    expect(after.length).toBeGreaterThan(10)
+    expect(after[0]).toBe(3)                                   // éteint : la valeur de base
+    expect(Math.max(...after)).toBeLessThanOrEqual(IDLE_PEAK)
+    h.stop()
+  })
+
+  it('la photo de la fiche montre le téléphone allumé, vu de l\'entrée ; la caméra revient ensuite au joueur, et la vibration continue fiche ouverte', async () => {
+    const { h, d, renderer, camera } = lastClue()
+    const screen = screenOf(h), center = phoneCenter(h)
+    const shots = []
+    renderer.render.mockImplementation(() => shots.push({ d: camera.position.distanceTo(center), glow: screen.emissiveIntensity }))
+    closeIt()
+    let next = null
+    await d.frames(8, 0.05, () => { if (ficheOn() && next === null) next = 'now'; else if (next === 'now') next = screen.emissiveIntensity })
+    const photo = shots[shots.length - 1]
+    expect(photo.d).toBeLessThan(1.6)                          // pris devant le téléphone, pas depuis le palier (2 m et plus)
+    expect(photo.glow).toBeGreaterThan(8)                      // l'écran allumé sur la photo
+    expect(camera.position.x).toBeCloseTo(6, 3); expect(camera.position.z).toBeCloseTo(7.85, 3)
+    expect(next).toBeGreaterThan(8)                            // l'image d'après l'ouverture : l'écran est encore allumé
+    h.stop()
+  })
+
+  it('le regard pivote en douceur vers le téléphone, puis la fiche s\'ouvre', async () => {
+    const { h, d } = lastClue()
+    const c = h.debug.controller, center = phoneCenter(h)
+    const yaw0 = c.yaw
+    closeIt()
+    const yaws = []
+    await d.frames(7, 0.05, () => yaws.push(c.yaw))
+    expect(ficheOn()).toBe(true)
+    const dx = center.x - c.position.x, dz = center.z - c.position.z
+    expect(c.yaw).toBeCloseTo(Math.atan2(-dx, -dz), 2)
+    expect(c.pitch).toBeCloseTo(Math.atan2(center.y - 1.65, Math.hypot(dx, dz)), 2)
+    expect(Math.abs(c.yaw - yaw0)).toBeGreaterThan(0.3)        // il a vraiment tourné (du palier vers la console)
+    const steps = yaws.slice(1).map((y, i) => Math.abs(y - yaws[i]))
+    expect(Math.max(...steps)).toBeLessThan(0.06)              // aucun saut d'une image à l'autre
+    const moving = steps.filter(s => s > 1e-9)
+    expect(moving.length).toBeGreaterThanOrEqual(20)           // 1,2 s d'images
+    expect(moving.length).toBeLessThanOrEqual(26)
+    expect(moving[0]).toBeLessThan(moving[Math.floor(moving.length / 2)] / 3)   // départ doux, pas un pivot à vitesse constante
+    h.stop()
+  })
+
+  it('effets atténués : pas de pivot, la fiche s\'ouvre quand le téléphone a fini de vibrer', async () => {
+    settings.reducedMotion = 'oui'
+    const { h, d } = lastClue()
+    const c = h.debug.controller, buzzed = spy(h, d, 'buzz')
+    closeIt()
+    const yaw0 = c.yaw, pitch0 = c.pitch
+    let opened = null
+    await d.frames(8, 0.05, t => { if (opened === null && ficheOn()) opened = t })
+    expect(c.yaw).toBe(yaw0); expect(c.pitch).toBe(pitch0)
+    expect(buzzed).toHaveLength(4)
+    expect(opened).not.toBeNull()
+    expect(opened).toBeGreaterThanOrEqual(buzzed[0].t + ENDING.vibration - 0.06)
+    expect(opened).toBeLessThan(6)
+    h.stop()
+  })
+
+  it('pause pendant la séquence : rien n\'avance (réplique, vibration, lueur, regard, fiche), puis tout reprend', async () => {
+    const { h, d } = lastClue()
+    const buzzed = spy(h, d, 'buzz'), said = spy(h, d, 'speak'), c = h.debug.controller, screen = screenOf(h)
+    closeIt()
+    while (buzzed.length < 1 && d.t < 10) await d.frames(0.05)
+    expect(buzzed).toHaveLength(1)
+    lockEl = null; document.dispatchEvent(new Event('pointerlockchange'))
+    expect(h.debug.state.mode).toBe('paused')
+    const n = said.length, yaw = c.yaw, glow = screen.emissiveIntensity
+    await d.frames(10)
+    expect(buzzed).toHaveLength(1); expect(said).toHaveLength(n)
+    expect(c.yaw).toBe(yaw); expect(screen.emissiveIntensity).toBe(glow)
+    expect(ficheOn()).toBe(false)
+    clickOn('#enq-resume')
+    expect(h.debug.controller.frozen).toBe(true)               // la séquence reprend, le joueur reste figé
+    await d.frames(4)
+    expect(buzzed).toHaveLength(4)
+    expect(ficheOn()).toBe(true)
+    h.stop()
+  })
+
+  it('stop() en pleine vibration : nœuds du son débranchés, aucun minuteur restant', async () => {
+    const audio = fakeAudio()
+    const { h, d } = lastClue({ audio })
+    const buzzed = spy(h, d, 'buzz')
+    closeIt()
+    while (buzzed.length < 2 && d.t < 10) await d.frames(0.05)
+    expect(buzzed).toHaveLength(2)
+    const toDest = () => audio.ctx.createGain.mock.results.map(r => r.value).filter(g => g.connect.mock.calls.some(([x]) => x === audio.dest))
+    expect(toDest().filter(g => !g.disconnect.mock.calls.length).length).toBeGreaterThan(2)   // pluie, son du kit, et la salve en cours
+    h.stop()
+    await vi.advanceTimersByTimeAsync(500)
+    for (const g of toDest()) expect(g.disconnect).toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('après les six indices, REPOSER n\'est pas proposé, ni R ni le clic droit ne ferment la fiche ; E tenu d\'avant n\'écoute pas, maintenu 1 s il écoute', async () => {
+    const { h, d, onDone } = lastClue()
+    closeIt()
+    keyE()                                                     // E pressé pendant la séquence, et tenu
+    while (!ficheOn() && d.t < 10) await d.frames(0.05)
+    expect($('#enq-fiche .enq-act').textContent).not.toContain(PHONE.reposer)
+    press('KeyR'); document.dispatchEvent(new MouseEvent('mousedown', { button: 2 }))
+    for (let i = 0; i < 30; i++) { document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', repeat: true })); await d.frames(0.1, 0.1) }
+    expect(ficheOn()).toBe(true)
+    expect(h.debug.state.mode).toBe('examining')
+    expect(onDone).not.toHaveBeenCalled()
+    keyUp('KeyE'); keyE()
+    await d.frames(1.1, 0.1)
+    expect(h.debug.state.mode).toBe('done')
+    await vi.advanceTimersByTimeAsync(800)
+    expect(onDone).toHaveBeenCalledWith({ result: 'listened' })
+  })
+
+  it('écouter : E maintenu 1 s ; relâché à 0,5 s, rien ne part et l\'anneau se vide', async () => {
+    const onDone = vi.fn()
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone, options: { cam: START, indices: 4, ouvrir: 'telephone' } })
+    const ring = $('#enq-fiche .enq-act .enq-ring')
+    expect(ring).not.toBeNull()
+    keyE()
+    for (let i = 0; i < 5; i++) h.update(0.1)
+    expect(+ring.style.getPropertyValue('--p')).toBeCloseTo(0.5, 2)
+    keyUp('KeyE')
+    expect(+ring.style.getPropertyValue('--p')).toBe(0)
+    for (let i = 0; i < 20; i++) h.update(0.1)
+    expect(h.debug.state.mode).toBe('examining')
+    keyE()
+    for (let i = 0; i < 9; i++) h.update(0.1)
+    expect(h.debug.state.mode).toBe('examining')               // 0,9 s : pas encore
+    h.update(0.1)
+    expect(h.debug.state.mode).toBe('done')
+    await vi.advanceTimersByTimeAsync(800)
+    expect(onDone).toHaveBeenCalledWith({ result: 'listened' })
+  })
+
+  it('une pause pendant le maintien l\'annule : il faut maintenir de nouveau 1 s', async () => {
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { indices: 4, ouvrir: 'telephone' } })
+    clickOn('#enq-card')
+    keyE()
+    for (let i = 0; i < 5; i++) h.update(0.1)
+    lockEl = null; document.dispatchEvent(new Event('pointerlockchange'))   // Échap, E relâché pendant la pause
+    for (let i = 0; i < 20; i++) h.update(0.1)
+    clickOn('#enq-resume')
+    for (let i = 0; i < 6; i++) h.update(0.1)
+    expect(h.debug.state.mode).toBe('examining')               // 0,5 + 0,6 s, mais pas d'un seul maintien
+    keyUp('KeyE'); keyE()
+    for (let i = 0; i < 10; i++) h.update(0.1)
+    expect(h.debug.state.mode).toBe('done')                    // témoin : un vrai maintien d'1 s écoute
+    h.stop()
+  })
+
+  it('avant le sixième indice, R repose le téléphone : la fiche se ferme et on reprend l\'exploration', () => {
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { indices: 4, ouvrir: 'telephone' } })
+    clickOn('#enq-card')
+    expect(ficheOn()).toBe(true)
+    expect($('#enq-fiche .enq-act').textContent).toMatch(/R\s*:\s*REPOSER/)
+    press('KeyR')
+    expect(ficheOn()).toBe(false)
+    expect(h.debug.state.mode).toBe('exploring')
+    const p = h.debug.controller.position, z0 = p.z
+    press(FWD()); h.update(0.1)
+    expect(p.z).toBeLessThan(z0)
+    h.stop()
+  })
+
+  it('le clic droit repose aussi le téléphone (avant le sixième indice)', () => {
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { indices: 4, ouvrir: 'telephone' } })
+    clickOn('#enq-card')
+    document.dispatchEvent(new MouseEvent('mousedown', { button: 2 }))
+    expect(ficheOn()).toBe(false)
+    expect(h.debug.state.mode).toBe('exploring')
+    h.stop()
+  })
+
+  it('la touche de REPOSER suit la disposition du clavier (la touche physique R, son libellé lu au clavier)', async () => {
+    Object.defineProperty(navigator, 'keyboard', { configurable: true, value: { getLayoutMap: () => Promise.resolve(new Map([['KeyR', 'p']])) } })
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { indices: 4, ouvrir: 'telephone' } })
+    await Promise.resolve(); await Promise.resolve()
+    clickOn('#enq-card')
+    expect($('#enq-fiche .enq-act').textContent).toMatch(/P\s*:\s*REPOSER/)
+    press('KeyR')
+    expect(ficheOn()).toBe(false)
+    h.stop()
+  })
+
+  it('coup de pouce : quand la piste du téléphone tombe, il vibre une fois et son écran s\'allume brièvement ; avant 4 indices, rien', async () => {
+    const run = async indices => {
+      const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { cam: START, indices } })
+      const d = driver(h), buzzed = spy(h, d, 'buzz'), screen = screenOf(h), glow = []
+      await d.frames(39, 0.1)
+      expect(buzzed).toHaveLength(0)                           // pas avant la piste
+      await d.frames(3, 0.1, () => glow.push(screen.emissiveIntensity))
+      const sub = $('#enq-sub .tx').textContent
+      h.stop()
+      return { buzzed, glow, sub }
+    }
+    const before = await run(3)                                // témoin : téléphone verrouillé, la piste mène à un indice
+    expect(CLUES.some(c => before.sub === c.piste)).toBe(true)
+    expect(before.buzzed).toHaveLength(0)
+    const after = await run(4)
+    expect(after.sub).toBe(PHONE.piste)
+    expect(after.buzzed).toHaveLength(1)
+    const peak = after.glow.findIndex(v => v > IDLE_PEAK)
+    expect(peak).toBeGreaterThanOrEqual(0)
+    expect(after.glow.slice(peak + 10).every(v => v === 3)).toBe(true)   // une seconde après : éteint
   })
 })

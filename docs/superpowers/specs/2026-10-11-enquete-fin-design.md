@@ -79,6 +79,17 @@ Précisions arrêtées à la tâche E1 (`state.js`) :
 - les 6 indices trouvés, la fiche du téléphone ne se ferme plus, même par `close()` : on en sort en écoutant, ou par PASSER L'ENQUÊTE depuis la pause ;
 - route `?indices=6` : la séquence part à la fermeture de la première fiche d'indice relue.
 
+Précisions arrêtées à la tâche E2 (`investigation.js`, `ambience.js`, `apartment.js`, `enquete.css`) :
+- la vibration : une salve dure 0,28 s (`BUZZ.salve`), deux salves à 0,42 s d'écart, deux fois, la dernière finie à 2,5 s : départs à 0 ; 0,7 ; 1,52 et 2,22 s. Les salves partent au temps de jeu (suspendues par la pause comme le reste) ; `buzz()` joue une salve (moteur en dents de scie à 152 Hz et console en carré à 76 Hz, passe-bas à 480 Hz, directement sur la destination du jeu) et débranche ses nœuds à la fin de la salve, ou à `stop()` une fois la salve finie ;
+- la lueur : l'écran reste allumé toute la vibration (`setPhoneLight(0.55)`, intensité 23, au-dessus du clignotement de repos qui monte à 14), plus vif à chaque salve (jusqu'à 40), puis s'éteint en 0,6 s ; il reprend ensuite son clignotement de repos, éteint (pas au milieu d'un clignotement). Seule l'intensité change, jamais la couleur émissive, que gère la surbrillance de la visée ;
+- « 1 NOUVEAU MESSAGE » sur l'écran 3D : la géométrie ne le permet pas (écran de 6,6 × 14,2 cm, une trentaine de pixels de large à 1,5 m, moins encore sur la photo de la fiche) : lueur seule, comme le prévoit le §3.1. `PHONE.notif` reste dans les données pour un plan rapproché futur ;
+- la photo de la fiche ouverte d'elle-même est prise depuis `apartment.phoneView` (debout dans l'entrée, à 1 m de la console) et non depuis le joueur, qui peut être dans la chambre de la petite : sous « LE TÉLÉPHONE », la photo d'un mur n'aurait pas de sens. La caméra est remise en place avant que l'image ne s'affiche. Ouverte par le joueur, la fiche garde la photo de ce qu'il regarde ;
+- le regard pivote vers le centre du volume de visée du téléphone, par le plus court chemin, en interpolation lissée (départ et arrivée doux) ; d'une autre pièce, il se tourne vers le bruit, à travers le mur ;
+- « Le téléphone… » est dit comme une piste (sous-titre et voix intérieure) ;
+- écouter : 1 s de temps de jeu, E ou clic gauche ; seul un appui neuf compte (pas la répétition d'une touche tenue depuis la séquence) ; relâcher, la pause ou la fenêtre quittée annulent et vident l'anneau. L'invite est « MAINTENIR E : ÉCOUTER LE MESSAGE », l'anneau autour du E ; la garde de 600 ms du lot 0 est retirée (l'invite est là dès l'ouverture), le test du double-clic reste vert ;
+- REPOSER : la touche physique R (`e.code === 'KeyR'`), son libellé lu dans la carte du clavier, ou le clic droit ; affiché seulement tant que la fiche peut se fermer, en action secondaire, plus discrète, qui ne bat pas ;
+- le coup de pouce : une salve et sa lueur quand la piste qui tombe est celle du téléphone et qu'il est déverrouillé.
+
 ## 4. Tests
 
 Témoin rouge pour chaque comportement (leçon des tests qui mentent) :

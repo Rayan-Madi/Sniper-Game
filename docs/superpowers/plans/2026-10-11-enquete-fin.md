@@ -21,14 +21,14 @@ Toutes celles des lots 0 et 1 (`docs/superpowers/plans/2026-10-07-lot0-correctio
 ### Tâche E2 : la séquence, le maintien, REPOSER, le coup de pouce
 
 **Fichiers :** `src/prologue/investigation.js`, `src/prologue/ambience.js`, `src/prologue/apartment.js`, `src/prologue/enquete.css`, tests `tests/prologue/investigation.test.js`, `tests/prologue/ambience.test.js`.
-- [ ] Séquence de fin (§3.1) : réplique, vibration (`buzz()`) et lueur de l'écran, pivot lissé du regard (sauf effets atténués), fiche du téléphone ouverte d'elle-même ; contrôleur figé pendant la séquence ; tout libéré à `stop()`.
-- [ ] Points laissés par la relecture de E1 (avec E1 seul, une fois la séquence finie, l'état est sur le téléphone sans fiche à l'écran et E ou un clic lance `finish('listened')` : rien ne part dans `main` avant E2) : `closeFiche()` ne dégèle plus le contrôleur quand l'état passe en `ending` ; la séquence est pilotée par `state.ending.steps` (chaque étape entrée déclenchée une fois) ; quand la fiche du téléphone s'ouvre d'elle-même, `phoneOpenedAt` et la garde repartent de zéro, ou le maintien les remplace ; la vibration n'est pas coupée par l'ouverture de la fiche (§3.6).
-- [ ] Maintien 1 s pour écouter (E ou clic gauche), anneau qui se remplit, relâcher annule (§3.2) ; garde de 600 ms retirée si redondante (tests du double-clic toujours verts).
-- [ ] REPOSER (`KeyR` ou clic droit) avant les 6 indices (§3.3), libellé selon la disposition du clavier.
-- [ ] Coup de pouce (§3.4).
-- [ ] Vérification réelle : Chrome sans interface sur `?enquete=1&indices=5`, dernier indice examiné puis fiche fermée, captures de la séquence (réplique, lueur, fiche ouverte) regardées.
-- [ ] `docs/superpowers/REPRISE.md` : la question ouverte du téléphone est réglée (REPOSER), la fin de l'enquête décrite en une ligne dans « Où on en est », nombre de tests attendu.
-- [ ] Commit : `feat(enquete): après le sixième indice, le téléphone vibre et la fiche s'ouvre, écouter se fait en maintenant, le téléphone se repose`
+- [x] Séquence de fin (§3.1) : réplique, vibration (`buzz()`) et lueur de l'écran, pivot lissé du regard (sauf effets atténués), fiche du téléphone ouverte d'elle-même ; contrôleur figé pendant la séquence ; tout libéré à `stop()`.
+- [x] Points laissés par la relecture de E1 (avec E1 seul, une fois la séquence finie, l'état est sur le téléphone sans fiche à l'écran et E ou un clic lance `finish('listened')` : rien ne part dans `main` avant E2) : `closeFiche()` ne dégèle plus le contrôleur quand l'état passe en `ending` ; la séquence est pilotée par `state.ending.steps` (chaque étape entrée déclenchée une fois) ; quand la fiche du téléphone s'ouvre d'elle-même, `phoneOpenedAt` et la garde repartent de zéro, ou le maintien les remplace ; la vibration n'est pas coupée par l'ouverture de la fiche (§3.6).
+- [x] Maintien 1 s pour écouter (E ou clic gauche), anneau qui se remplit, relâcher annule (§3.2) ; garde de 600 ms retirée si redondante (tests du double-clic toujours verts).
+- [x] REPOSER (`KeyR` ou clic droit) avant les 6 indices (§3.3), libellé selon la disposition du clavier.
+- [x] Coup de pouce (§3.4).
+- [x] Vérification réelle : Chrome sans interface sur `?enquete=1&indices=5`, dernier indice examiné puis fiche fermée, captures de la séquence (réplique, lueur, fiche ouverte) regardées. Chrome sans interface refuse le verrouillage du pointeur : il est simulé dans la page pour le parcours au regard libre (pivot vu, puis fiche ouverte, maintien, cinématique B) ; caméra figée devant la console pour la lueur ; effets atténués : pas de pivot ; REPOSER à 4 indices.
+- [x] `docs/superpowers/REPRISE.md` : la question ouverte du téléphone est réglée (REPOSER), la fin de l'enquête décrite en une ligne dans « Où on en est », nombre de tests attendu.
+- [x] Commit : `feat(enquete): après le sixième indice, le téléphone vibre et la fiche s'ouvre, écouter se fait en maintenant, le téléphone se repose`
 
 ## Critères de fin
 

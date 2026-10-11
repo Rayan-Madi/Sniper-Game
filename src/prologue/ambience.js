@@ -3,8 +3,15 @@
 import { createSound } from '../briefing/sound.js'
 import { estimate } from '../briefing/kit.js'
 
+// Vibration du téléphone posé sur la console (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md §3.1) : une
+// salve dure `salve` secondes ; à la fin, deux salves séparées de `gap`, deux fois (l'enquête les déclenche une à une,
+// au temps de jeu).
+export const BUZZ = { salve: 0.28, gap: 0.42 }
+const unplug = nodes => nodes.forEach(n => { try { n.disconnect() } catch (e) { /* déjà débranché */ } })
+
 export function createAmbience(audio) {
   const timers = new Set(), intervals = new Set()
+  const buzzing = new Set()   // nœuds des salves en cours : débranchés à la fin de leur salve, ou à l'arrêt
   let dead = false, started = false, proximity = 0, voiceEnd = 0
   const at = (ms, fn) => { const h = setTimeout(() => { timers.delete(h); if (!dead) fn() }, ms); timers.add(h); return h }
   const every = (ms, fn) => { const h = setInterval(() => { if (!dead) fn() }, ms); intervals.add(h); return h }
@@ -55,10 +62,33 @@ export function createAmbience(audio) {
       if (voiceEnd) { clearTimeout(voiceEnd); timers.delete(voiceEnd); voiceEnd = 0 }
       if (!dead) S.stopVoice()
     },
+    // une salve de vibration : le moteur (bourdonnement grave, ~150 Hz) et la console de bois qui résonne dessous,
+    // filtrés sourds ; ses nœuds sont débranchés dès la salve finie
+    buzz() {
+      if (!live()) return
+      const t = c.currentTime, d = BUZZ.salve
+      const motor = c.createOscillator(); motor.type = 'sawtooth'; motor.frequency.setValueAtTime(152, t)
+      const wood = c.createOscillator(); wood.type = 'square'; wood.frequency.setValueAtTime(76, t)
+      const low = c.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 480; low.Q.value = 3
+      const g = c.createGain()
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.2, t + 0.025)
+      g.gain.setValueAtTime(0.2, t + d - 0.04); g.gain.linearRampToValueAtTime(0.0001, t + d)
+      motor.connect(low); wood.connect(low); low.connect(g); g.connect(audio.dest)
+      motor.start(t); wood.start(t); motor.stop(t + d + 0.02); wood.stop(t + d + 0.02)
+      const nodes = [motor, wood, low, g]
+      buzzing.add(nodes)
+      at(d * 1000 + 40, () => { buzzing.delete(nodes); unplug(nodes) })
+    },
     stop() {
       if (dead) return
       S.destroy(); dead = true
       timers.forEach(clearTimeout); timers.clear(); intervals.forEach(clearInterval); intervals.clear()
+      // une salve en cours finit sur son enveloppe (0,28 s au plus, pas de coupure sèche), puis elle est débranchée : son
+      // minuteur de fin vient d'être annulé, un minuteur natif prend le relais (comme pour la pluie)
+      if (buzzing.size) {
+        const left = [...buzzing]; buzzing.clear()
+        setTimeout(() => left.forEach(unplug), BUZZ.salve * 1000 + 40)
+      }
       if (rain) {
         const { src, g } = rain; rain = null
         // la montée de 2 s peut être encore programmée : l'annuler d'abord, sinon elle reprend le dessus sur le fondu, mais en

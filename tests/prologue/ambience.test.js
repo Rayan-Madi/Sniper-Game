@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createAmbience } from '../../src/prologue/ambience.js'
+import { createAmbience, BUZZ } from '../../src/prologue/ambience.js'
 import { estimate } from '../../src/briefing/kit.js'
 
 const FAKE = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] }
@@ -133,6 +133,53 @@ describe('le son de l\'enquête', () => {
     expect(hush).toHaveBeenCalledTimes(2)
     expect(vi.getTimerCount()).toBe(2)
     a.stop()
+  })
+
+  // la vibration du téléphone (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md §3.1 et §3.6)
+  const created = (audio, kind, from = 0) => audio.ctx[kind].mock.results.slice(from).map(r => r.value)
+  const counts = audio => ['createOscillator', 'createGain', 'createBiquadFilter', 'createBufferSource'].map(k => audio.ctx[k].mock.results.length)
+  const since = (audio, before) => ['createOscillator', 'createGain', 'createBiquadFilter', 'createBufferSource'].flatMap((k, i) => created(audio, k, before[i]))
+
+  it('buzz() : une salve de bourdonnement jusqu\'à la destination du jeu, ses nœuds débranchés dès la salve finie', async () => {
+    const audio = fakeAudio(); const a = createAmbience(audio)
+    const before = counts(audio)
+    a.buzz()
+    const nodes = since(audio, before)
+    const sources = created(audio, 'createOscillator', before[0])
+    expect(sources.length).toBeGreaterThan(0)
+    for (const s of sources) { expect(s.start).toHaveBeenCalled(); expect(reaches(s, audio.dest)).toBe(true) }
+    expect(nodes.some(n => n.disconnect.mock.calls.length)).toBe(false)     // la salve joue
+    await vi.advanceTimersByTimeAsync(BUZZ.salve * 1000 - 20)
+    expect(nodes.some(n => n.disconnect.mock.calls.length)).toBe(false)     // elle joue encore
+    await vi.advanceTimersByTimeAsync(100)
+    for (const n of nodes) expect(n.disconnect).toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+    a.stop()
+  })
+
+  it('buzz() sans contexte, ou après l\'arrêt : muet, sans minuteur', async () => {
+    const a = createAmbience(null)
+    a.buzz()
+    expect(vi.getTimerCount()).toBe(0)
+    const audio = fakeAudio(); const b = createAmbience(audio)
+    b.stop(); await vi.advanceTimersByTimeAsync(400)
+    const before = counts(audio)
+    b.buzz()
+    expect(since(audio, before)).toHaveLength(0)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('stop() pendant une salve : la vibration est débranchée elle aussi, aucun minuteur restant', async () => {
+    const audio = fakeAudio(); const a = createAmbience(audio)
+    const before = counts(audio)
+    a.buzz()
+    const nodes = since(audio, before)
+    const gains = nodes.filter(n => n.connect.mock.calls.some(([d]) => d === audio.dest))
+    expect(gains.length).toBeGreaterThan(0)
+    a.stop()
+    await vi.advanceTimersByTimeAsync(400)
+    for (const g of gains) expect(g.disconnect).toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('stop() coupe tout : nœuds débranchés après le fondu, aucun minuteur restant, idempotent', async () => {
