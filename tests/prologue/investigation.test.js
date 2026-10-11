@@ -863,3 +863,46 @@ describe('l\'enquête : la fin, écouter, reposer, le coup de pouce', () => {
     expect(after.glow.slice(peak + 10).every(v => v === 3)).toBe(true)   // une seconde après : éteint
   })
 })
+
+// ── relecture de E2 : les touches affichées suivent la disposition du clavier ──
+describe('l\'enquête : relecture de E2', () => {
+  afterEach(() => { settings.reducedMotion = 'auto'; delete navigator.keyboard })
+  // Dvorak : la touche physique E écrit « . », la touche R écrit « p »
+  const dvorak = () => Object.defineProperty(navigator, 'keyboard', { configurable: true,
+    value: { getLayoutMap: () => Promise.resolve(new Map([['KeyE', '.'], ['KeyR', 'p']])) } })
+  const layoutRead = async () => { await Promise.resolve(); await Promise.resolve() }
+
+  it('la touche E affichée suit la disposition du clavier : carte, invite de visée, FERMER, MAINTENIR', async () => {
+    dvorak()
+    const renderer = fakeRenderer(), camera = new THREE.PerspectiveCamera()
+    const probe = startInvestigation({ renderer, camera, onDone: vi.fn() })
+    const cam = lookAt(probe.debug.apartment, 'mot'); probe.stop()
+    let h = startInvestigation({ renderer, camera, onDone: vi.fn(), options: { cam } })
+    await layoutRead()
+    expect($('.enq-card .k').textContent).toMatch(/\.\s*EXAMINER/)
+    h.update(0.016)
+    expect($('#enq-prompt').textContent).toMatch(/^\s*\.\s*:\s*EXAMINER/)
+    keyE()
+    expect($('#enq-fiche .enq-act').textContent).toMatch(/^\s*\.\s*:\s*FERMER/)
+    h.stop()
+    h = startInvestigation({ renderer, camera, onDone: vi.fn(), options: { indices: 4, ouvrir: 'telephone' } })
+    await layoutRead()
+    clickOn('#enq-card')                                        // la fiche s'ouvre une fois la disposition connue
+    expect($('#enq-fiche .enq-act').textContent).toMatch(/MAINTENIR\s*\.\s*:\s*ÉCOUTER LE MESSAGE/)
+    expect($('#enq-fiche .enq-act .enq-key .enq-ring')).not.toBeNull()   // l'anneau reste autour de la touche
+    h.stop()
+  })
+
+  it('la disposition lue après l\'ouverture de la fiche du téléphone met ses touches à jour (E et R), sans attendre une autre ouverture', async () => {
+    dvorak()
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { cam: START, indices: 4, ouvrir: 'telephone' } })
+    const act = $('#enq-fiche .enq-act')
+    expect(act.textContent).toMatch(/MAINTENIR\s*E\s*:/)          // pas encore lue : libellés dérivés des codes
+    expect(act.textContent).toMatch(/R\s*:\s*REPOSER/)
+    await layoutRead()
+    expect(act.textContent).toMatch(/MAINTENIR\s*\.\s*:\s*ÉCOUTER LE MESSAGE/)
+    expect(act.textContent).toMatch(/P\s*:\s*REPOSER/)
+    expect($('#enq-fiche .enq-act .enq-key .enq-ring')).not.toBeNull()
+    h.stop()
+  })
+})

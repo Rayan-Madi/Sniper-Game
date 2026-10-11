@@ -104,7 +104,7 @@ const HTML = `
   <div class="enq-count" id="enq-count">INDICES <b>0</b> / 6</div>
   <div class="enq-time" id="enq-time"><i>●</i> 14/03 · 21:47</div>
   <div class="enq-cross"></div>
-  <div class="enq-prompt" id="enq-prompt"><b>E</b> : EXAMINER</div>
+  <div class="enq-prompt" id="enq-prompt"><b data-key="KeyE">E</b> : EXAMINER</div>
   <div class="enq-sub" id="enq-sub"><span class="spk">VIKTOR</span><span class="tx"></span></div>
   <div class="enq-fiche" id="enq-fiche">
     <div class="enq-tab"></div>
@@ -287,11 +287,14 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
 
   // libellé d'une touche physique selon la disposition du clavier (KeyR → P en Dvorak), sinon dérivé du code
   const keyName = code => { const k = layout && layout.get(code); return k ? String(k).toUpperCase() : keyLabel(code) }
+  // une touche affichée par l'interface : son libellé, remis à jour par relabel() quand la carte du clavier arrive
+  const keyB = code => `<b data-key="${code}">${esc(keyName(code))}</b>`
+  function relabel() { if (ui) ui.querySelectorAll('[data-key]').forEach(el => { el.textContent = keyName(el.dataset.key) }) }
   // la fiche du téléphone : écouter (maintenir E), et REPOSER tant que les 6 indices ne sont pas trouvés
   function showPhone(view = null) {
     const p = PHONE, n = p.appels.length
-    let act = `<span class="enq-do">MAINTENIR <span class="enq-key"><b>E</b><i class="enq-ring"></i></span> : ${esc(p.action)}</span>`
-    if (state.phoneCanPutDown) act += `<span class="enq-alt"><b>${esc(keyName('KeyR'))}</b> : ${esc(p.reposer)}</span>`
+    let act = `<span class="enq-do">MAINTENIR <span class="enq-key">${keyB('KeyE')}<i class="enq-ring"></i></span> : ${esc(p.action)}</span>`
+    if (state.phoneCanPutDown) act += `<span class="enq-alt">${keyB('KeyR')} : ${esc(p.reposer)}</span>`
     openFiche({ id: p.id, tab: p.titre, lieu: p.lieu, titre: `${n} APPEL${n > 1 ? 'S' : ''} MANQUÉ${n > 1 ? 'S' : ''}`, calls: p.appels, lines: p.viktor, act, go: true, view })
   }
 
@@ -301,7 +304,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     if (r.type === 'phone-locked') { say(r.line); return }
     if (r.type === 'phone') { showPhone(); return }
     const c = r.clue
-    openFiche({ id, tab: `INDICE ${pad(c.n)} / ${pad(r.total)}`, mark: String(c.n), lieu: c.lieu, titre: c.titre, quote: c.citation || null, lines: [c.viktor], act: '<span><b>E</b> : FERMER</span>' })
+    openFiche({ id, tab: `INDICE ${pad(c.n)} / ${pad(r.total)}`, mark: String(c.n), lieu: c.lieu, titre: c.titre, quote: c.citation || null, lines: [c.viktor], act: `<span>${keyB('KeyE')} : FERMER</span>` })
     if (c.acouphene) amb.tinnitus()
     setCount(r.count, r.first)
   }
@@ -569,13 +572,13 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
       const el = $('.enq-card .k'); if (!el) return
       const kb = s => `<kbd>${esc(s)}</kbd>`
       el.innerHTML = `<span>${labels.map(kb).join('')} SE DÉPLACER</span><i></i><span>SOURIS : REGARDER</span><i></i>` +
-        `<span>${kb('E')} EXAMINER</span><i></i><span>${kb('ÉCHAP')} PAUSE</span>`
+        `<span>${kb(keyName('KeyE'))} EXAMINER</span><i></i><span>${kb('ÉCHAP')} PAUSE</span>`
     }
     render(codes.map(keyLabel))
     try {
       const kbd = navigator.keyboard
       if (kbd && typeof kbd.getLayoutMap === 'function') {
-        kbd.getLayoutMap().then(map => { if (stopped) return; layout = map; render(codes.map(keyName)) }, () => {})
+        kbd.getLayoutMap().then(map => { if (stopped) return; layout = map; render(codes.map(keyName)); relabel() }, () => {})
       }
     } catch (e) { /* libellés dérivés des codes */ }
   }
