@@ -15,7 +15,7 @@ export const state = {
   currentLevel: 1,
   freedVictims: false,              // choix moral du port (mission 3) : victimes libérées ?
   briefingSeen: NO_BRIEFING_SEEN(), // briefing de chaque mission déjà vu → pas rejoué au réessai
-  prologueSeen: false,              // prologue (l'offre, le rappel, le tableau) déjà vu dans cette campagne
+  prologueSeen: false,              // prologue (l'offre, l'appel d'Anton, le tableau) déjà vu dans cette campagne
   campaignDone: false,              // M6 réussie, épilogue pas encore vu jusqu'au bout : le menu propose la fin
 }
 

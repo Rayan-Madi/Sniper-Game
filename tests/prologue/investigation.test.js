@@ -310,6 +310,16 @@ describe('l\'enquête — finitions', () => {
     h.stop()
   })
 
+  // prologue v2 (spec 2026-10-11-prologue-v2 §3) : le message laissé est celui de sa femme (MAISON, 19:04) ;
+  // l'appel du numéro jetable, à 18:52, n'en a pas
+  it('fiche du téléphone : le message est sur l\'appel de la maison, pas sur celui de 18:52', () => {
+    const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { cam: START, indices: 4, ouvrir: 'telephone' } })
+    const lignes = [...document.querySelectorAll('#enq-fiche .enq-calls > div')]
+      .map(d => `${d.querySelector('b').textContent} | ${d.querySelector('small').textContent}`)
+    expect(lignes).toEqual(['06 39 98 41 07 · 18:52 | MANQUÉ', 'MAISON · 19:04 | MANQUÉ · 1 MESSAGE'])
+    h.stop()
+  })
+
   it('la fiche du téléphone compte les appels manqués des données (option ouvrir)', () => {
     const open = () => startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { cam: START, indices: 4, ouvrir: 'telephone' } })
     let h = open()

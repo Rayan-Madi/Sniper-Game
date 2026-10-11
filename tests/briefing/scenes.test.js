@@ -64,6 +64,124 @@ describe.each(['libres', 'enfermes'])('épilogue, variante %s', port => {
   })
 })
 
+// Prologue B, version 2 (spec 2026-10-11-prologue-v2 §1 et §2) : le message est celui de sa femme ; Anton appelle
+// (appel entrant, depuis le numéro de 18:52), dit qu'il peut aider sans en dire plus et raccroche ; puis il envoie le
+// dossier, dont les fiches remplissent le mur, et deux messages tapés ; le contact s'enregistre « ANTON ».
+describe('prologue B : le message de sa femme, l\'appel d\'Anton, le dossier', () => {
+  // Une lecture complète, relevée toutes les 100 ms.
+  async function lecture() {
+    const handle = await playCinematic('prologue-b', {})
+    const root = document.getElementById('briefing-root')
+    const $ = sel => root.querySelector(sel)
+    // au début de chaque réplique : le texte du téléphone et les fiches épinglées / toutes les fiches
+    const obs = { repliques: [], auDebut: [], appel: [], ecranQuiSonne: null, vm: null, journaux: [], dossier: null, ph1Fin: null }
+    let tx = null
+    const appelDe = ph => ['end', 'ans', 'ring', 'dial', 'vm'].find(c => ph.classList.contains(c)) || null
+    const journal = () => [...root.querySelectorAll('.p-log .lr')].map(r =>
+      `${r.querySelector('b').textContent} · ${r.querySelector('small').textContent.replace('●', '').trim()}${r.querySelector('.vmi') ? ' · [message]' : ''}`)
+    for (let t = 0; t < 120000; t += 100) {
+      await vi.advanceTimersByTimeAsync(100)
+      const ph = $('#ph1')
+      if (!ph) break   // scène terminée et démontée
+      // répliques (sous-titres) : une nouvelle ligne = un nouvel élément .tx ; on garde son texte complet
+      const spk = $('#sub .spk'), t2 = $('#sub .tx')
+      if (t2 && t2 !== tx && t2.textContent) {
+        tx = t2; obs.repliques.push([spk.textContent, ''])
+        obs.auDebut.push({ ph1: ph.textContent, fiches: `${root.querySelectorAll('.fc.set').length} / ${root.querySelectorAll('.fc').length}` })
+      }
+      if (t2 && t2 === tx) obs.repliques.at(-1)[1] = t2.textContent
+      // états de l'écran d'appel, dans l'ordre
+      const etat = appelDe(ph)
+      if (etat && etat !== obs.appel.at(-1)) obs.appel.push(etat)
+      if (etat === 'ring' && !obs.ecranQuiSonne) obs.ecranQuiSonne = `${$('#ph1n').textContent} | ${$('#ph1i').textContent} | ${$('#ph1 .p-st').textContent.includes('APPEL ENTRANT')}`
+      if (etat === 'vm' && !obs.vm) obs.vm = `${$('.p-vm b').textContent} | ${$('.p-vm small').textContent}`
+      if (ph.classList.contains('log')) { const j = journal(); if (j.join() !== obs.journaux.at(-1)?.join()) obs.journaux.push(j) }
+      if (obs.dossier === null && ph.classList.contains('sms') && /DOSSIER/.test($('.p-sms').textContent)) obs.dossier = root.querySelectorAll('.fc.on').length
+      obs.ph1Fin = ph.textContent
+    }
+    expect(handle.kit.errors).toEqual([])
+    return obs
+  }
+
+  it('les répliques racontent la nouvelle histoire, dans l\'ordre, et rien d\'autre', async () => {
+    const { repliques } = await lecture()
+    const VM = 'MESSAGERIE · MAISON · 19:04', SMS = 'MESSAGE · 06 39 98 41 07'
+    expect(repliques).toEqual([
+      [VM, 'Viktor, c\'est moi… Il y a des gens à la porte.'],
+      [VM, 'Ils frappent. Ils ne s\'en vont pas.'],
+      [VM, 'Rappelle-moi. Vite.'],
+      ['INCONNU', 'Viktor. Je sais ce qu\'ils ont fait ce soir.'],
+      ['INCONNU', 'Je peux t\'aider.'],
+      ['INCONNU', 'Ils ont dépassé les bornes.'],
+      ['VIKTOR', 'Qui êtes-vous ?'],
+      ['INCONNU', 'Demain, tu sauras qui.'],
+      [SMS, 'Je te donne les noms. Toi, tu as le fusil.'],
+      [SMS, 'Appelle-moi Anton.'],
+      ['VIKTOR', 'Ils voulaient mon silence. Ils auront ma vengeance.'],
+    ])
+  })
+
+  it('le téléphone : la messagerie de la maison, puis un appel ENTRANT du numéro de 18:52, décroché, raccroché ; jamais de rappel', async () => {
+    const { appel, vm, ecranQuiSonne } = await lecture()
+    expect(vm).toBe('MAISON | AUJ. 19:04 · 0:09')
+    expect(appel).toEqual(['vm', 'ring', 'ans', 'end'])
+    expect(ecranQuiSonne).toBe(NUMERO_JETABLE + ' | NUMÉRO INCONNU | true')
+  })
+
+  it('le journal des appels : l\'appel entrant de 22:41 en tête, le message sur la maison seule ; « ANTON » une fois le contact enregistré', async () => {
+    const { journaux } = await lecture()
+    expect(journaux[0]).toEqual([
+      NUMERO_JETABLE + ' · AUJ. 22:41 · ENTRANT',
+      'MAISON · AUJ. 19:04 · MANQUÉ · [message]',
+      NUMERO_JETABLE + ' · AUJ. 18:52 · MANQUÉ',
+      'NUMÉRO MASQUÉ · 21 FÉVR. · 23:12 · 0:10',
+    ])
+    expect(journaux.at(-1)).toEqual([
+      '« ANTON » · AUJ. 22:41 · ENTRANT',
+      'MAISON · AUJ. 19:04 · MANQUÉ · [message]',
+      '« ANTON » · AUJ. 18:52 · MANQUÉ',
+      'NUMÉRO MASQUÉ · 21 FÉVR. · 23:12 · 0:10',
+    ])
+  })
+
+  it('le dossier arrive par message avant la première fiche ; toutes les fiches sont au mur avant « Je te donne les noms » ; le contact devient « ANTON »', async () => {
+    const { repliques, auDebut, dossier, ph1Fin } = await lecture()
+    const noms = repliques.findIndex(([, l]) => l === 'Je te donne les noms. Toi, tu as le fusil.')
+    const anton = repliques.findIndex(([, l]) => l === 'Appelle-moi Anton.')
+    expect(noms).toBeGreaterThan(-1); expect(anton).toBeGreaterThan(noms)
+    expect(dossier).toBe(0)
+    expect(auDebut[noms].fiches).toBe('8 / 8')
+    expect(auDebut[anton].ph1).not.toContain('ANTON')
+    expect(ph1Fin).toContain('« ANTON »')
+  })
+})
+
+// Effets atténués (spec du lot 1 §4.5 : aucune secousse) : l'appel entrant de la prologue B fait vibrer le téléphone.
+describe('prologue B, effets atténués', () => {
+  // animation du téléphone et de ses traits de vibration pendant l'appel entrant
+  const pendantLAppel = async reducedMotion => {
+    const handle = await playCinematic('prologue-b', { reducedMotion })
+    const root = document.getElementById('briefing-root')
+    let vu = null
+    for (let t = 0; t < 30000 && !vu; t += 100) {
+      await vi.advanceTimersByTimeAsync(100)
+      const ph = root.querySelector('#ph1')
+      if (ph.classList.contains('ring')) vu = [getComputedStyle(ph).animation, getComputedStyle(root.querySelector('.vib')).animation]
+    }
+    handle.cancel()
+    return vu
+  }
+
+  it('le téléphone qui sonne ne tremble pas et ses traits ne clignotent pas (sans l\'option, si : garde-fou)', async () => {
+    const [telephone, traits] = await pendantLAppel(false)
+    expect(telephone).toMatch(/pro-vib/)
+    expect(traits).toMatch(/k-blink/)
+    const [attenue, traitsAttenues] = await pendantLAppel(true)
+    expect(attenue).not.toMatch(/pro-vib/)
+    expect(traitsAttenues).not.toMatch(/k-blink/)
+  })
+})
+
 describe('M5 : le compteur « vendus au réseau » suit les silhouettes allumées', () => {
   const allumees = root => root.querySelectorAll('#men .sold').length
 
