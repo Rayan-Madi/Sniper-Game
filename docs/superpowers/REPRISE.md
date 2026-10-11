@@ -1,7 +1,7 @@
 # Prompt de reprise : Sniper-Game
 
 > À coller tel quel au début d'une nouvelle conversation Claude Code ouverte dans le dossier du jeu.
-> Mis à jour le 9 octobre 2026, à la fin du lot 1 (socle technique, branche `lot1-socle`), après le lot 0 (corrections de l'audit de reprise) et la réécriture de l'historique du 7 octobre.
+> Mis à jour le 9 octobre 2026, à la fin du lot 1 (socle technique, branche `lot1-socle`), après le lot 0 (corrections de l'audit de reprise) et la réécriture de l'historique du 7 octobre ; puis le 11 octobre 2026 : la fin de l'enquête (branche `enquete-fin`).
 >
 > **Sur un autre PC** : ce fichier est sur GitHub. Ouvrir Claude Code dans un dossier vide et commencer par :
 > « Clone https://github.com/Rayan-Madi/Sniper-Game, fais `npm install`, puis lis docs/superpowers/REPRISE.md et reprends à partir de là. »
@@ -22,7 +22,7 @@ Ce que j'attends : le résultat le plus « stylé » possible (qualité visuelle
 
 ## Où on en est
 
-Fait, relu et testé (**728 tests verts** avec le lot 1 ; 326 à la fin du lot 0) ; les points 1 à 4 sont fusionnés dans `main`, le lot 1 (point 5) l'est après la relecture finale de sa branche `lot1-socle` :
+Fait, relu et testé (**774 tests verts** avec la fin de l'enquête ; 728 à la fin du lot 1, 326 à la fin du lot 0) ; les points 1 à 5 sont fusionnés dans `main`, la fin de l'enquête (point 6) l'est après la relecture finale de sa branche `enquete-fin` :
 1. **Briefings M1-M6 et épilogue** en motion design « dossier du fixeur » (Plan 1) : kit `src/briefing/kit.js`, `playCinematic` dans `src/briefing/index.js`, scènes générées depuis les maquettes par `scripts/port-maquette.mjs` (ne jamais éditer `src/briefing/scenes/*.js` à la main).
 2. **Prologue** en deux cinématiques (Plan 2) : `prologue-a` et `prologue-b`, une fois par campagne (`upgradeState.prologueSeen`).
 3. **Enquête jouable** entre A et B (Plan 3) : `src/prologue/`. Budget gardé par un test (au plus 47 maillages et 16 600 triangles par `stats()` ; mesuré en jeu : 44 appels, 16 446 triangles).
@@ -35,7 +35,7 @@ Fait, relu et testé (**728 tests verts** avec le lot 1 ; 326 à la fin du lot 0
    - PvP : la touche D va à droite (`src/pvpMath.js`), modèles chargés dans un ordre stable, perte du relais et départ de l'adversaire annoncés ;
    - Electron : modèles en chemin relatif (`import.meta.env.BASE_URL`), `npm run electron:dev` marche sous Windows, `Soldier.glb` et `model_check.html` retirés ;
    - cinématiques : compteurs justes en mode gel, compteur de M5 au rythme des silhouettes, numéro jetable d'Anton dans l'épilogue, `reset()` du kit propre, musique coupée bien débranchée ;
-   - enquête : plus d'écoute du message au double-clic sur le téléphone (garde de 600 ms), ancre du téléphone vraiment atteignable ;
+   - enquête : plus d'écoute du message au double-clic sur le téléphone (garde de 600 ms, remplacée depuis par le maintien d'1 s du point 6), ancre du téléphone vraiment atteignable ;
    - textes visibles du jeu sans tiret cadratin (test garde-fou `tests/texts.test.js`), journal du port selon le choix ;
    - outils : cache Vite à part pour le serveur des maquettes (sans lui, lancer les deux serveurs cassait le jeu en 504) ; `scripts/verif-mission.mjs` rejoue des parcours de campagne dans Chrome sans interface.
 5. **Lot 1 : socle technique** (spec `docs/superpowers/specs/2026-10-07-lot1-socle-technique-design.md`, dont le §8 consigne les décisions du 9 octobre 2026 ; plan `docs/superpowers/plans/2026-10-07-lot1-socle-technique.md` ; mesures et captures dans `docs/superpowers/specs/annexes/README.md`) :
@@ -46,6 +46,7 @@ Fait, relu et testé (**728 tests verts** avec le lot 1 ; 326 à la fin du lot 0
    - confort : Effets atténués (Auto suit `prefers-reduced-motion`, Oui, Non) : flash du tir à 0,06, aucune secousse, glitchs des cinématiques au tiers, carton SIGNAL PERDU figé ; bouton Plein écran ;
    - précompilation : la mission se monte et ses shaders se compilent sur l'écran noir d'ouverture de son briefing ;
    - chiffres, avant le lot contre après, en Moyen (README des annexes, « Après le lot 1 ») : après toute une partie, retour au menu à 3 288 géométries et 3 553 textures avant, 447 et 32 après (dont les 38 et 29 des sept modèles, gardées pour la session) ; chaque relance de M6 ajoutait 89 géométries et 155 textures, chaque arène PvP 84 et 329 : plus rien ; triangles de M6 à la vue de départ, 2,65 M avant, 1,42 M en Moyen, 1,33 M en Bas ; arène PvP, 5,5 M avant, 2,75 M ; première image de M1 à froid (RTX 3080), 1,18 s avant, 0,41 s après ; arrêt entre la cinématique et M6, d'environ 2,8 s à 0,5 à 0,7 s. Les cinq seuils du §6 de la spec sont tenus en Moyen et en Bas (`node scripts/memtest.mjs --check`).
+6. **Enquête : une fin qui vient d'elle-même** (spec `docs/superpowers/specs/2026-10-11-enquete-fin-design.md`, plan `docs/superpowers/plans/2026-10-11-enquete-fin.md`) : la fiche du 6e indice refermée, Viktor dit « J'en ai assez vu. », le téléphone vibre sur la console et son écran s'allume, le regard s'y pose s'il est en vue, à 100° au plus (pas en effets atténués) et sa fiche s'ouvre d'elle-même ; écouter se fait en maintenant E ou le clic gauche 1 s (anneau qui se remplit) ; avant le 6e indice, R ou le clic droit REPOSE le téléphone ; quand la piste du téléphone tombe, il vibre une fois (coup de pouce) ; cette piste ne tombe qu'une fois, et plus du tout une fois le téléphone examiné, même reposé.
 
 À lire pour le contexte : les specs `docs/superpowers/specs/` (cinématiques, enquête, lot 1) et les plans `docs/superpowers/plans/`.
 
@@ -60,8 +61,7 @@ Fait, relu et testé (**728 tests verts** avec le lot 1 ; 326 à la fin du lot 0
 - **Voix** : **on garde les bips**, pas de voix (ni synthèse ni service en ligne).
 - **Historique Git** : réécrit le 7 octobre 2026 (trailers `Co-Authored-By` retirés, auteurs unifiés sous Rayan Madi).
 
-Questions encore ouvertes :
-- dans l'enquête, une fois la fiche du téléphone ouverte, la seule sortie est ÉCOUTER : ajouter un REPOSER pour chercher les indices manquants ?
+Questions encore ouvertes (celle du téléphone de l'enquête, qu'on ne pouvait pas reposer, est réglée le 11 octobre 2026 : REPOSER, point 6 ; celle du regard qui pivotait vers un mur aussi : il ne pivote que vers un téléphone en vue) :
 - PvP hors réseau local : par défaut, réseau local avec un champ « adresse du relais » (pas d'hébergement payant).
 
 ## Suite prévue (dans cet ordre)
@@ -77,7 +77,7 @@ Questions encore ouvertes :
 - **Sauvegardes d'avant le lot 0** : une sauvegarde faite après une réussite puis un retour au menu pointe encore sur la mission réussie ; elle la propose une fois (et la recrédite), puis tout se normalise. Pour M6 réussie sans épilogue vu, le menu affiche REPRENDRE : MISSION 6 au lieu de VOIR LA FIN.
 - **Échec** : si une cible fuit pendant les 600 ms qui suivent un civil abattu, l'écran dit « Une cible a fui » au lieu du civil (`triggerFleeGameOver` pourrait respecter `failPending`).
 - **Convoi, repli procédural** (modèles GLB absents seulement) : le corps couché d'un occupant abattu dépasse de la jeep.
-- **Enquête** : le passage entre la console et le battant ouvert de la porte d'entrée est fermé (0,43 m pour 0,56 m d'emprise) ; on atteint le téléphone par le milieu de l'entrée. Vu de très près sous un certain angle, le bord du drap éclairé par la lampe prend une teinte pêche (mélange de la lampe ambre et du ciel bleu, pas un bug de code).
+- **Enquête** : le passage entre la console et le battant ouvert de la porte d'entrée est fermé (0,43 m pour 0,56 m d'emprise) ; on atteint le téléphone par le milieu de l'entrée. Vu de très près sous un certain angle, le bord du drap éclairé par la lampe prend une teinte pêche (mélange de la lampe ambre et du ciel bleu, pas un bug de code). En pause, la frappe d'une réplique en cours, sa voix bipée et la durée d'affichage du sous-titre continuent en temps réel (la séquence de fin, elle, est bien suspendue) : après une longue pause pendant « J'en ai assez vu. », la réplique peut être finie, voire effacée ; à faire avancer au temps de jeu.
 - **Interface** : en 1280 × 720, l'aide des commandes passe sur deux lignes ; deux libellés du journal de Viktor sont peu contrastés (2,3:1 et 2,9:1) ; les tirets cadratins restent dans les répliques des scènes générées.
 - `scripts/verif-mission.mjs`, scénario `aide-reussite` : non concluant une fois sur trois quand le premier tir touche un civil (problème du script, pas du jeu).
 - `scripts/verif-mission.mjs`, scénario `journal` : peut sortir rouge si on le lance pendant un memtest (fichier DevToolsActivePort verrouillé, ou cible qui fuit après un tir manqué) ; lancé seul, il est vert. Ne pas lancer les deux en même temps.
@@ -103,7 +103,7 @@ Questions encore ouvertes :
     { "name": "maquettes", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "docs/superpowers/maquettes/cinematiques", "--port", "5193", "--strictPort"], "port": 5193 }
   ] }
   ```
-  Le serveur des maquettes a son propre cache (`docs/superpowers/maquettes/cinematiques/vite.config.js`) : les deux peuvent tourner ensemble. Tests : `npx vitest run` (728 attendus). Build : `npx vite build`. Routes de dev : `?cine=<id>&freeze=<ms>` (cinématiques), `?enquete=1&cam=x,y,z,lacet,tangage&ouvrir=<indice>&indices=n&stats=1` (enquête), `?stats=1` (panneau de performances, toutes phases), `?memtest=1&qualite=bas` (mesure mémoire, lue par `scripts/memtest.mjs`). Accroches de dev dans la console : `__mem()`, `__aim()`, `__aimAt()`, `__mission()`, `__decor()`.
+  Le serveur des maquettes a son propre cache (`docs/superpowers/maquettes/cinematiques/vite.config.js`) : les deux peuvent tourner ensemble. Tests : `npx vitest run` (768 attendus). Build : `npx vite build`. Routes de dev : `?cine=<id>&freeze=<ms>` (cinématiques), `?enquete=1&cam=x,y,z,lacet,tangage&ouvrir=<indice>&indices=n&stats=1` (enquête), `?stats=1` (panneau de performances, toutes phases), `?memtest=1&qualite=bas` (mesure mémoire, lue par `scripts/memtest.mjs`). Accroches de dev dans la console : `__mem()`, `__aim()`, `__aimAt()`, `__mission()`, `__decor()`.
 - **Captures et pilotage** : `scripts/shots.mjs` (cinématiques), `scripts/verif-mission.mjs` (campagne), `scripts/capture-mission.mjs` (captures déterministes, à comparer à l'octet) et `scripts/memtest.mjs` (mesure mémoire et triangles, seuils du lot 1 avec `--check` ; mode d'emploi dans `docs/superpowers/specs/annexes/README.md`), Chrome sans interface, chemin `--screenshot` absolu, `--user-data-dir` jetable, **jamais de port de débogage fixe** (`--remote-debugging-port=0`, port relu dans `DevToolsActivePort`) : un port fixe a déjà fait piloter par erreur le navigateur d'une autre session. Si le volet du navigateur intégré est caché, `requestAnimationFrame` ne tourne pas : tester le rendu par captures sans interface.
 - **Worktrees** : ne pas mettre `node_modules` en jonction, ou retirer la jonction (`cmd /c rmdir`) avant `git worktree remove`, qui la suit et vide le `node_modules` du dépôt principal.
 - Style « dossier du fixeur » : Anton (le fixeur) n'est jamais vu et ne dit jamais « tu entres » ; Viktor tire toujours de loin et en hauteur.

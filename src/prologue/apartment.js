@@ -1140,7 +1140,11 @@ export function buildApartment() {
 
   // ── animation : porte, pluie, néon qui grésille ──
   const neonState = { t: 0, next: 1.2, burst: 0, level: 1 }
-  let phoneT = 0
+  // écran du téléphone : au repos, il s'allume ~1 s toutes les 5,5 s (le rappel de la messagerie) ; phoneLight (0 à 1)
+  // le tient allumé à la place, quand il vibre (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md §3.6)
+  let phoneT = 0, phoneLight = null
+  const PHONE_DARK = 1.1   // la phase de repos qui suit un clignotement : l'écran éteint, à sa valeur de base
+  const lightPhone = () => { if (phoneScreen && phoneLight !== null) phoneScreen.emissiveIntensity = 3 + 37 * phoneLight }
   function setNeon(level) {
     M.neon.emissiveIntensity = 1.2 * level
     M.halo.color.setRGB(0.24 * level, 0.3 * level, 0.42 * level)
@@ -1152,8 +1156,20 @@ export function buildApartment() {
   return {
     group, colliders, targets, occluders, anchors,
     start: { x: 6.0, z: 7.85, yaw: 0, pitch: -0.05 },
+    // d'où l'on photographie le téléphone quand sa fiche s'ouvre d'elle-même : debout dans l'entrée, à 1 m de la console
+    phoneView: { x: 5.6, y: 1.65, z: 5.6 },
     lights: { spot, ambient, moon, nightlight },
     openDoor() { door.opening = true },
+    // allume l'écran du téléphone (0 : valeur de base, 1 : au plus vif), tenu malgré update ; null le rend à son
+    // clignotement de repos, repris éteint (pas au milieu d'un clignotement)
+    setPhoneLight(level) {
+      if (level === null || level === undefined) {
+        if (phoneLight !== null) { phoneLight = null; phoneT = PHONE_DARK; if (phoneScreen) phoneScreen.emissiveIntensity = 3 }
+        return
+      }
+      phoneLight = Math.max(0, Math.min(1, +level || 0))
+      lightPhone()
+    },
     update(dt) {
       if (disposed) return
       dt = Math.min(Math.max(dt || 0, 0), 0.1)
@@ -1173,8 +1189,11 @@ export function buildApartment() {
         if (n.burst <= 0) n.level = 1
       } else if (n.t > n.next) { n.burst = 0.12 + Math.random() * 0.5; n.next = n.t + 1.5 + Math.random() * 4.5 }
       setNeon(n.level)
-      phoneT = (phoneT + dt) % 5.5   // écran qui s'allume ~1 s toutes les 5,5 s
-      if (phoneScreen) phoneScreen.emissiveIntensity = 3 + 11 * (phoneT < 1.1 ? Math.sin(phoneT / 1.1 * Math.PI) : 0)
+      if (phoneLight !== null) lightPhone()
+      else {
+        phoneT = (phoneT + dt) % 5.5   // écran qui s'allume ~1 s toutes les 5,5 s
+        if (phoneScreen) phoneScreen.emissiveIntensity = 3 + 11 * (phoneT < PHONE_DARK ? Math.sin(phoneT / PHONE_DARK * Math.PI) : 0)
+      }
     },
     stats() {
       let drawables = 0, triangles = 0

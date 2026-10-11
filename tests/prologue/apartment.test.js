@@ -168,3 +168,37 @@ describe('l\'appartement', () => {
     apt.dispose()
   })
 })
+
+// l'écran du téléphone pendant la vibration de la fin (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md §3.6)
+describe('l\'appartement : l\'écran du téléphone', () => {
+  const screenOf = apt => {
+    let s = null
+    apt.targets.find(t => t.userData.clueId === PHONE.id).traverse(o => { for (const m of [].concat(o.material || [])) if (m.userData.baseEmissive === 0x0b1220) s = m })
+    return s
+  }
+  const idle = apt => { const seen = []; for (let i = 0; i < 120; i++) { apt.update(0.05); seen.push(screenOf(apt).emissiveIntensity) } return seen }
+
+  it('setPhoneLight allume l\'écran au-delà de son clignotement de repos, et le tient malgré update', () => {
+    const apt = buildApartment()
+    const rest = Math.max(...idle(apt))                         // témoin : au repos, l'écran s'allume ~1 s toutes les 5,5 s
+    apt.setPhoneLight(1)
+    expect(screenOf(apt).emissiveIntensity).toBeGreaterThan(rest)
+    const held = idle(apt)
+    expect(Math.min(...held)).toBeGreaterThan(rest)              // 6 s : le clignotement de repos ne reprend pas la main
+    apt.setPhoneLight(0.5)
+    const half = screenOf(apt).emissiveIntensity
+    expect(half).toBeLessThan(held[0]); expect(half).toBeGreaterThan(3)
+    apt.dispose()
+  })
+
+  it('setPhoneLight(null) rend l\'écran à sa valeur de base, éteint, sans saut vers un clignotement en cours', () => {
+    const apt = buildApartment()
+    apt.update(0.5)                                             // en plein clignotement de repos
+    expect(screenOf(apt).emissiveIntensity).toBeGreaterThan(3)
+    apt.setPhoneLight(1); apt.update(0.05)
+    apt.setPhoneLight(null)
+    apt.update(0.05)
+    expect(screenOf(apt).emissiveIntensity).toBe(3)              // la valeur de base, pas la suite du clignotement
+    apt.dispose()
+  })
+})
