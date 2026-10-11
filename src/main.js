@@ -1568,8 +1568,9 @@ if (import.meta.env.DEV) {
   // troisième civil vivant ('cible', 'garde', 'civil'). Faux si rien ne correspond. Le tir reste celui du joueur.
   // avance (s) : vise là où le PNJ sera après le vol de la balle : une cible du convoi, qui roule (M5), ou un PNJ qui
   // marche ou qui fuit (vitesses de NPC._move : speed en marche, speed × 8 en fuite, déviations ignorées).
-  // zone : 'torse' (défaut), 'tete' ou 'membre' : vise le milieu de cette zone touchée du PNJ, sur sa pose du moment
-  // (NPC.hitZones, src/shot/hitzones.js) ; le milieu de sa boîte grossière s'il n'en a pas.
+  // zone : 'torse' (défaut), 'tete' ou 'membre' : vise le milieu de la première zone touchée de cette partie (pour la
+  // tête, le crâne), sur la pose du moment (NPC.hitZones, src/shot/hitzones.js) ; le milieu de sa boîte grossière s'il
+  // n'en a pas.
   const vitessePnj = npc => npc.state === STATES.FLEE ? npc.fleeDir.clone().multiplyScalar(npc.speed * 8)
     : npc.state === STATES.WALK ? npc.walkDir.clone().multiplyScalar(npc.speed) : new THREE.Vector3()
   window.__aimAt = (what, n = 0, avance = 0, zone = 'torse') => {

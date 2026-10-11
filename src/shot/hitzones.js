@@ -5,10 +5,13 @@ import { ZONES } from './tuning.js'
 //
 // Une zone : { part: 'tete' | 'torse' | 'membre', a, b, r }, en coordonnées monde, recalculée sur la pose du moment.
 // C'est une capsule de rayon r autour du segment [a, b] ; une sphère quand a et b sont confondus.
-// - tête : sphère au milieu des os Head (base du crâne) et HeadTop_End (sommet), ZONES.tete ;
+// - tête : sphère au milieu des os Head (base du crâne) et HeadTop_End (sommet), ZONES.tete, et sphère du bas du
+//   visage (bouche, menton), ZONES.machoire : le crâne s'arrête vers l'os Head, alors que le visage descend plus bas
+//   devant lui ;
 // - torse : capsule des hanches (Hips) au haut du dos (Spine2), ZONES.torse ; son bout arrondi monte jusqu'à l'os
 //   Neck, à la base du cou, sans mordre sur le menton comme le ferait une capsule qui finirait à Neck ;
-// - cou : capsule Neck → Head, ZONES.cou, comptée torse ;
+// - cou : capsule de Neck jusqu'à 4 cm sous l'os Head, ZONES.cou, comptée torse : finie sur l'os Head, son bout arrondi
+//   dépasserait de 6 cm dans la base du crâne ;
 // - membres : bras (Arm → ForeArm → Hand), mains (Hand → HandMiddle1), jambes (UpLeg → Leg → Foot), pieds
 //   (Foot → ToeBase), ZONES.bras, ZONES.jambe, ZONES.pied.
 
@@ -21,6 +24,30 @@ export function boneKey(name) {
 // Os que les zones utilisent : tous présents dans chacun des sept modèles du jeu (tests/shot/glb-bones.test.js).
 export const REQUIRED_BONES = ['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head', 'HeadTop_End',
   ...['Left', 'Right'].flatMap(s => ['Arm', 'ForeArm', 'Hand', 'HandMiddle1', 'UpLeg', 'Leg', 'Foot', 'ToeBase'].map(o => s + o))]
+
+// Frontière de la tête et du cou, dans le repère de la tête (axe de sa base vers son sommet, visage vers le +Z de l'os
+// Head, tourné vers l'avant sur les sept modèles), mesurée contre leur maillage, de face et de dos, debout et assis
+// (tests/shot/glb-bones.test.js) :
+// - bas du visage : centre de sa sphère au-dessus de la base de la tête, dans son axe, et vers le visage (m) ;
+// - cou : il s'arrête à COU_SOUS_TETE sous la base de la tête, son bout arrondi n'en dépasse plus que de 2 cm.
+const VISAGE = { haut: 0.03, avant: 0.04 }
+const COU_SOUS_TETE = 0.04
+const _q = new THREE.Quaternion()
+
+// Sphère du bas du visage (comptée tête), posée depuis la base de la tête ; null si le visage est dans l'axe.
+function basDuVisage(base, axe, face) {
+  face = face.clone().addScaledVector(axe, -face.dot(axe))
+  if (face.lengthSq() < 1e-8) return null
+  const c = base.clone().addScaledVector(axe, VISAGE.haut).addScaledVector(face.normalize(), VISAGE.avant)
+  return { part: 'tete', a: c, b: c.clone(), r: ZONES.machoire }
+}
+
+// Capsule du cou (comptée torse), de sa base à COU_SOUS_TETE sous la base de la tête ; une sphère sur sa base quand
+// elle est plus haute que ce point (chez mafia_boss, Neck n'est qu'à 3 cm de Head).
+function cou(neck, base, axe) {
+  const haut = base.clone().addScaledVector(axe, -COU_SOUS_TETE)
+  return { part: 'torse', a: neck.clone(), b: haut.clone().sub(neck).dot(axe) > 0 ? haut : neck.clone(), r: ZONES.cou }
+}
 
 // Os d'un modèle par nom nu, relevés une fois par instance (le clone d'un PNJ garde ses os jusqu'à sa libération).
 const bonesCache = new WeakMap()
@@ -54,10 +81,13 @@ export function zonesFromSkeleton(model) {
   if (!top) top = head.clone().addScaledVector(neck ? head.clone().sub(neck).normalize() : new THREE.Vector3(0, 1, 0), 2 * ZONES.tete)
   const c = head.clone().lerp(top, 0.5)
   zones.push({ part: 'tete', a: c, b: c.clone(), r: ZONES.tete })
+  const axe = top.clone().sub(head).normalize()
+  const visage = basDuVisage(head, axe, new THREE.Vector3(0, 0, 1).applyQuaternion(bones.Head.getWorldQuaternion(_q)))
+  if (visage) zones.push(visage)
 
   // Torse et cou
   capsule('torse', 'Hips', ['Spine2', 'Spine1', 'Spine', 'Neck'].find(k => bones[k]), ZONES.torse)
-  capsule('torse', 'Neck', 'Head', ZONES.cou)
+  if (neck) zones.push(cou(neck, head, axe))
 
   // Membres
   for (const s of ['Left', 'Right']) {
@@ -84,11 +114,15 @@ export function zonesFromProcedural(group) {
   const headBase = w(u.head)
   const c = w(u.head, 0, 0.14, 0)   // centre de la sphère de la tête (makePerson)
   zones.push({ part: 'tete', a: c, b: c.clone(), r: ZONES.tete })
+  // Repère de la tête : son pivot monte selon son +Y, le visage (nez, yeux) est vers son +Z
+  const axe = w(u.head, 0, 1, 0).sub(headBase).normalize()
+  const visage = basDuVisage(headBase, axe, w(u.head, 0, 0, 1).sub(headBase))
+  if (visage) zones.push(visage)
   const hips = w(u.legL).lerp(w(u.legR), 0.5)
   const up = headBase.clone().sub(hips).normalize()
   const neck = headBase.clone().addScaledVector(up, -0.1)   // base du cou, comme l'os Neck
   zones.push({ part: 'torse', a: hips, b: neck.clone().addScaledVector(up, -ZONES.torse), r: ZONES.torse })
-  zones.push({ part: 'torse', a: neck, b: headBase, r: ZONES.cou })
+  zones.push(cou(neck, headBase, axe))
 
   for (const [arm, hand] of [[u.armL, u.handL], [u.armR, u.handR]]) {
     if (!arm || !hand) continue

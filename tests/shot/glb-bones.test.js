@@ -15,12 +15,21 @@ import { ZONES } from '../../src/shot/tuning.js'
 //    comme dans characters.js, posé debout (Idle) et assis (Talk, le commanditaire de M6), chaque sommet rattaché à
 //    l'os qui le porte le plus : la distance typique (médiane) de la peau à la zone de sa partie reste proche du rayon ;
 // 3. un rayon qui passe à 25 cm devant la poitrine ne touche aucune zone, alors que l'ancienne boîte le touchait ;
-//    la tête, debout comme assise, est touchée sur l'os.
+//    la tête, debout comme assise, est touchée sur l'os ;
+// 4. la tête compte pour la tête jusqu'à sa frontière avec le cou, de face (bouche et menton) comme de dos (base du
+//    crâne) : des rayons horizontaux sur l'axe du visage, comparés au maillage lui-même (le premier triangle touché,
+//    rattaché à l'os qui le porte le plus), ne comptent jamais pour le corps tant qu'ils touchent la tête, hors d'une
+//    bande de tolérance au bas de la tête (les 2 derniers cm du menton, les 3 derniers cm de la base du crâne) ; la
+//    gorge, plus de 3,5 cm sous le menton, ne compte pas pour la tête.
 //
 // Témoin : sans le préfixe numéroté (boneKey qui ne retire que « mixamorig »), cinq modèles sur sept n'ont plus aucun
 // os requis (vu rouge) ; avec la sphère de 13 cm de rayon d'avant cette tâche, elle dépasse de plus d'un quart la
 // distance typique de la peau sur trois modèles (gangster_man_01 et 02, mafia_woman_01 : vu rouge), et avec 13 cm de
-// diamètre elle passe sous la peau des sept (vu rouge).
+// diamètre elle passe sous la peau des sept (vu rouge). Point 4, vu rouge sur les zones d'avant la relecture de T4
+// (sphère du crâne seule, cou fini sur l'os Head) : la bouche comptait pour le torse sur les quatorze poses, la base du
+// crâne sur onze ; vu rouge aussi avec un torse qui monterait jusqu'à Neck (le visage compte pour le torse sur douze
+// poses, mafia_boss compris), avec un cou fini sur l'os Head (la base du crâne, sur onze) et avec une sphère du bas
+// du visage de 10 cm (la gorge compte pour la tête sur huit).
 
 const DIR = resolve(__dirname, '../../public/models')
 const FILES = readdirSync(DIR).filter(f => f.endsWith('.glb')).sort()
@@ -99,6 +108,74 @@ function skinDistances(model, zones) {
   return Object.fromEntries(Object.entries(d).map(([k, xs]) => [k, median(xs)]))
 }
 
+// ── Le maillage comme vérité : triangles en coordonnées monde sur la pose du moment (skinning recalculé sur le
+// processeur), chacun rattaché à l'os qui le porte le plus (poids sommés sur ses trois sommets) ──
+const partieDeLOs = os => /^(Head|HeadTop_End)$/.test(os) ? 'tete' : /^(Hips|Spine\d?|Neck|\w+Shoulder)$/.test(os) ? 'torse' : 'membre'
+function trianglesAutourDe(model, centre, rayon) {
+  const tris = []
+  const v = new THREE.Vector3()
+  model.traverse(m => {
+    if (!m.isSkinnedMesh) return
+    const g = m.geometry, idx = g.index, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight
+    const monde = []
+    for (let i = 0; i < pos.count; i++) { m.getVertexPosition(i, v); monde.push(v.clone().applyMatrix4(m.matrixWorld)) }
+    const n = idx ? idx.count : pos.count
+    for (let t = 0; t < n; t += 3) {
+      const ii = [t, t + 1, t + 2].map(k => idx ? idx.getX(k) : k)
+      const P = ii.map(i => monde[i])
+      if (P.every(p => p.distanceTo(centre) > rayon)) continue
+      const poids = {}
+      for (const i of ii) for (let k = 0; k < 4; k++) {
+        const os = boneKey(m.skeleton.bones[si.getComponent(i, k)].name)
+        poids[os] = (poids[os] || 0) + sw.getComponent(i, k)
+      }
+      tris.push({ P, part: partieDeLOs(Object.entries(poids).sort((a, b) => b[1] - a[1])[0][0]) })
+    }
+  })
+  return tris
+}
+// Partie du premier triangle que le rayon traverse (Möller-Trumbore, deux faces), ou null.
+function premierTriangle(ray, tris) {
+  const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), p = new THREE.Vector3(), q = new THREE.Vector3(), s = new THREE.Vector3()
+  let best = null, bt = Infinity
+  for (const tr of tris) {
+    const [A, B, C] = tr.P
+    e1.subVectors(B, A); e2.subVectors(C, A); p.crossVectors(ray.direction, e2)
+    const det = e1.dot(p)
+    if (Math.abs(det) < 1e-12) continue
+    s.subVectors(ray.origin, A)
+    const u = s.dot(p) / det
+    if (u < 0 || u > 1) continue
+    q.crossVectors(s, e1)
+    const w = ray.direction.dot(q) / det
+    if (w < 0 || u + w > 1) continue
+    const t = e2.dot(q) / det
+    if (t > 0 && t < bt) { bt = t; best = tr }
+  }
+  return best ? best.part : null
+}
+// Rayons horizontaux sur l'axe du visage (la verticale de l'os Head), de 12 cm sous l'os à 30 cm au-dessus, tous les
+// 5 mm, de face ou de dos : le visage regarde vers le +Z de l'os Head (tourné vers l'avant sur les sept modèles).
+// Pour chacun, ce que touche le maillage et la zone comptée, à la hauteur `h` (mm) au-dessus du plus bas des rayons
+// qui touchent la tête (dessous du menton de face, base du crâne de dos) : `tete`, ceux qui touchent la tête ;
+// `corps`, ceux qui touchent le cou ou le torse.
+function axeDuVisage(model, sens) {
+  const b = bones(model)
+  const head = at(b, 'Head')
+  const visage = new THREE.Vector3(0, 0, 1).applyQuaternion(b.Head.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize()
+  const dir = sens === 'face' ? visage.clone().negate() : visage
+  const tris = trianglesAutourDe(model, head, 0.45)
+  const zones = zonesFromSkeleton(model)
+  const rayons = []
+  for (let mm = -120; mm <= 300; mm += 5) {
+    const ray = new THREE.Ray(head.clone().setY(head.y + mm / 1000).addScaledVector(dir, -1), dir)
+    rayons.push({ mm, maillage: premierTriangle(ray, tris), zone: rayVsZones(ray, zones)?.part ?? null })
+  }
+  const bas = Math.min(...rayons.filter(r => r.maillage === 'tete').map(r => r.mm))
+  rayons.forEach(r => { r.h = r.mm - bas })
+  return { tete: rayons.filter(r => r.maillage === 'tete'), corps: rayons.filter(r => r.maillage === 'torse') }
+}
+
 // Médiane de la distance peau-zone, en fraction du rayon : bornes tenues par les sept modèles, debout et assis.
 const BORNES = { tete: [ZONES.tete, 0.8, 1.3], torse: [ZONES.torse, 0.75, 1.35], bras: [ZONES.bras, 0.55, 1.35], jambe: [ZONES.jambe, 0.7, 1.3] }
 
@@ -132,6 +209,29 @@ describe('les zones collent aux maillages des sept modèles', () => {
         const hit = rayVsZones(new THREE.Ray(c.clone().add(new THREE.Vector3(0, 0, 30)), new THREE.Vector3(0, 0, -1)), zones)
         expect(hit?.part).toBe('tete')
         if (clip === 'Talk') expect(c.y, 'tête de la pose assise').toBeLessThan(1.4)
+      })
+
+      it(`${file}, ${clip === 'Idle' ? 'debout' : 'assis'} : de face, le visage compte pour la tête, bouche comprise, la gorge non`, () => {
+        const m = models[file]
+        pose(m, clip)
+        const { tete, corps } = axeDuVisage(m.model, 'face')
+        expect(tete.length, 'rayons qui touchent la tête').toBeGreaterThan(40)
+        // à hauteur de bouche (4 cm au-dessus du dessous du menton) : la tête
+        expect(tete.find(r => r.h === 40)?.zone, 'à hauteur de bouche').toBe('tete')
+        // nulle part au-dessus des 2 derniers centimètres du menton, un tir au visage ne compte pour le corps
+        expect(tete.filter(r => r.h >= 20 && r.zone !== 'tete' && r.zone !== null).map(r => `${r.h / 10} cm : ${r.zone}`)).toEqual([])
+        // et la gorge, plus de 3,5 cm sous le menton, ne compte pas pour la tête (chez mafia_boss, un col porté par
+        // l'os Spine2 monte jusque sous le menton : la balle qui le traverse dans ses 3 premiers cm trouve la mâchoire)
+        expect(corps.filter(r => r.h <= -35 && r.zone === 'tete').map(r => `${r.h / 10} cm`)).toEqual([])
+      })
+
+      it(`${file}, ${clip === 'Idle' ? 'debout' : 'assis'} : de dos, la base du crâne compte pour la tête`, () => {
+        const m = models[file]
+        pose(m, clip)
+        const { tete } = axeDuVisage(m.model, 'dos')
+        // mafia_boss : son col cache la nuque, une quinzaine de rayons seulement touchent la tête de dos
+        expect(tete.length, 'rayons qui touchent la tête').toBeGreaterThan(10)
+        expect(tete.filter(r => r.h >= 30 && r.zone !== 'tete' && r.zone !== null).map(r => `${r.h / 10} cm : ${r.zone}`)).toEqual([])
       })
     }
 

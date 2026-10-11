@@ -88,8 +88,9 @@ export const SCORE_ZONE = {
 // l'os. Plus grand, la zone déborde de la silhouette ; plus petit, la balle traverse un bord visible sans toucher.
 export const ZONES = {
   tete: 0.10,           // sphère entre les os Head et HeadTop_End : 20 cm, pour une tête de 17 cm de large et 23 de haut
+  machoire: 0.07,       // sphère du bas du visage (bouche, menton), comptée tête : plus grande, elle mord sur la gorge
   torse: 0.15,          // capsule des hanches au haut du dos : un rayon qui passe à 25 cm de l'axe la manque
-  cou: 0.06,            // capsule de la base du cou à la tête, comptée torse
+  cou: 0.06,            // capsule de la base du cou jusque sous la tête, comptée torse
   bras: 0.06,           // bras, avant-bras et mains
   jambe: 0.08,          // cuisses et tibias
   pied: 0.05,           // pieds, de la cheville à la plante

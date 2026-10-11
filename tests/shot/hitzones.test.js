@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import * as THREE from 'three'
 import { fakeMixamo } from './fakeMixamo.js'
+import { ZONES } from '../../src/shot/tuning.js'
 
 // Zones touchées calées sur les os (spec du lot 2, §3.4 et §4 ; plan, tâche T4). Ce que la balle touche sur un PNJ :
 // avant le lot 2, une boîte de 0,8 × 2 × 0,8 m centrée à 1 m au-dessus des pieds (getBounds), qui ne suivait ni la
@@ -178,6 +179,51 @@ describe('npcHit : cible assise (M6) et tir en plongée', () => {
   })
 })
 
+// Frontière de la tête et du cou (relecture de T4) : la sphère du crâne s'arrête vers l'os Head, alors que le visage
+// descend plus bas devant (bouche et menton) ; le bout arrondi du cou, posé sur l'os Head, dépassait de 6 cm dans la
+// base du crâne. Témoin : avant, un tir de face à hauteur de l'os Head (la bouche) et un tir de dos 1,5 cm au-dessus
+// comptaient pour le torse (vus rouges) ; avec un torse qui monterait jusqu'à Neck, la bouche y compte encore (vu
+// rouge). Gardes : avec une sphère du bas du visage de 10 cm, la gorge compte pour la tête ; sans cou, un tir passe
+// entre le haut du dos et la tête sans rien toucher (vus rouges).
+describe('npcHit : frontière de la tête et du cou', () => {
+  beforeAll(() => load())
+  // Rayon horizontal depuis 30 m derrière (-Z), à la hauteur de p.
+  const deDos = p => new THREE.Ray(new THREE.Vector3(p.x, p.y, p.z - 30), new THREE.Vector3(0, 0, 1))
+  const auDessusDe = (p, dy) => p.clone().setY(p.y + dy)
+
+  it('de face, la bouche (à hauteur de l\'os Head) compte pour la tête', () => {
+    const n = pnj()
+    expect(hz.npcHit(deFace(os(n, 'Head')), [n])).toMatchObject({ part: 'tete' })
+  })
+
+  it('assise, de face, la bouche compte pour la tête', () => {
+    const n = assis()
+    expect(hz.npcHit(deFace(os(n, 'Head')), [n])).toMatchObject({ part: 'tete' })
+  })
+
+  it('de dos, la base du crâne (1,5 cm au-dessus de l\'os Head) compte pour la tête', () => {
+    const n = pnj()
+    expect(hz.npcHit(deDos(auDessusDe(os(n, 'Head'), 0.015)), [n])).toMatchObject({ part: 'tete' })
+  })
+
+  it('sous le menton, la gorge (6 cm sous l\'os Head) compte pour le torse, de face comme de dos', () => {
+    const n = pnj()
+    const gorge = auDessusDe(os(n, 'Head'), -0.06)
+    expect(hz.npcHit(deFace(gorge), [n])).toMatchObject({ part: 'torse' })
+    expect(hz.npcHit(deDos(gorge), [n])).toMatchObject({ part: 'torse' })
+  })
+
+  it('le cou n\'a pas de trou entre le haut du dos et la tête', () => {
+    const n = pnj()
+    const bas = os(n, 'Spine2').y, haut = os(n, 'Head').y
+    for (let y = bas; y <= haut; y += 0.005) {
+      const p = os(n, 'Head').setY(y)
+      expect(hz.npcHit(deFace(p), [n]), `de face à ${y.toFixed(3)} m`).not.toBeNull()
+      expect(hz.npcHit(deDos(p), [n]), `de dos à ${y.toFixed(3)} m`).not.toBeNull()
+    }
+  })
+})
+
 describe('npcHit : modèle procédural (modèles absents)', () => {
   beforeAll(() => load({ models: false }))
   const proc = () => { const n = pnj(); expect(n.character).toBeNull(); return n }
@@ -202,6 +248,11 @@ describe('npcHit : modèle procédural (modèles absents)', () => {
     const n = proc()
     const p = n.mesh.localToWorld(new THREE.Vector3(0, 1.25, 0.25))
     expect(hz.npcHit(new THREE.Ray(p.clone().setX(p.x + 30), new THREE.Vector3(-1, 0, 0)), [n])).toBeNull()
+  })
+
+  it('de face, le bas du visage (4 cm au-dessus du pivot de la tête) compte pour la tête', () => {
+    const n = proc()
+    expect(hz.npcHit(deFace(pivot(n, 'head', [0, 0.04, 0])), [n])).toMatchObject({ part: 'tete' })
   })
 })
 
@@ -265,11 +316,49 @@ describe('zonesFromSkeleton : zones d\'un squelette Mixamo', () => {
   const bone = (scene, bare) => { let b = null; scene.traverse(o => { if (o.isBone && o.name.endsWith(bare) && !b) b = o }); return b }
   const worldOf = (scene, bare) => { scene.updateMatrixWorld(true); return bone(scene, bare).getWorldPosition(new THREE.Vector3()) }
 
-  it('une tête, un torse et un cou, des membres : bras, mains, jambes, pieds', () => {
+  it('une tête (crâne et bas du visage), un torse et un cou, des membres : bras, mains, jambes, pieds', () => {
     const z = hz.zonesFromSkeleton(posed('mixamorig7').scene)
-    expect(z.filter(x => x.part === 'tete')).toHaveLength(1)
+    expect(z.filter(x => x.part === 'tete')).toHaveLength(2)
     expect(z.filter(x => x.part === 'torse')).toHaveLength(2)
     expect(z.filter(x => x.part === 'membre')).toHaveLength(12)
+  })
+
+  it('le bas du visage : une sphère 3 cm au-dessus de l\'os Head, dans l\'axe de la tête, et 4 cm vers le visage', () => {
+    const { scene } = posed('mixamorig7')
+    const [, visage] = hz.zonesFromSkeleton(scene).filter(x => x.part === 'tete')
+    const head = worldOf(scene, 'Head')
+    const axe = worldOf(scene, 'HeadTop_End').sub(head).normalize()
+    const face = new THREE.Vector3(0, 0, 1).applyQuaternion(bone(scene, 'Head').getWorldQuaternion(new THREE.Quaternion()))
+    expect(visage.a.distanceTo(head.clone().addScaledVector(axe, 0.03).addScaledVector(face, 0.04))).toBeLessThan(1e-9)
+    expect(visage.b.distanceTo(visage.a)).toBe(0)
+    expect(visage.r).toBe(ZONES.machoire)
+  })
+
+  it('le bas du visage suit la tête quand elle tourne (le +Z de l\'os Head)', () => {
+    const { scene } = posed('mixamorig7')
+    const avant = hz.zonesFromSkeleton(scene).filter(x => x.part === 'tete')[1].a.clone()
+    bone(scene, 'Head').rotation.y = Math.PI / 2   // la tête regarde vers sa gauche
+    const apres = hz.zonesFromSkeleton(scene).filter(x => x.part === 'tete')[1].a
+    const head = worldOf(scene, 'Head')
+    const gauche = new THREE.Vector3(1, 0, 0).applyQuaternion(bone(scene, 'Head').parent.getWorldQuaternion(new THREE.Quaternion()))
+    expect(apres.distanceTo(avant)).toBeGreaterThan(0.05)
+    expect(apres.clone().sub(head).dot(gauche)).toBeCloseTo(0.04, 6)
+  })
+
+  it('le cou va de Neck à 4 cm sous l\'os Head ; une sphère sur Neck quand Neck est plus près de la tête', () => {
+    const { scene } = posed('mixamorig7')
+    const cou = () => hz.zonesFromSkeleton(scene).filter(x => x.part === 'torse')[1]
+    const head = worldOf(scene, 'Head'), axe = worldOf(scene, 'HeadTop_End').sub(head).normalize()
+    expect(cou().a.distanceTo(worldOf(scene, 'Neck'))).toBeLessThan(1e-9)
+    expect(cou().b.distanceTo(head.clone().addScaledVector(axe, -0.04))).toBeLessThan(1e-9)
+    expect(cou().r).toBe(ZONES.cou)
+    // Neck à 3 cm sous la tête, comme chez mafia_boss
+    const neck = bone(scene, 'Neck'), headBone = bone(scene, 'Head')
+    neck.position.y += headBone.position.y - 0.03
+    headBone.position.y = 0.03
+    const c = cou()
+    expect(c.a.distanceTo(worldOf(scene, 'Neck'))).toBeLessThan(1e-9)
+    expect(c.b.distanceTo(c.a)).toBe(0)
   })
 
   it('même résultat quel que soit le préfixe des os (mixamorig, mixamorig7, mixamorig12, deux-points)', () => {
@@ -330,6 +419,6 @@ describe('accès aux zones depuis le PNJ (npc.js)', () => {
     await load({ models: false })
     const n = pnj()
     expect(n.hitZones()).toEqual(hz.zonesFromProcedural(n.mesh))
-    expect(n.hitZones().map(x => x.part).sort()).toEqual([...Array(12).fill('membre'), 'tete', 'torse', 'torse'])
+    expect(n.hitZones().map(x => x.part).sort()).toEqual([...Array(12).fill('membre'), 'tete', 'tete', 'torse', 'torse'])
   })
 })
