@@ -22,7 +22,7 @@ Ce que j'attends : le résultat le plus « stylé » possible (qualité visuelle
 
 ## Où on en est
 
-Fait, relu et testé (**765 tests verts** avec la fin de l'enquête ; 728 à la fin du lot 1, 326 à la fin du lot 0) ; les points 1 à 5 sont fusionnés dans `main`, la fin de l'enquête (point 6) l'est après la relecture finale de sa branche `enquete-fin` :
+Fait, relu et testé (**768 tests verts** avec la fin de l'enquête ; 728 à la fin du lot 1, 326 à la fin du lot 0) ; les points 1 à 5 sont fusionnés dans `main`, la fin de l'enquête (point 6) l'est après la relecture finale de sa branche `enquete-fin` :
 1. **Briefings M1-M6 et épilogue** en motion design « dossier du fixeur » (Plan 1) : kit `src/briefing/kit.js`, `playCinematic` dans `src/briefing/index.js`, scènes générées depuis les maquettes par `scripts/port-maquette.mjs` (ne jamais éditer `src/briefing/scenes/*.js` à la main).
 2. **Prologue** en deux cinématiques (Plan 2) : `prologue-a` et `prologue-b`, une fois par campagne (`upgradeState.prologueSeen`).
 3. **Enquête jouable** entre A et B (Plan 3) : `src/prologue/`. Budget gardé par un test (au plus 47 maillages et 16 600 triangles par `stats()` ; mesuré en jeu : 44 appels, 16 446 triangles).
@@ -63,6 +63,7 @@ Fait, relu et testé (**765 tests verts** avec la fin de l'enquête ; 728 à la 
 
 Questions encore ouvertes (celle du téléphone de l'enquête, qu'on ne pouvait pas reposer, est réglée le 11 octobre 2026 : REPOSER, point 6) :
 - PvP hors réseau local : par défaut, réseau local avec un champ « adresse du relais » (pas d'hébergement payant).
+- Fin de l'enquête, à juger en jeu : quand le 6e indice est trouvé loin de l'entrée (salon, chambre de la petite, palier), le regard pivote vers le téléphone à travers le mur et finit sur ce mur ; la fiche qui s'ouvre aussitôt montre bien le téléphone allumé, vu de l'entrée. Piste si ça gêne : ne pivoter que si le téléphone est en vue, sinon garder le regard fixe, comme en effets atténués.
 
 ## Suite prévue (dans cet ordre)
 
@@ -77,7 +78,7 @@ Questions encore ouvertes (celle du téléphone de l'enquête, qu'on ne pouvait 
 - **Sauvegardes d'avant le lot 0** : une sauvegarde faite après une réussite puis un retour au menu pointe encore sur la mission réussie ; elle la propose une fois (et la recrédite), puis tout se normalise. Pour M6 réussie sans épilogue vu, le menu affiche REPRENDRE : MISSION 6 au lieu de VOIR LA FIN.
 - **Échec** : si une cible fuit pendant les 600 ms qui suivent un civil abattu, l'écran dit « Une cible a fui » au lieu du civil (`triggerFleeGameOver` pourrait respecter `failPending`).
 - **Convoi, repli procédural** (modèles GLB absents seulement) : le corps couché d'un occupant abattu dépasse de la jeep.
-- **Enquête** : le passage entre la console et le battant ouvert de la porte d'entrée est fermé (0,43 m pour 0,56 m d'emprise) ; on atteint le téléphone par le milieu de l'entrée. Vu de très près sous un certain angle, le bord du drap éclairé par la lampe prend une teinte pêche (mélange de la lampe ambre et du ciel bleu, pas un bug de code).
+- **Enquête** : le passage entre la console et le battant ouvert de la porte d'entrée est fermé (0,43 m pour 0,56 m d'emprise) ; on atteint le téléphone par le milieu de l'entrée. Vu de très près sous un certain angle, le bord du drap éclairé par la lampe prend une teinte pêche (mélange de la lampe ambre et du ciel bleu, pas un bug de code). En pause, la frappe d'une réplique en cours, sa voix bipée et la durée d'affichage du sous-titre continuent en temps réel (la séquence de fin, elle, est bien suspendue) : après une longue pause pendant « J'en ai assez vu. », la réplique peut être finie, voire effacée ; à faire avancer au temps de jeu.
 - **Interface** : en 1280 × 720, l'aide des commandes passe sur deux lignes ; deux libellés du journal de Viktor sont peu contrastés (2,3:1 et 2,9:1) ; les tirets cadratins restent dans les répliques des scènes générées.
 - `scripts/verif-mission.mjs`, scénario `aide-reussite` : non concluant une fois sur trois quand le premier tir touche un civil (problème du script, pas du jeu).
 - `scripts/verif-mission.mjs`, scénario `journal` : peut sortir rouge si on le lance pendant un memtest (fichier DevToolsActivePort verrouillé, ou cible qui fuit après un tir manqué) ; lancé seul, il est vert. Ne pas lancer les deux en même temps.
@@ -103,7 +104,7 @@ Questions encore ouvertes (celle du téléphone de l'enquête, qu'on ne pouvait 
     { "name": "maquettes", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "docs/superpowers/maquettes/cinematiques", "--port", "5193", "--strictPort"], "port": 5193 }
   ] }
   ```
-  Le serveur des maquettes a son propre cache (`docs/superpowers/maquettes/cinematiques/vite.config.js`) : les deux peuvent tourner ensemble. Tests : `npx vitest run` (765 attendus). Build : `npx vite build`. Routes de dev : `?cine=<id>&freeze=<ms>` (cinématiques), `?enquete=1&cam=x,y,z,lacet,tangage&ouvrir=<indice>&indices=n&stats=1` (enquête), `?stats=1` (panneau de performances, toutes phases), `?memtest=1&qualite=bas` (mesure mémoire, lue par `scripts/memtest.mjs`). Accroches de dev dans la console : `__mem()`, `__aim()`, `__aimAt()`, `__mission()`, `__decor()`.
+  Le serveur des maquettes a son propre cache (`docs/superpowers/maquettes/cinematiques/vite.config.js`) : les deux peuvent tourner ensemble. Tests : `npx vitest run` (768 attendus). Build : `npx vite build`. Routes de dev : `?cine=<id>&freeze=<ms>` (cinématiques), `?enquete=1&cam=x,y,z,lacet,tangage&ouvrir=<indice>&indices=n&stats=1` (enquête), `?stats=1` (panneau de performances, toutes phases), `?memtest=1&qualite=bas` (mesure mémoire, lue par `scripts/memtest.mjs`). Accroches de dev dans la console : `__mem()`, `__aim()`, `__aimAt()`, `__mission()`, `__decor()`.
 - **Captures et pilotage** : `scripts/shots.mjs` (cinématiques), `scripts/verif-mission.mjs` (campagne), `scripts/capture-mission.mjs` (captures déterministes, à comparer à l'octet) et `scripts/memtest.mjs` (mesure mémoire et triangles, seuils du lot 1 avec `--check` ; mode d'emploi dans `docs/superpowers/specs/annexes/README.md`), Chrome sans interface, chemin `--screenshot` absolu, `--user-data-dir` jetable, **jamais de port de débogage fixe** (`--remote-debugging-port=0`, port relu dans `DevToolsActivePort`) : un port fixe a déjà fait piloter par erreur le navigateur d'une autre session. Si le volet du navigateur intégré est caché, `requestAnimationFrame` ne tourne pas : tester le rendu par captures sans interface.
 - **Worktrees** : ne pas mettre `node_modules` en jonction, ou retirer la jonction (`cmd /c rmdir`) avant `git worktree remove`, qui la suit et vide le `node_modules` du dépôt principal.
 - Style « dossier du fixeur » : Anton (le fixeur) n'est jamais vu et ne dit jamais « tu entres » ; Viktor tire toujours de loin et en hauteur.

@@ -29,6 +29,7 @@ Toutes celles des lots 0 et 1 (`docs/superpowers/plans/2026-10-07-lot0-correctio
 - [x] Vérification réelle : Chrome sans interface sur `?enquete=1&indices=5`, dernier indice examiné puis fiche fermée, captures de la séquence (réplique, lueur, fiche ouverte) regardées. Chrome sans interface refuse le verrouillage du pointeur : il est simulé dans la page pour le parcours au regard libre (pivot vu, puis fiche ouverte, maintien, cinématique B) ; caméra figée devant la console pour la lueur ; effets atténués : pas de pivot ; REPOSER à 4 indices.
 - [x] `docs/superpowers/REPRISE.md` : la question ouverte du téléphone est réglée (REPOSER), la fin de l'enquête décrite en une ligne dans « Où on en est », nombre de tests attendu.
 - [x] Commit : `feat(enquete): après le sixième indice, le téléphone vibre et la fiche s'ouvre, écouter se fait en maintenant, le téléphone se repose`
+- [x] Relecture de E2 : les touches affichées (E de l'invite, de la carte, de FERMER et de MAINTENIR ; R de REPOSER) suivent la disposition du clavier, mises à jour si elle arrive fiche ouverte ; en effets atténués, ni secousse ni grain à pleine hausse à l'ouverture d'une fiche. Témoins rouges. Notés pour plus tard (spec, précisions de la relecture de E2, et REPRISE.md) : la frappe et la voix d'une réplique en pause, le pivot qui finit sur un mur d'une autre pièce (à juger en jeu).
 
 ## Critères de fin
 

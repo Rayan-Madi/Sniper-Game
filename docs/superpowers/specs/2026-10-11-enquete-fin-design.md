@@ -90,6 +90,12 @@ Précisions arrêtées à la tâche E2 (`investigation.js`, `ambience.js`, `apar
 - REPOSER : la touche physique R (`e.code === 'KeyR'`), son libellé lu dans la carte du clavier, ou le clic droit ; affiché seulement tant que la fiche peut se fermer, en action secondaire, plus discrète, qui ne bat pas ;
 - le coup de pouce : une salve et sa lueur quand la piste qui tombe est celle du téléphone et qu'il est déverrouillé.
 
+Précisions arrêtées à la relecture de E2 :
+- toutes les touches affichées suivent la disposition du clavier, comme REPOSER : E de l'invite de visée, de la carte de départ, de FERMER et de MAINTENIR (la touche physique reste `KeyE`). Quand la carte du clavier arrive après l'ouverture d'une fiche, les libellés déjà affichés sont mis à jour sans attendre une autre ouverture ;
+- effets atténués : le glitch à l'ouverture d'une fiche (celle du téléphone qui s'ouvre d'elle-même comprise) ne secoue plus le voile, et son grain ne monte que d'un tiers de sa hausse, comme les glitchs des cinématiques (lot 1 §4.5) ; son son reste ;
+- limite connue, gardée pour plus tard : la pause suspend la séquence, mais pas la frappe d'une réplique en cours, sa voix bipée ni la durée d'affichage du sous-titre (minuteurs réels, comme les pistes et les fiches avant cette spec). Après une longue pause pendant « J'en ai assez vu. », la réplique peut être finie, voire effacée. Suite possible : faire avancer la frappe et la voix au temps de jeu ;
+- à juger en jeu par Rayan : d'une autre pièce, le pivot vers le bruit finit sur un mur (le téléphone est hors de vue) ; la fiche qui s'ouvre aussitôt montre le téléphone allumé, vu de l'entrée. Piste si ça gêne : ne pivoter que si le téléphone est en vue (rayon contre les murs), sinon garder le regard fixe, comme en effets atténués.
+
 ## 4. Tests
 
 Témoin rouge pour chaque comportement (leçon des tests qui mentent) :
