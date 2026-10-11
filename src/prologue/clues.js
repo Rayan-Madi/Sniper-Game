@@ -18,4 +18,9 @@ export const PHONE = {
   viktor: ['Ce jour-là, j\'avais oublié mon téléphone.', 'Elle m\'a appelé. Il était là, en silencieux.'],
   piste: 'Mon téléphone… dans l\'entrée.',
   action: 'ÉCOUTER LE MESSAGE',
+  // la fin, une fois les 6 indices trouvés (spec docs/superpowers/specs/2026-10-11-enquete-fin-design.md §3.5)
+  fin: 'J\'en ai assez vu.',
+  vibre: 'Le téléphone…',
+  notif: '1 NOUVEAU MESSAGE',
+  reposer: 'REPOSER',
 }

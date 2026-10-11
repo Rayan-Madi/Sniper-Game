@@ -70,6 +70,13 @@ Les répliques restent modifiables à un seul endroit (Rayan avait proposé « j
 - `apartment.js` : accès à l'écran du téléphone pour la lueur (le matériau a déjà `userData.baseEmissive`) ; la lueur revient à sa valeur de base après la vibration.
 - `enquete.css` : anneau de maintien, deuxième action de la fiche.
 
+Précisions arrêtées à la tâche E1 (`state.js`) :
+- le mode `ending` couvre la séquence ; ses étapes : `silence` (0,8 s), `line` (la réplique, le temps de sa voix, `estimate` des cinématiques), `breath` (0,6 s), `buzz` (1,2 s), `turn` (1,2 s, absente en effets atténués), puis `phone` (mode `examining` sur le téléphone). Avec la vraie réplique, la fiche s'ouvre à 5,2 s (4,0 s en effets atténués) ;
+- `state.ending` donne l'étape, le temps écoulé, l'avancement de l'étape (le pivot s'en sert) et la liste des étapes entrées, dans l'ordre : aucune n'est sautée, même par une image très longue ;
+- effets atténués : la fiche s'ouvre à la fin de l'étape `buzz`, 1,2 s après le début de la vibration ; le réglage est lu au début de la séquence (`reducedMotion` accepte une fonction) ;
+- les 6 indices trouvés, la fiche du téléphone ne se ferme plus, même par `close()` : on en sort en écoutant, ou par PASSER L'ENQUÊTE depuis la pause ;
+- route `?indices=6` : la séquence part à la fermeture de la première fiche d'indice relue.
+
 ## 4. Tests
 
 Témoin rouge pour chaque comportement (leçon des tests qui mentent) :

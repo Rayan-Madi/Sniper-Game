@@ -13,9 +13,9 @@ Toutes celles des lots 0 et 1 (`docs/superpowers/plans/2026-10-07-lot0-correctio
 ### Tâche E1 : état et données
 
 **Fichiers :** `src/prologue/state.js`, `src/prologue/clues.js`, `tests/prologue/state.test.js`.
-- [ ] `PHONE.fin`, `PHONE.vibre`, `PHONE.notif`, `PHONE.reposer` (§3.5 de la spec).
-- [ ] `allFound`, `phoneCanPutDown`, sous-état de fin piloté par `tick` (étapes du §3.1, temps de jeu seulement, rien pendant la pause), passage en `examining` sur le téléphone à la fin ; REPOSER refusé après les 6 indices. Témoins rouges.
-- [ ] Commit : `feat(enquete): l'enquête sait qu'elle est finie quand les six indices sont trouvés`
+- [x] `PHONE.fin`, `PHONE.vibre`, `PHONE.notif`, `PHONE.reposer` (§3.5 de la spec).
+- [x] `allFound`, `phoneCanPutDown`, sous-état de fin piloté par `tick` (étapes du §3.1, temps de jeu seulement, rien pendant la pause), passage en `examining` sur le téléphone à la fin ; REPOSER refusé après les 6 indices. Témoins rouges.
+- [x] Commit : `feat(enquete): l'enquête sait qu'elle est finie quand les six indices sont trouvés`
 
 ### Tâche E2 : la séquence, le maintien, REPOSER, le coup de pouce
 
