@@ -137,7 +137,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
 
   let apartment = null, scene = null, state = null, controller = null, interact = null, amb = null
   let saved = null, savedAuto = null, style = null, ui = null, $ = () => null
-  let ready = false, started = false, ending = false, stopped = false, reported = false
+  let ready = false, started = false, fadingOut = false, stopped = false, reported = false
   let glitchTimer = 0, subTimer = 0, lineTimer = 0, retryTimer = 0, actTimer = 0
   let phoneOpenedAt = 0  // horodatage (performance.now) de l'ouverture de la fiche du téléphone
   const listening = []   // [cible, type, fonction] à retirer au démontage
@@ -281,7 +281,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
   // E ou clic gauche : examiner ce qu'on vise, fermer la fiche, ou écouter le message (pas dans la foulée de
   // l'ouverture : le second clic d'un double-clic sur le téléphone terminait l'enquête par accident)
   function act() {
-    if (!started || ending || stopped) return
+    if (!started || fadingOut || stopped) return
     if (state.mode === 'exploring') { if (interact.current) examine(interact.current) }
     else if (state.mode === 'examining') {
       if (state.current !== PHONE.id) closeFiche()
@@ -306,17 +306,17 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     if (opts.ouvrir) examine(opts.ouvrir)
   }
   function requestLock() {
-    if (stopped || ending) return
+    if (stopped || fadingOut) return
     if (locked()) onLockChange(); else controller.lock(renderer.domElement)
   }
   // REPRENDRE : si le verrou n'est pas revenu au bout de RETRY_MS, le dire (sinon le clic semble perdu)
   function resume() {
     requestLock()
     cancel(retryTimer)
-    retryTimer = at(RETRY_MS, () => { retryTimer = 0; if (!stopped && !ending && !locked() && !$('#enq-pause').hidden) $('#enq-retry').hidden = false })
+    retryTimer = at(RETRY_MS, () => { retryTimer = 0; if (!stopped && !fadingOut && !locked() && !$('#enq-pause').hidden) $('#enq-retry').hidden = false })
   }
   function onLockChange() {
-    if (stopped || ending || !locked()) return     // la perte du verrou passe par onUnlock du contrôleur
+    if (stopped || fadingOut || !locked()) return     // la perte du verrou passe par onUnlock du contrôleur
     $('#enq-card').hidden = true; $('#enq-pause').hidden = true
     $('#enq-retry').hidden = true; cancel(retryTimer); retryTimer = 0
     state.resume()
@@ -324,7 +324,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     if (!started) begin()
   }
   function pause() {
-    if (!started || ending || stopped || cam) return
+    if (!started || fadingOut || stopped || cam) return
     state.pause()
     controller.setFrozen(true)
     aim(false)
@@ -332,8 +332,8 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     $('#enq-pause').hidden = false
   }
   function finish(result) {
-    if (ending || stopped) return
-    ending = true
+    if (fadingOut || stopped) return
+    fadingOut = true
     if (state) state.finish(result)
     const black = $('#enq-black')
     if (black) { black.classList.add('end'); black.classList.remove('off') }
@@ -355,7 +355,7 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
   function fail(error) {
     console.error('[enquête]', error)
     if (stopped) return
-    if (!ending) { ending = true; if (state) state.finish('error') }
+    if (!fadingOut) { fadingOut = true; if (state) state.finish('error') }
     stop()
     report({ result: 'error', error })
   }
@@ -471,12 +471,12 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
       dt = Math.min(Math.max(dt || 0, 0), 0.1)
       apartment.update(dt)
       if (cam) { controller.setPose(cam); controller.update(0) }
-      else controller.update(started && !ending && state.mode === 'exploring' && locked() ? dt : 0)
+      else controller.update(started && !fadingOut && state.mode === 'exploring' && locked() ? dt : 0)
       scene.updateMatrixWorld()   // la visée lit les matrixWorld des cibles (sans rendu préalable, elles valent l'identité)
-      const exploring = started && !ending && state.mode === 'exploring'
+      const exploring = started && !fadingOut && state.mode === 'exploring'
       if (exploring) aim(!!interact.update())
       else aim(false)
-      if (started && !ending) {
+      if (started && !fadingOut) {
         const c = apartment.anchors.corps, p = controller.position
         if (c) amb.setProximity(1 - (Math.hypot(p.x - c.x, p.z - c.z) - 1.5) / 6)
         const hint = state.tick(dt, p)
