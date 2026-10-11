@@ -191,7 +191,9 @@ export function startInvestigation({ renderer, camera, audio = null, root = docu
     sub.classList.remove('on')
   }
 
+  // glitch à l'ouverture d'une fiche : en effets atténués, ni secousse ni grain à pleine hausse (le son reste)
   function glitch() {
+    ui.classList.toggle('enq-reduced', !!effectsReduced())
     ui.classList.add('gl'); amb.glitch()
     cancel(glitchTimer)
     glitchTimer = at(GLITCH_MS, () => { glitchTimer = 0; ui.classList.remove('gl') })

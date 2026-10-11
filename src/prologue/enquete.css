@@ -10,6 +10,10 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
 .enq.gl .enq-grain { opacity: .3; }
 .enq.gl .enq-fx { animation: enq-shake .25s steps(3); }
+/* effets atténués (classe enq-reduced, posée à chaque glitch selon le réglage), comme les glitchs des cinématiques (lot 1
+   §4.5) : pas de secousse, et le grain ne monte que d'un tiers de sa hausse, .08 + (.3 - .08) / 3 */
+.enq.enq-reduced.gl .enq-fx { animation: none; }
+.enq.enq-reduced.gl .enq-grain { opacity: .15; }
 @keyframes enq-grain { 0% { transform: translate(0,0) } 25% { transform: translate(-3%,2%) } 50% { transform: translate(2%,-3%) } 75% { transform: translate(-2%,-1%) } }
 @keyframes enq-shake { 0%,100% { transform: none } 33% { transform: translate(-.4vw,.2vh) } 66% { transform: translate(.3vw,-.3vh) } }
 @keyframes enq-blink { 50% { opacity: 0 } }

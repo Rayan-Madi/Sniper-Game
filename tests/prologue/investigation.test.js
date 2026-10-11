@@ -864,7 +864,7 @@ describe('l\'enquête : la fin, écouter, reposer, le coup de pouce', () => {
   })
 })
 
-// ── relecture de E2 : les touches affichées suivent la disposition du clavier ──
+// ── relecture de E2 : les touches affichées suivent la disposition du clavier ; la secousse des fiches en effets atténués ──
 describe('l\'enquête : relecture de E2', () => {
   afterEach(() => { settings.reducedMotion = 'auto'; delete navigator.keyboard })
   // Dvorak : la touche physique E écrit « . », la touche R écrit « p »
@@ -904,5 +904,28 @@ describe('l\'enquête : relecture de E2', () => {
     expect(act.textContent).toMatch(/P\s*:\s*REPOSER/)
     expect($('#enq-fiche .enq-act .enq-key .enq-ring')).not.toBeNull()
     h.stop()
+  })
+
+  // Lot 1 §4.5 : aucune secousse en effets atténués, et le grain d'un glitch ne monte que d'un tiers. Feuille réelle
+  // injectée (sous Vitest, l'import ?raw revient vide) : jsdom en calcule les règles sans les animer.
+  it('effets atténués : une fiche s\'ouvre sans secouer le voile, son grain ne monte que d\'un tiers (sans le réglage : secousse, garde-fou)', async () => {
+    const open = async reduced => {
+      settings.reducedMotion = reduced ? 'oui' : 'non'
+      const h = startInvestigation({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn(), options: { cam: START, ouvrir: 'serrure' } })
+      $('#enq-css').textContent = css
+      const fx = $('.enq-fx'), grain = $('.enq-grain')
+      const during = { animation: getComputedStyle(fx).animation, grain: +getComputedStyle(grain).opacity }
+      await vi.advanceTimersByTimeAsync(300)                   // le glitch fini
+      const rest = +getComputedStyle(grain).opacity
+      h.stop()
+      return { ...during, rest }
+    }
+    const normal = await open(false)
+    expect(normal.animation).toMatch(/enq-shake/)
+    expect([normal.rest, normal.grain]).toEqual([0.08, 0.3])   // garde-fou : les valeurs de la feuille
+    const calm = await open(true)
+    expect(calm.animation).not.toMatch(/enq-shake/)
+    expect(calm.rest).toBe(normal.rest)
+    expect(calm.grain).toBeCloseTo(normal.rest + (normal.grain - normal.rest) / 3, 2)
   })
 })
