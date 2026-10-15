@@ -23,8 +23,10 @@ describe('l\'appartement', () => {
   // budget relevé par le prologue v2 (spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §5, au lieu de 47 et
   // 16 600) : toujours fusionné par matériau. Mesuré par stats() après l'architecture intérieure et sa relecture :
   // 48 objets, 27 398 triangles (en jeu : 45 appels, 27 294 triangles au départ) ; après le mobilier (N4) : 50 objets
-  // (le velours du fauteuil, les images aux murs), 42 962 triangles (en jeu : 47 appels, 42 858 triangles au départ).
-  // Toute hausse est un choix assumé : mettre ce test à jour en même temps que REPRISE.md.
+  // (le velours du fauteuil, les images aux murs), 42 962 triangles (en jeu : 47 appels, 42 858 triangles au départ) ;
+  // après sa relecture (l'écharpe pliée au crochet), 43 218 triangles (en jeu : 47 appels, 43 114 triangles au départ).
+  // Il reste environ 1 800 triangles : une tâche qui ajoute de la géométrie en retire ailleurs, ou relève le budget
+  // par une décision écrite. Toute hausse est un choix assumé : mettre ce test à jour en même temps que REPRISE.md.
   it('tient le budget relevé : au plus 80 objets dessinés et 45 000 triangles', () => {
     const apt = buildApartment()
     const { drawables, triangles } = apt.stats()
@@ -684,6 +686,59 @@ describe('l\'appartement : le mobilier', () => {
       const off = h ? Math.abs(wall - (d[0] ? h.point.x : h.point.z)) : NaN
       if (!h || !h.object.material.map || !(off >= 0.003 && off <= 0.06)) bad.push(`${lieu} : ${h ? `${h.object.material.name}, à ${r3(off)} m du mur` : 'rien'}`)
     }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  // l'écharpe de la petite, pendue à la patère de l'entrée (crochet en x = 5,25, mur en z = 4,56) : deux plaques planes
+  // de 13 cm, aussi larges en haut qu'en bas, se lisaient comme deux planches, presque un rideau (relecture de N4)
+  it('l\'écharpe de la petite pend comme un tissu : des plis sur sa largeur, ramassée au crochet, des franges au bout', () => {
+    const apt = buildApartment(), { first } = probes(apt), bad = []
+    const RED = new THREE.Color(0x9a3440)
+    // profondeur (z) de l'écharpe vue de face, depuis l'entrée ; null si le rayon touche autre chose
+    const scarfZ = (x, y) => {
+      const h = first([x, y, 5.0], [0, 0, -1], 1)
+      const c = h && h.object.material.name === 'livres' && h.object.geometry.attributes.color
+      if (!c) return null
+      const i = h.face.a
+      return Math.abs(c.getX(i) - RED.r) + Math.abs(c.getY(i) - RED.g) + Math.abs(c.getZ(i) - RED.b) < 0.01 ? h.point.z : null
+    }
+    const xs = range(5.05, 5.5, 0.002)
+    // suites de points de l'écharpe sans saut de plus de 3 mm (un pan, ou ce qu'on en voit)
+    const pieces = zs => {
+      const out = []; let cur = []
+      zs.forEach((z, i) => {
+        if (z !== null && cur.length && Math.abs(z - cur[cur.length - 1].z) < 0.003) cur.push({ x: xs[i], z })
+        else { if (cur.length) out.push(cur); cur = z === null ? [] : [{ x: xs[i], z }] }
+      })
+      if (cur.length) out.push(cur)
+      return out
+    }
+    // plis : sur la largeur, la surface monte et descend ; une plaque plane, arrondie aux bords, change de pente une fois
+    for (const y of [1.25, 1.35, 1.45]) {
+      let turns = 0
+      for (const p of pieces(xs.map(x => scarfZ(x, y)))) {
+        if (p.length < 15) continue
+        let last = 0
+        for (let i = 1; i < p.length; i++) {
+          const dz = p[i].z - p[i - 1].z, s = Math.abs(dz) > 0.00015 ? Math.sign(dz) : 0
+          if (s && last && s !== last) turns++
+          if (s) last = s
+        }
+      }
+      if (turns < 2) bad.push(`plis en y = ${y} : ${turns} changement(s) de pente`)
+    }
+    // ramassée au crochet : juste sous la patère, bien plus étroite qu'en bas
+    const width = y => { const on = xs.filter(x => scarfZ(x, y) !== null); return on.length ? on[on.length - 1] - on[0] : 0 }
+    const top = width(1.58), low = width(1.25)
+    if (!(low > 0.1 && top <= 0.6 * low)) bad.push(`largeur sous le crochet ${r3(top)}, en bas ${r3(low)}`)
+    // franges : sous le bout d'un pan, au moins quatre brins séparés, de 12 mm de large au plus
+    let strands = 0
+    for (const y of range(0.95, 1.25, 0.01)) {
+      const runsHere = pieces(xs.map(x => scarfZ(x, y)))
+      if (runsHere.every(p => p[p.length - 1].x - p[0].x <= 0.012)) strands = Math.max(strands, runsHere.length)
+    }
+    if (strands < 4) bad.push(`franges : ${strands} brin(s)`)
     expect(bad).toEqual([])
     apt.dispose()
   })

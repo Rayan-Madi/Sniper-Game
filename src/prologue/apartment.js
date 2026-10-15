@@ -212,6 +212,27 @@ function duvet(cx, z0, z1, half, y0, yLow, seed) {
   g.computeVertexNormals()
   return g
 }
+// Écharpe pendue à un crochet : une bande de tissu d'épaisseur t tirée le long d'un chemin, du bout du pan de devant,
+// par-dessus le crochet, jusqu'au bout du pan de derrière ; une seule pièce fermée (boîte de nu × ns segments déformée).
+// path(s) → point du milieu de la bande (s de 0 à 1, une rangée tous les 1 / ns) ; wide(s) sa largeur ; folds(u, s) l'écart
+// des plis le long de la normale (u de −1 à 1 en travers, qui suit l'axe x du monde). Aux deux bouts, n brins de franges
+// pendent tout droit. Rend la bande puis les brins.
+function scarf(path, wide, folds, t, nu, ns, n, seed) {
+  const T = new THREE.Vector3(), X = new THREE.Vector3(), N = new THREE.Vector3()
+  const at = (u, s, k) => {
+    const P = path(s)
+    T.subVectors(path(Math.min(1, s + 1e-4)), path(Math.max(0, s - 1e-4))).normalize()
+    X.set(1, 0, 0).addScaledVector(T, -T.x).normalize()   // en travers, perpendiculaire au chemin
+    N.crossVectors(X, T)                                   // repère direct : la boîte garde ses faces vers l'extérieur
+    return P.addScaledVector(X, u * wide(s) / 2).addScaledVector(N, k * t + folds(u, s))
+  }
+  const out = [warp(new THREE.BoxGeometry(1, 1, 1, nu, ns, 1), (x, y, z) => at(x * 2, y + 0.5, z).toArray())], rnd = makeRnd(seed)
+  for (const s of [0, 1]) for (let i = 0; i < n; i++) {
+    const p = at(((i + 0.5) / n * 2 - 1) * 0.9, s, 0), len = 0.03 + 0.012 * rnd()
+    out.push(new THREE.BoxGeometry(0.005, len, 0.004).translate(0, -len / 2, 0).rotateZ((rnd() - 0.5) * 0.25).translate(p.x, p.y + 0.003, p.z))
+  }
+  return out
+}
 // Image w × h, face +z, aux UV recadrées sur le rectangle [x, y, largeur, hauteur] (pixels) de la planche des images.
 const PIC_W = 1024, PIC_H = 512
 function pictureGeo(w, h, [x, y, rw, rh]) {
@@ -1079,7 +1100,7 @@ export function buildApartment() {
   B.add(M.boisSombre, rounded(0.03, 0.82, 0.62, 0.012), { x: 4.575, y: 1.55, z: 6.35 })
   const mirror = new THREE.BoxGeometry(0.006, 0.72, 0.52); mirror.translate(4.594, 1.55, 6.35); B.add(M.miroir, mirror)
   {   // la patère, sur le mur de la cuisine : le ciré jaune de la petite pendu par sa capuche, son écharpe, ses bottes dessous
-    const zf = 4.5 + T / 2, YELLOW = 0xb08a2c, RED = 0x7a2830
+    const zf = 4.5 + T / 2, YELLOW = 0xb08a2c, RED = 0x9a3440
     B.add(M.boisSombre, rounded(0.66, 0.08, 0.022, 0.008), { x: 5.05, y: 1.64, z: zf + 0.011 })
     for (const x of [4.85, 5.05, 5.25]) {
       B.add(brass, rod(V(x, 1.625, zf + 0.02), V(x, 1.625, zf + 0.07), 0.005, 6)); B.add(brass, rod(V(x, 1.625, zf + 0.07), V(x, 1.655, zf + 0.082), 0.005, 6))
@@ -1088,10 +1109,22 @@ export function buildApartment() {
     B.add(M.livres, tint(warp(cushion(0.34, 0.07, 0.5, 0.45, 0.3), (x, y, z) => [x * (0.98 + 0.4 * z), y, z]), YELLOW), { x: 4.85, y: 1.36, z: zf + 0.046, rx: Math.PI / 2 })
     for (const s of [-1, 1]) B.add(M.livres, tint(between(new THREE.CapsuleGeometry(0.03, 0.3, 3, 8), V(4.85 + s * 0.14, 1.55, zf + 0.05), V(4.85 + s * 0.18, 1.2, zf + 0.056)), YELLOW))
     B.add(M.livres, tint(cushion(0.19, 0.09, 0.2, 0.6, 0.5), YELLOW), { x: 4.85, y: 1.6, z: zf + 0.058, rx: Math.PI / 2 + 0.35 })
-    // l'écharpe : les deux pans, et le tour du crochet
-    B.add(M.livres, tint(rounded(0.13, 0.62, 0.014, 0.006), RED), { x: 5.22, y: 1.33, z: zf + 0.03, rz: 0.04 })
-    B.add(M.livres, tint(rounded(0.12, 0.56, 0.014, 0.006), RED), { x: 5.3, y: 1.36, z: zf + 0.022, rz: -0.03 })
-    B.add(M.livres, tint(cushion(0.17, 0.05, 0.1, 0.7, 0.4), RED), { x: 5.25, y: 1.63, z: zf + 0.05 })
+    // l'écharpe, pliée sur le crochet de droite (sa tige court en y = 1,625, de 2 à 7 cm du mur) : le pan de devant
+    // descend jusqu'à 1,06 m et dérive à gauche, celui de derrière, plus court, à droite, entre le mur et l'autre pan.
+    // Ramassée au crochet (4,5 cm), elle s'ouvre à 12 cm en 25 cm de chute ; des plis courent sur sa longueur, à peine
+    // marqués au pli du crochet ; des franges à ses deux bouts.
+    {
+      const C = V(5.25, 1.618, zf + 0.045), r = 0.017, a = 9 / 22, b = 14 / 22   // rangées : 9 au pan de devant, 5 au pli, 8 derrière
+      const F0 = V(5.218, 1.06, zf + 0.047), F1 = V(C.x, C.y, C.z + r), B1 = V(C.x, C.y, C.z - r), B0 = V(5.29, 1.12, zf + 0.024)
+      const Lf = F0.distanceTo(F1), Lb = B0.distanceTo(B1)
+      const path = s => s <= a ? F0.clone().lerp(F1, s / a)
+        : s < b ? V(C.x, C.y + r * Math.sin(Math.PI * (s - a) / (b - a)), C.z + r * Math.cos(Math.PI * (s - a) / (b - a)))
+          : B1.clone().lerp(B0, (s - b) / (1 - b))
+      const drop = s => s <= a ? (a - s) / a * Lf : s < b ? 0 : (s - b) / (1 - b) * Lb       // chute depuis le crochet
+      const geos = scarf(path, s => 0.045 + 0.075 * smooth(0, 0.25, drop(s)),
+        (u, s) => 0.006 * smooth(0, 0.1, drop(s)) * Math.sin(u * 1.5 * Math.PI + 0.6 + 2.5 * s), 0.008, 6, 22, 5, 83)
+      for (const g of geos) B.add(M.livres, tint(g, RED))
+    }
     // les bottes de pluie, sous le ciré
     for (const [x, z, ry] of [[4.8, zf + 0.13, 0.1], [4.93, zf + 0.115, -0.15]]) {
       B.add(M.livres, tint(rounded(0.075, 0.17, 0.085, 0.025), YELLOW), { x, y: 0.135, z, ry })
