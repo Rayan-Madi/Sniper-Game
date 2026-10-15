@@ -222,13 +222,48 @@ describe('l\'appartement : l\'écran du téléphone', () => {
 const H = 2.6, V3 = (...a) => new THREE.Vector3(...a)
 const r3 = v => Math.round(v * 1000) / 1000
 const visible = o => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true }
-function probes(apt) {
+// Les maillages réduits aux triangles dont la boîte englobante touche `box` (THREE.Box3, coordonnées du monde), posés
+// dans le monde, avec leur matériau (donc leur face visible), leurs couleurs de sommet et leur ordre. Un point d'impact
+// situé dans `box` appartient à un triangle qui touche `box` : un rayon qui reste dans la boîte touche donc exactement
+// ce qu'il toucherait dans tout l'appartement, sans tester ses 43 000 triangles.
+function crop(meshes, box) {
+  const out = [], v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()], tri = new THREE.Box3()
+  for (const m of meshes) {
+    if (Array.isArray(m.material)) throw new Error(`crop : ${m.name} a plusieurs matériaux`)
+    const g = m.geometry, pos = g.attributes.position, col = g.attributes.color, idx = g.index
+    const flip = m.matrixWorld.determinant() < 0   // un miroir retourne le sens des triangles
+    const start = g.drawRange.start, end = Math.min(idx ? idx.count : pos.count, start + g.drawRange.count)
+    const P = [], C = []
+    for (let i = start; i < end; i += 3) {
+      const ids = [i, i + 1, i + 2].map(k => idx ? idx.getX(k) : k)
+      ids.forEach((k, j) => v[j].fromBufferAttribute(pos, k).applyMatrix4(m.matrixWorld))
+      if (!box.intersectsBox(tri.setFromPoints(v))) continue
+      for (const j of flip ? [0, 2, 1] : [0, 1, 2]) {
+        P.push(v[j].x, v[j].y, v[j].z)
+        if (col) C.push(col.getX(ids[j]), col.getY(ids[j]), col.getZ(ids[j]))
+      }
+    }
+    if (!P.length) continue
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
+    if (col) geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3))
+    out.push(new THREE.Mesh(geo, m.material))
+  }
+  return out
+}
+
+// box (facultatif) : ne sonder que dans cette boîte, bien plus vite ; un rayon qui en sortirait est une erreur
+function probes(apt, box = null) {
   apt.group.updateMatrixWorld(true)
-  const meshes = []; apt.group.traverse(o => { if (o.isMesh && !o.material.transparent && visible(o)) meshes.push(o) })
+  let meshes = []; apt.group.traverse(o => { if (o.isMesh && !o.material.transparent && visible(o)) meshes.push(o) })
+  if (box) meshes = crop(meshes, box)
   const ray = new THREE.Raycaster()
   // premier objet opaque touché depuis o dans la direction d (undefined si rien avant far)
   const first = (o, d, far = 10) => {
     ray.set(new THREE.Vector3(...o), new THREE.Vector3(...d).normalize()); ray.near = 0; ray.far = far
+    if (box && !(box.containsPoint(ray.ray.origin) && box.containsPoint(ray.ray.at(far, new THREE.Vector3())))) {
+      throw new Error(`sonde hors de sa boîte : de ${o} vers ${d} sur ${far} m`)
+    }
     return ray.intersectObjects(meshes, false)[0]
   }
   // distance au premier objet opaque, depuis o dans la direction d (Infinity si rien avant far)
@@ -692,8 +727,10 @@ describe('l\'appartement : le mobilier', () => {
 
   // l'écharpe de la petite, pendue à la patère de l'entrée (crochet en x = 5,25, mur en z = 4,56) : deux plaques planes
   // de 13 cm, aussi larges en haut qu'en bas, se lisaient comme deux planches, presque un rideau (relecture de N4)
+  // Près de 8 000 rayons : sondés contre tout l'appartement, ils prenaient 12 s (plus de 20 s sous la charge de la suite) ;
+  // tous restent dans la boîte de la patère, le décor est donc réduit aux triangles qui la touchent.
   it('l\'écharpe de la petite pend comme un tissu : des plis sur sa largeur, ramassée au crochet, des franges au bout', () => {
-    const apt = buildApartment(), { first } = probes(apt), bad = []
+    const apt = buildApartment(), { first } = probes(apt, new THREE.Box3(V3(5.0, 0.9, 3.95), V3(5.55, 1.65, 5.05))), bad = []
     const RED = new THREE.Color(0x9a3440)
     // profondeur (z) de l'écharpe vue de face, depuis l'entrée ; null si le rayon touche autre chose
     const scarfZ = (x, y) => {
