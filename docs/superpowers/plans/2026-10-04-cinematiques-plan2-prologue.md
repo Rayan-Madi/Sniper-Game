@@ -1,5 +1,7 @@
 # Cinématiques — Plan 2 : le prologue en motion design et le nettoyage de l'ancienne 3D
 
+> **Historique.** Depuis le prologue v2 du 11 octobre 2026 (spec `docs/superpowers/specs/2026-10-11-prologue-v2-design.md`), Anton ne laisse plus de message à 18:52 : le message est celui de sa femme (MAISON, 19:04), Anton appelle à 22:41 et envoie le dossier. Ce plan décrit la version exécutée le 4 octobre.
+
 > **Pour les agents :** sous-compétence requise : superpowers:subagent-driven-development (recommandé) ou superpowers:executing-plans. Les étapes utilisent des cases (`- [ ]`).
 
 **But :** remplacer l'intro 3D du jeu par les deux cinématiques du prologue en motion design (A « l'offre », B « le rappel »), jouées une fois par campagne, puis supprimer l'ancien code de cinématique 3D devenu mort.

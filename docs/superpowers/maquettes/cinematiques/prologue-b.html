@@ -2,10 +2,11 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<title>Prologue B — Le rappel</title>
+<title>Prologue B · L'appel</title>
 <link rel="stylesheet" href="kit.css">
 <style>
-  /* PROLOGUE B — « Le rappel ». POV de Viktor : la messagerie, le rappel, Anton, le tableau de chasse. */
+  /* PROLOGUE B : « L'appel » (prologue v2, spec 2026-10-11-prologue-v2 §2). POV de Viktor : le message de sa femme,
+     le silence, l'appel d'Anton (sans un mot de trop), le dossier qu'il envoie, le tableau de chasse. */
   .pro { --amb: #f2b36b; --amb2: #ffd9a0; --red: #e04848; --pol: #f2c21b; --wh: #f1f4ea; --dim: rgba(215,220,207,.55); }
   .pro .shot { position: absolute; inset: 0; opacity: 0; overflow: hidden; transition: opacity .3s; }
   .pro .shot.on { opacity: 1; }
@@ -47,10 +48,17 @@
   .pro .rpose { position: absolute; inset: 0; transform-origin: 50% 70%; transition: transform .9s cubic-bezier(.2,.8,.2,1);
       transform: perspective(80cqw) translateY(56cqw) rotateX(16deg) rotateY(-20deg) rotateZ(-12deg); }
   .pro .rig.on .rpose { transform: perspective(80cqw) rotateX(6deg) rotateY(-14deg) rotateZ(-4deg); }
+  /* le silence : le téléphone retombe dans la main, l'écran à demi sorti du cadre */
+  .pro .rig.on.low .rpose { transform: perspective(80cqw) translate(-2cqw, 31cqw) rotateX(20deg) rotateY(-20deg) rotateZ(-11deg); transition-duration: 1.6s; }
+  /* devant le tableau : le téléphone tenu plus bas, à droite, sans cacher les fiches */
+  .pro .rig.aside .rpose { transform: perspective(80cqw) translate(21cqw, 60cqw) rotateX(14deg) rotateY(-18deg) rotateZ(-2deg) scale(.78); }
+  .pro .rig.on.aside .rpose { transform: perspective(80cqw) translate(21cqw, 3cqw) rotateX(6deg) rotateY(-16deg) rotateZ(3deg) scale(.78); }
   .pro .rig svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .pro .rig .mob { left: 7cqw; top: 0; }
   .pro #thumb { transform-box: view-box; transform-origin: 305px 500px; transition: transform .28s cubic-bezier(.4,0,.2,1); }
   .pro .rig.press #thumb { transform: rotate(-21deg) scale(.97); }
+  /* décrocher : le pouce monte sur le bouton vert, à droite (classe take : « acc » est déjà celle du bouton) */
+  .pro .rig.take #thumb { transform: translate(-12px, -15px) rotate(-2deg); }
 
   /* téléphone (un seul exemplaire : celui en main) */
   /* isolation : les z-index internes (journal, reflet, encoche) restent DANS le téléphone ; les doigts et le pouce repassent devant */
@@ -110,19 +118,36 @@
   /* ── la main gantée du tableau (ombre et cadrage du SVG) ── */
   .pro .bhand svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(.8cqw 1.2cqw 1cqw rgba(0,0,0,.55)); }
 
-  /* ── le rappel : messagerie, appel sortant, décroché ── */
-  .pro .p-st .s2, .pro .p-st .s3 { display: none; }
-  .pro .mob.dial .p-st .s1, .pro .mob.ans .p-st .s1 { display: none; }
-  .pro .mob.dial .p-st .s3 { display: inline; color: #8fd19e; }
+  /* ── l'appel : appel entrant (.ring), décroché (.ans), raccroché (.end) ; écran en veille (.dim) ── */
+  .pro .p-st .s2 { display: none; }
+  .pro .mob.ans .p-st .s1 { display: none; }
   .pro .mob.ans .p-st .s2 { display: inline; }
-  /* appel sortant : pas encore de minuterie ; les boutons attendent, grisés, et s'allument au décroché */
   .pro .p-row { transition: opacity .3s; }
-  .pro .mob.dial .p-tm { opacity: 0; }
-  .pro .mob.dial .p-row { opacity: .4; }
+  .pro .scr { transition: filter .8s; }
+  .pro .mob.dim .scr { filter: brightness(.3); }
+  /* appel entrant : le téléphone vibre (il est en silencieux), refuser à gauche, décrocher à droite */
+  .pro .mob.ring, .pro .mob.bz { animation: pro-vib .09s steps(2) infinite; }
+  @keyframes pro-vib { 0% { transform: translate(.18cqw, 0) rotate(.3deg) } 50% { transform: translate(-.18cqw, .05cqw) rotate(-.3deg) } }
+  .pro .mob.ring .p-st .s1 { color: #8fd19e; }
+  .pro .mob.ring .p-row, .pro .mob.ring .p-tm, .pro .mob.ring .p-btn.hang { display: none; }
+  /* à la place de la rangée d'icônes, au-dessus du pouce : le bouton vert reste visible, le pouce n'a qu'à monter */
+  .pro .mob.ring .p-btn.dec, .pro .mob.ring .p-btn.acc { display: flex; top: 24.2cqw; }
   /* ondes autour de l'avatar ; la pose de repos (deux anneaux) reste lisible sur une image figée */
-  .pro .mob.dial .p-av s { opacity: .5; transform: scale(1.16); animation: pro-ringc 1.2s ease-out infinite; }
-  .pro .mob.dial .p-av s + s { opacity: .22; transform: scale(1.34); animation-delay: .6s; }
+  .pro .mob.ring .p-av s { opacity: .5; transform: scale(1.16); animation: pro-ringc 1.2s ease-out infinite; }
+  .pro .mob.ring .p-av s + s { opacity: .22; transform: scale(1.34); animation-delay: .6s; }
   @keyframes pro-ringc { 0% { opacity: .9; transform: scale(1) } 100% { opacity: 0; transform: scale(1.7) } }
+  /* traits de vibration de part et d'autre du téléphone (au-dessus des doigts et du pouce) */
+  .pro .rig svg.vib { inset: auto; top: 5cqw; width: 2.4cqw; height: 10cqw; opacity: 0; }
+  .pro .rig svg.vib.l { left: 3.4cqw; }
+  .pro .rig svg.vib.r { left: 28.2cqw; transform: scaleX(-1); }
+  .pro .mob.ring ~ .vib, .pro .mob.bz ~ .vib { opacity: 1; animation: k-blink .3s steps(2) infinite; }
+  /* effets atténués (classe k-reduced posée par le kit du jeu) : ni tremblement ni clignotement, les traits restent */
+  .pro.k-reduced .mob.ring, .pro.k-reduced .mob.bz, .pro.k-reduced .mob.ring ~ .vib, .pro.k-reduced .mob.bz ~ .vib { animation: none; }
+  /* raccroché : APPEL TERMINÉ à la place de la minuterie, le reste s'éteint */
+  .pro .mob.end .p-tm { opacity: 0; }
+  .pro .mob.end .p-end { opacity: 1; }
+  .pro .mob.end .p-st, .pro .mob.end .p-av, .pro .mob.end .p-nm, .pro .mob.end .p-row, .pro .mob.end .p-in { opacity: .35; }
+  .pro .mob.end .p-btn.hang { transform: scale(.86); filter: brightness(.7) saturate(.6); }
   /* messagerie : remplace l'écran d'appel tant que .vm est posé */
   .pro .p-vm, .pro .p-vr, .pro .p-btn.cb, .pro .p-cbl { opacity: 0; transition: opacity .25s; }
   .pro .mob.vm .p-vm, .pro .mob.vm .p-vr, .pro .mob.vm .p-btn.cb, .pro .mob.vm .p-cbl { opacity: 1; }
@@ -136,19 +161,43 @@
   .pro .vb { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; }
   .pro .vb i { width: .28cqw; border-radius: .14cqw; background: rgba(215,220,207,.28); }
   .pro .vp { position: absolute; inset: 0; clip-path: inset(0 100% 0 0); }
-  .pro .vp.play { clip-path: inset(0 0 0 0); transition: clip-path 3s linear; }
+  /* le message dure 8,5 s (les trois répliques de sa femme et leurs silences) : la piste lue avance avec elles */
+  .pro .vp.play { clip-path: inset(0 0 0 0); transition: clip-path 8.5s linear; }
   .pro .vp .vb i { background: var(--amb); box-shadow: 0 0 .5cqw rgba(242,179,107,.55); }
   .pro .vt { display: flex; justify-content: space-between; margin-top: .6cqw; font-size: 1.05cqw; color: rgba(215,220,207,.5); }
-  /* lecteur : pause (lecture en cours), haut-parleur allumé (le téléphone est tenu devant lui), corbeille — à la place des boutons d'appel */
+  /* lecteur : pause (lecture en cours), haut-parleur allumé (le téléphone est tenu devant lui), corbeille ; à la place des boutons d'appel */
   .pro .p-vr { position: absolute; left: 0; right: 0; top: 24.6cqw; display: flex; justify-content: center; gap: 1.5cqw; }
   .pro .p-vr i { position: relative; width: 3.6cqw; height: 3.6cqw; border-radius: 50%; background: rgba(255,255,255,.1); }
   .pro .p-vr i svg { position: absolute; inset: 22%; width: 56%; height: 56%; }
   .pro .p-vr i.hp { background: rgba(242,179,107,.26); box-shadow: inset 0 0 0 .12cqw rgba(242,179,107,.7); }
   .pro .p-btn.cb { left: 50%; margin-left: -2.2cqw; background: #34c759; }
   .pro .p-cbl { position: absolute; left: 0; right: 0; top: 36.2cqw; text-align: center; font-size: 1.05cqw; letter-spacing: .25em; padding-left: .25em; color: #8fd19e; }
-  /* journal : le message laissé à 18:52 (même pictogramme que l'écran de messagerie) */
+  /* journal : le message laissé par sa femme à 19:04 (même pictogramme que l'écran de messagerie) */
   .pro .lr .vmi { position: absolute; right: 1.3cqw; top: 50%; width: 2.4cqw; height: 1.2cqw; margin-top: -.6cqw; }
   .pro .lr .vmi svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 .3cqw rgba(242,179,107,.5)); }
+
+  /* ── messages : le fil du numéro jetable, la pièce jointe (le dossier), les deux messages tapés ── */
+  .pro .p-sms { position: absolute; left: 0; right: 0; top: 3.3cqw; bottom: 0; background: #0a0f17; z-index: 5; transform: translateY(105%); transition: transform .5s cubic-bezier(.2,.8,.2,1);
+      border-top: 1px solid rgba(215,220,207,.15); }
+  .pro .mob.sms .p-sms { transform: none; }
+  .pro .p-sms h5 { margin: 0; padding: 1cqw 1.3cqw .5cqw; font-size: 1.2cqw; font-weight: normal; letter-spacing: .3em; color: rgba(215,220,207,.55); }
+  .pro .p-sms .sh { display: flex; align-items: center; gap: .8cqw; padding: .4cqw 1.2cqw .8cqw; border-bottom: 1px solid rgba(255,255,255,.07); }
+  .pro .p-sms .sav { flex: none; width: 2.8cqw; height: 2.8cqw; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-style: normal;
+      font-family: Georgia, 'Times New Roman', serif; font-size: 1.6cqw; color: var(--red); background: radial-gradient(circle at 50% 35%, #2c3546, #121722); box-shadow: 0 0 0 .12cqw rgba(215,220,207,.2); }
+  .pro .p-sms .sh b { display: block; min-height: 1.7cqw; font-size: 1.35cqw; letter-spacing: .05em; color: var(--wh); }
+  .pro .p-sms .sh small { display: block; min-height: 1.3cqw; margin-top: .1cqw; font-size: 1cqw; letter-spacing: .14em; color: rgba(215,220,207,.55); }
+  .pro .p-sms .sl { position: absolute; left: 0; right: 0; top: 8cqw; bottom: 3.8cqw; display: flex; flex-direction: column; justify-content: flex-end; gap: .7cqw; padding: 0 1.1cqw .9cqw; overflow: hidden; }
+  .pro .p-sms .bb { display: none; align-self: flex-start; max-width: 82%; padding: .6cqw .85cqw; border-radius: 1cqw 1cqw 1cqw .25cqw; background: #1d2433;
+      color: var(--wh); font-size: 1.2cqw; line-height: 1.35; min-height: 1.6cqw; }
+  .pro .p-sms .bb.on { display: flex; animation: pro-pop .25s cubic-bezier(.2,.8,.2,1); }
+  @keyframes pro-pop { from { opacity: 0; transform: translateY(.8cqw) scale(.94) } }
+  .pro .p-sms .att { align-items: center; gap: .7cqw; padding: .7cqw .9cqw; background: #241d16; box-shadow: inset 0 0 0 .12cqw rgba(242,179,107,.45); transition: background .2s, box-shadow .2s; }
+  .pro .p-sms .att.open { background: #3a2a18; box-shadow: inset 0 0 0 .18cqw rgba(242,179,107,.95), 0 0 1cqw rgba(242,179,107,.35); }
+  .pro .p-sms .att svg { position: static; flex: none; width: 2.4cqw; height: 2.8cqw; }
+  .pro .p-sms .att b { display: block; font-size: 1.3cqw; letter-spacing: .14em; color: var(--amb2); }
+  .pro .p-sms .att small { display: block; margin-top: .15cqw; font-size: 1cqw; letter-spacing: .08em; color: rgba(215,220,207,.6); }
+  .pro .p-sms .sin { position: absolute; left: 1.1cqw; right: 1.1cqw; bottom: 1cqw; height: 2.4cqw; padding-left: 1cqw; border-radius: 1.2cqw; border: .1cqw solid rgba(215,220,207,.2);
+      display: flex; align-items: center; font-size: 1cqw; letter-spacing: .2em; color: rgba(215,220,207,.35); }
 
   /* ── POV 5 : le tableau de chasse ── */
   .pro #sBoard { background: #070707; }
@@ -216,11 +265,9 @@
       -webkit-mask-image: linear-gradient(90deg, transparent, #000 75%); mask-image: linear-gradient(90deg, transparent, #000 75%); }
   .pro .bvig { position: absolute; inset: 0; z-index: 5; pointer-events: none; background: radial-gradient(ellipse at 45% 40%, transparent 50%, rgba(0,0,0,.6) 100%); }
 
-  /* ── radio : canal inconnu, puis « Anton » ── */
+  /* ── radio : le canal de l'appel, allumé quand l'inconnu parle, éteint quand il raccroche
+        (le nom « ANTON » ne s'affiche que sur le téléphone, une fois le contact enregistré) ── */
   .pro .radio { background: rgba(4,5,8,.72); padding: .35cqw .8cqw; border-radius: .3cqw; }
-  .pro .radio .lb2 { display: none; }
-  .pro .radio.named .lb { display: none; }
-  .pro .radio.named .lb2 { display: inline; }
   .pro .radio .dot { color: var(--red); }
   .pro .radio .eq i { background: var(--amb); }
 
@@ -419,6 +466,8 @@
             <path d="M120 470 C170 482 230 482 290 468" fill="none" stroke="rgba(170,180,200,.16)" stroke-width="1.4" stroke-dasharray="4 4"/>
           </svg>
           <div class="mob" id="ph1"></div>
+          <svg class="vib l" viewBox="0 0 24 120"><g fill="none" stroke="rgba(241,244,234,.6)" stroke-width="2" stroke-linecap="round"><path d="M18 30 Q8 60 18 90"/><path d="M8 20 Q-4 60 8 100"/></g></svg>
+          <svg class="vib r" viewBox="0 0 24 120"><g fill="none" stroke="rgba(241,244,234,.6)" stroke-width="2" stroke-linecap="round"><path d="M18 30 Q8 60 18 90"/><path d="M8 20 Q-4 60 8 100"/></g></svg>
           <svg viewBox="0 0 340 620">
             <path d="M58 512 C150 494 270 490 362 504 L370 650 L50 650 Z" fill="url(#pro-slv)"/>
             <path d="M58 512 C150 494 270 490 362 504" fill="none" stroke="rgba(170,180,200,.2)" stroke-width="2"/>
@@ -433,7 +482,7 @@
         </div>
       </div>
 
-      <div class="radio" id="radio"><span class="dot">●</span><span class="lb">CANAL INCONNU · NUMÉRO JETABLE</span><span class="lb2">CANAL INCONNU · « ANTON »</span><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></div>
+      <div class="radio" id="radio"><span class="dot">●</span><span class="lb">CANAL INCONNU · NUMÉRO JETABLE</span><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></div>
       <div class="sub" id="sub"></div>
       <div class="title" id="title"><div class="t1">PROLOGUE</div><div class="ln"></div><div class="t2">SNIPER</div></div>
     </div>
@@ -487,29 +536,44 @@
   const PAUSE = '<svg viewBox="0 0 20 20"><g fill="#e9ecef"><rect x="5" y="4" width="3.4" height="12" rx="1"/><rect x="11.6" y="4" width="3.4" height="12" rx="1"/></g></svg>'
   const BIN = '<svg viewBox="0 0 20 20"><g fill="none" stroke="#e9ecef" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6 H16 M8 6 V4 H12 V6 M6 6 L7 17 H13 L14 6 M9 9 V14 M11 9 V14"/></g></svg>'
   const VMI = '<svg viewBox="0 0 24 12"><g fill="none" stroke="#f2b36b" stroke-width="1.8"><circle cx="5.5" cy="6" r="4"/><circle cx="18.5" cy="6" r="4"/><path d="M5.5 10 H18.5"/></g></svg>'
-  // le téléphone en main : messagerie (.vm), appel sortant (.dial), décroché (.ans), Anton (.ant), journal (.log)
+  // pièce jointe : une chemise cartonnée
+  const FOLDER = '<svg viewBox="0 0 24 28"><path d="M2 5 H10 L12 8 H22 V26 H2 Z" fill="#c9a46a"/><path d="M2 10 H22 V26 H2 Z" fill="#e2c48e"/><path d="M6 15 H18 M6 18.5 H16 M6 22 H14" stroke="#7a5a2a" stroke-width="1.2"/></svg>'
+  // le numéro jetable d'Anton : il a tenté d'appeler à 18:52 (sans message), il appelle à 22:41, puis il envoie le dossier
+  const NUM = '06 39 98 41 07'
+  // le téléphone en main : messagerie (.vm), appel entrant (.ring), décroché (.ans), raccroché (.end), Anton (.ant),
+  // journal (.log), messages (.sms), écran en veille (.dim), vibration d'un message (.bz)
   const phone = (id, clock) => `<div class="scr">
       <div class="p-sb"><span id="${id}c">${clock}</span><span class="p-ic"><i></i><i></i><i></i><i></i><b></b></span></div>
-      <div class="p-st"><span class="s1">APPEL EN COURS</span><span class="s2">EN COURS · CHIFFRÉ</span><span class="s3">APPEL…</span></div>
+      <div class="p-st"><span class="s1">APPEL ENTRANT</span><span class="s2">EN COURS · CHIFFRÉ</span></div>
       <div class="p-av">${AV}<em>?</em><s></s><s></s></div>
-      <div class="p-nm" id="${id}n">06 39 98 41 07</div>
+      <div class="p-nm" id="${id}n">${NUM}</div>
       <div class="p-in" id="${id}i">NUMÉRO INCONNU</div>
       <div class="p-tm" id="${id}t">00:00</div>
+      <div class="p-end">APPEL TERMINÉ</div>
       <div class="p-row">${ICO.map(s => `<i>${s}</i>`).join('')}</div>
-      <div class="p-btn hang">${HS}</div>
-      <div class="p-vm"><h6>${VMI}MESSAGERIE</h6><b>06 39 98 41 07</b><small>AUJ. 18:52 · 0:04</small>
+      <div class="p-btn hang">${HS}</div><div class="p-btn dec">${HS}</div><div class="p-btn acc">${HC}</div>
+      <div class="p-vm"><h6>${VMI}MESSAGERIE</h6><b>MAISON</b><small>AUJ. 19:04 · 0:09</small>
         <div class="vw"><div class="vb"></div><div class="vp" id="vmbar"><div class="vb"></div></div></div>
-        <div class="vt"><span>0:00</span><span>0:04</span></div></div>
+        <div class="vt"><span>0:00</span><span>0:09</span></div></div>
       <div class="p-vr"><i>${PAUSE}</i><i class="hp">${ICO[2]}</i><i>${BIN}</i></div>
       <div class="p-btn cb">${HC}</div><div class="p-cbl">RAPPELER</div>
       <div class="p-log"><h5>RÉCENTS</h5>
-        <div class="lr"><b>« ANTON »</b><small><span class="gd">●</span> AUJ. 22:41 · SORTANT</small></div>
-        <div class="lr ms"><b>MAISON</b><small>AUJ. 19:04 · MANQUÉ</small></div>
-        <div class="lr ms"><b>06 39 98 41 07</b><small>AUJ. 18:52 · MANQUÉ</small><i class="vmi">${VMI}</i></div>
+        <div class="lr" id="lg1"><b id="lg1n">${NUM}</b><small><span class="gd">●</span> AUJ. 22:41 · ENTRANT</small></div>
+        <div class="lr ms"><b>MAISON</b><small>AUJ. 19:04 · MANQUÉ</small><i class="vmi">${VMI}</i></div>
+        <div class="lr ms" id="lg2"><b id="lg2n">${NUM}</b><small>AUJ. 18:52 · MANQUÉ</small></div>
         <div class="lr" id="lg3"><b>NUMÉRO MASQUÉ</b><small>21 FÉVR. · 23:12 · 0:10</small><i class="tag" id="lgt">REFUSÉ</i></div>
       </div>
+      <div class="p-sms"><h5>MESSAGES</h5>
+        <div class="sh"><i class="sav">?</i><div><b id="${id}sn">${NUM}</b><small id="${id}si">NUMÉRO INCONNU</small></div></div>
+        <div class="sl">
+          <div class="bb att" id="batt">${FOLDER}<span><b>DOSSIER</b><small>8 FICHES</small></span></div>
+          <div class="bb" id="bm1"><span id="sm1" data-reset></span></div>
+          <div class="bb" id="bm2"><span id="sm2" data-reset></span></div>
+        </div>
+        <div class="sin">ÉCRIRE…</div>
+      </div>
     </div><div class="notch"></div>`
-  $('ph1').innerHTML = phone('ph1', '22:41')
+  $('ph1').innerHTML = phone('ph1', '22:40')
   // forme d'onde du message : les mêmes 34 barres pour la piste grise et la piste lue (tirées après la ville)
   const bars = Array.from({ length: 34 }, () => (18 + rnd() * 82).toFixed(0))
   $('ph1').querySelectorAll('.vb').forEach(v => { v.innerHTML = bars.map(h => `<i style="height:${h}%"></i>`).join('') })
@@ -525,10 +589,25 @@
   const G = (ms, p) => K => K.glitch(ms, p)
   const H = K => K.snd.heart()
   const mmss = s => '00:' + String(s).padStart(2, '0')
-  const clock = (K, id, from, n) => { for (let i = 0; i < n; i++) K.at(i * 1000, () => { $(id).textContent = mmss(from + i) }) }
+  // minuterie d'appel ; elle s'arrête quand l'appel est terminé (classe end sur le téléphone)
+  const clock = (K, id, from, n, guard) => { for (let i = 0; i < n; i++) K.at(i * 1000, () => { if (!guard || !$(guard).classList.contains('end')) $(id).textContent = mmss(from + i) }) }
   const rain = K => { K.snd.noise(6, .045, 3800, 'highpass', 0, .5); K.snd.noise(4, .03, 900, 'bandpass', .4, .6) }
-  // tonalité de retour d'appel (ça sonne chez Anton)
-  const ring = K => { K.snd.tone(440, 'sine', 1.1, .05); K.snd.tone(480, 'sine', 1.1, .04) }
+  // le silence : une inspiration, une expiration
+  const breath = K => { K.snd.noise(1.1, .03, 520, 'bandpass', 0, .8, 380); K.snd.noise(1.4, .024, 430, 'bandpass', 1.25, .8, 280) }
+  // vibreur (le téléphone est en silencieux) ; bips de fin d'appel
+  const buzz = K => { K.snd.tone(150, 'sawtooth', .32, .07); K.snd.noise(.32, .05, 180, 'lowpass') }
+  const hangup = K => { for (let i = 0; i < 3; i++) K.snd.tone(480, 'sine', .16, .1, i * .3) }
+  // « INCONNU » parle : voix radio comme Anton (le kit n'allume la radio que pour ANTON)
+  const talk = K => { K.on('radio'); K.on('radio', 'talk') }
+  // message tapé : sur l'écran du téléphone et en sous-titre, au rythme d'une réplique, sans voix (le cliquetis des touches)
+  const SMS = 'MESSAGE · ' + NUM
+  const typed = (K, id, text) => {
+    const sub = K.$('sub'), d = (350 + text.length * 62) * .8
+    sub.innerHTML = '<span class="spk"></span><span class="tx"></span>'
+    sub.querySelector('.spk').textContent = SMS
+    K.type(sub.querySelector('.tx'), text, d)
+    K.type(id, text, d, true)
+  }
   const hand = $('bhand')
   const aim = (x, y) => { hand.style.setProperty('--hx', x + 'cqw'); hand.style.setProperty('--hy', y + 'cqw') }
   // épingler une fiche : la main monte avec la fiche, l'index enfonce la punaise, la main repart
@@ -539,77 +618,97 @@
     ...(o.keep ? [] : [[t + 620, K => K.off('bhand', 'in')]]),
   ]
 
+  const VM = 'MESSAGERIE · MAISON · 19:04'
   K.run({
     music: 'somber',
-    stateClasses: ['press', 'vm', 'dial', 'ans', 'ant', 'log', 'play', 'red', 'later', 'named', 'in', 'set', 'q', 'go'],
-    reset: K => { $('ph1n').textContent = '06 39 98 41 07'; $('ph1i').textContent = 'NUMÉRO INCONNU'; $('ph1c').textContent = '22:41'; $('ph1t').textContent = '00:00'; aim(14.5, 30.6) },
+    stateClasses: ['press', 'take', 'low', 'aside', 'vm', 'ring', 'ans', 'end', 'ant', 'log', 'sms', 'dim', 'bz', 'open', 'play', 'red', 'later', 'in', 'set', 'q', 'go'],
+    reset: K => {
+      ;['ph1n', 'ph1sn', 'lg1n', 'lg2n'].forEach(id => { $(id).textContent = NUM })
+      ;['ph1i', 'ph1si'].forEach(id => { $(id).textContent = 'NUMÉRO INCONNU' })
+      $('ph1c').textContent = '22:40'; $('ph1t').textContent = '00:00'; aim(14.5, 30.6)
+    },
     beats: [
-      // 1 — le message vocal de 18:52, écouté trop tard
-      { label: 'le message', who: 'PHONE', name: 'MESSAGE · 18:52', pre: 1700, post: 900,
-        say: 'Viktor, sors ta famille de là. Maintenant.',
+      // 1 · le message de sa femme, laissé à 19:04 sur la messagerie (la piste lue avance avec ses trois répliques)
+      { label: 'le message', who: 'PHONE', name: VM, pre: 1700, post: 250,
+        say: 'Viktor, c\'est moi… Il y a des gens à la porte.',
         cues: [
           [0, K => { K.crt(); K.on('sWin'); K.on('sWin', 'later'); K.on('ph1', 'vm'); rain(K) }],
           [300, K => { K.on('rig'); K.snd.paper() }],
           [1300, K => K.snd.beep(1046)],
           [1700, K => K.on('vmbar', 'play')],
-          [4300, H], [5000, G(200, .6)], [5200, H]] },
-      // 2 — le rappel : le pouce sur « RAPPELER », ça sonne, ça décroche
-      { label: 'le rappel', min: 4600, cues: [
-          [0, K => { K.$('sub').textContent = '' }],
-          [250, K => K.on('rig', 'press')],
-          [520, K => { K.off('ph1', 'vm'); K.on('ph1', 'dial'); K.$('ph1i').textContent = 'APPEL SORTANT'; K.snd.beep(900) }],
-          [800, K => K.off('rig', 'press')],
-          [1100, ring], [2900, ring],
-          [4300, K => { K.off('ph1', 'dial'); K.on('ph1', 'ans'); K.$('ph1i').textContent = 'NUMÉRO INCONNU'; K.music('dread'); K.snd.beep(1320); clock(K, 'ph1t', 0, 30); K.glitch(160, .5) }]] },
-      // 3 — Anton décroche
-      { label: 'trop tard', pre: 400, post: 350, say: 'Tu as eu mon message. Trop tard, je sais.',
-        cues: [[2400, H]] },
-      // 4 — la règle d'Anton : jamais vu
-      { label: 'jamais vu', post: 300, say: 'Tu ne me connais pas. Et tu ne verras jamais mon visage.',
-        cues: [[2900, K => { K.on('ph1', 'ant'); K.glitch(220, .7) }], [3400, H]] },
-      // 5 — « Appelle-moi Anton »
-      { label: 'Anton', pre: 500, post: 300, say: 'Appelle-moi Anton. Je vends des infos… et je sais qui t\'a fait ça.',
-        cues: [
-          [0, K => K.glitch(320, .85)],
-          [1100, K => { K.type('ph1n', '« ANTON »', 520, true); K.on('radio', 'named'); K.glitch(160, .6) }],
-          [2000, K => K.type('ph1i', 'IDENTITÉ INCONNUE', 650, true)],
-          [3900, K => { H(K); K.glitch(200, .7) }]] },
-      // 6 — le journal d'appels : la maison à 19:04, le message de 18:52, le refus du 21 février
-      { label: 'on ne dit pas non', post: 350, say: 'On t\'a offert du travail. Tu as dit non. Chez eux, on ne dit pas non.',
-        cues: [
-          [150, K => { K.on('ph1', 'log'); K.snd.paper() }],
-          [900, K => { K.on('lg3'); K.snd.beep(900) }],
-          [2000, K => { K.on('lgt'); K.snd.stamp() }],
-          [3300, K => { K.on('sWin', 'red'); K.glitch(320, .85); H(K) }]] },
-      // 7 — le tableau de chasse
-      { label: 'le tableau', pre: 600, post: 300, say: 'Note bien. Markov. Les frères Sanctechair. Vosko, le passeur.',
-        cues: [
-          [0, K => { K.glitch(450, 1); K.off('rig'); K.on('sWin', 'out'); K.on('sBoard'); K.on('bdolly', 'go'); K.snd.sweep() }],
-          ...pin(1100, 'fMk', 14.5, 30.6), ...pin(2000, 'fFr', 30.75, 30.6), ...pin(3350, 'fVo', 46.5, 30.6)] },
-      // 8 — les officiers, le colonel
-      { label: 'les officiers', post: 300, say: 'Trois officiers. Et un colonel qui n\'a pas de visage.',
-        cues: [
+          [3900, H]] },
+      { label: 'ils frappent', who: 'PHONE', name: VM, pre: 350, post: 250, say: 'Ils frappent. Ils ne s\'en vont pas.',
+        cues: [[1300, H], [2200, H]] },
+      { label: 'rappelle-moi', who: 'PHONE', name: VM, pre: 400, post: 300, say: 'Rappelle-moi. Vite.',
+        cues: [[1300, G(200, .6)], [1950, K => K.snd.beep(880)]] },
+      // 2 · le silence : le téléphone retombe dans la main, l'écran se met en veille ; la pluie, sa respiration
+      { label: 'le silence', min: 3800, cues: [
+          [500, K => { K.$('sub').textContent = ''; K.on('rig', 'low'); K.on('ph1', 'dim'); rain(K) }],
+          [900, breath], [2500, breath]] },
+      // 3 · l'appel : le téléphone vibre, le numéro de 18:52 s'affiche ; Viktor décroche
+      { label: 'l\'appel', min: 3300, cues: [
+          [0, K => { K.off('rig', 'low'); K.off('ph1', 'dim'); K.off('ph1', 'vm'); K.on('ph1', 'ring'); K.$('ph1c').textContent = '22:41'; buzz(K) }],
+          [280, buzz], [900, buzz], [1180, buzz], [1800, buzz], [2080, buzz],
+          [2400, K => K.on('rig', 'take')],
+          [2650, K => { K.off('ph1', 'ring'); K.on('ph1', 'ans'); K.snd.beep(1320); K.music('dread'); clock(K, 'ph1t', 0, 40, 'ph1'); K.glitch(160, .5) }],
+          [2950, K => K.off('rig', 'take')]] },
+      // 4 · « INCONNU » : il sait, il peut aider ; il n'en dit pas plus
+      { label: 'je sais', who: 'INCONNU', pre: 500, post: 350, say: 'Viktor. Je sais ce qu\'ils ont fait ce soir.',
+        cues: [[500, talk], [1800, K => { K.on('ph1', 'ant'); K.glitch(220, .7) }], [3000, H]] },
+      { label: 'aider', who: 'INCONNU', pre: 450, post: 350, say: 'Je peux t\'aider.', cues: [[450, talk]] },
+      { label: 'les bornes', who: 'INCONNU', pre: 400, post: 450, say: 'Ils ont dépassé les bornes.',
+        cues: [[400, talk], [1700, K => { K.on('sWin', 'red'); K.glitch(320, .85); H(K) }]] },
+      { label: 'qui', who: 'VIKTOR', pre: 500, post: 450, say: 'Qui êtes-vous ?' },
+      { label: 'tu vas savoir', who: 'INCONNU', pre: 700, post: 250, say: 'Tu vas savoir qui.', cues: [[700, talk]] },
+      // 5 · il raccroche (le canal se ferme : l'indicateur radio s'éteint) ; le journal : l'appel entrant de 22:41,
+      //     le même numéro qu'à 18:52, le refus du 21 février
+      { label: 'raccroché', min: 1400, cues: [
+          [0, K => { K.on('ph1', 'end'); K.off('radio'); hangup(K) }],
+          [1100, K => { K.$('sub').textContent = '' }]] },
+      { label: 'le journal', min: 2800, cues: [
+          [0, K => { K.on('ph1', 'log'); K.snd.paper() }],
+          [600, K => { K.on('lg1'); K.snd.beep(900) }],
+          [1400, K => { K.on('lg2'); K.snd.beep(900); H(K) }],
+          [2100, K => { K.on('lgt'); K.snd.stamp() }]] },
+      // 6 · le dossier : un message du même numéro, une pièce jointe ; le pouce l'ouvre
+      { label: 'le dossier', min: 3500, cues: [
+          [0, K => { K.on('ph1', 'sms'); K.on('ph1', 'bz'); K.$('ph1c').textContent = '22:42'; buzz(K) }], [280, buzz],
+          [560, K => { K.off('ph1', 'bz'); K.on('batt'); K.snd.ping() }],
+          [1600, K => K.on('rig', 'press')],
+          [1850, K => { K.on('batt', 'open'); K.snd.paper() }],
+          [2150, K => K.off('rig', 'press')],
+          [2700, K => { K.glitch(450, 1); K.off('rig'); K.on('sWin', 'out'); K.on('sBoard'); K.on('bdolly', 'go'); K.snd.sweep() }]] },
+      // 7 · les fiches du dossier, une à une, au mur
+      { label: 'le tableau', min: 3100, cues: [
+          ...pin(300, 'fMk', 14.5, 30.6), ...pin(1150, 'fFr', 30.75, 30.6), ...pin(2200, 'fVo', 46.5, 30.6)] },
+      { label: 'les officiers', min: 2700, cues: [
           ...pin(0, 'fVe', 18.6, 16.7, { keep: true }), ...pin(430, 'fHa', 26.7, 16.7, { keep: true }), ...pin(860, 'fRo', 34.8, 16.7),
           ...pin(1750, 'fKe', 57, 16.1), [2400, G(160, .55)]] },
-      // 9 — celui qui paie : la fiche « ? » et les fils rouges
-      { label: 'le commanditaire', post: 400, say: 'Et au-dessus, celui qui paie tout le monde. Personne ne l\'a jamais vu.',
-        cues: [
+      { label: 'le commanditaire', min: 4300, cues: [
           ...pin(250, 'fQ', 46, 1.1, { heavy: true }),
           ...['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'].map((id, i) => [1400 + i * 230, K => { K.on(id); K.snd.marker() }]),
           [3900, K => { H(K); K.glitch(240, .75) }]] },
-      // 10 — les noms, le fusil
-      { label: 'les noms', post: 400, say: 'Je te donne les noms. Toi, tu as le fusil.',
+      // 8 · deux messages tapés, le téléphone tenu devant le tableau ; le contact s'enregistre « ANTON »
+      { label: 'les noms', min: 4400, cues: [
+          [0, K => { K.on('rig', 'aside'); K.on('rig'); K.on('ph1', 'bz'); K.$('ph1c').textContent = '22:43'; buzz(K) }],
+          [500, K => { K.off('ph1', 'bz'); K.on('bm1'); K.snd.ping(); typed(K, 'sm1', 'Je te donne les noms. Toi, tu as le fusil.') }],
+          ...[['mt1'], ['mt2'], ['mt3'], ['mt4a', 'mt4b', 'mt4c'], ['mt5'], ['mt6']].map((ids, i) => [1300 + i * 260, K => { ids.forEach(id => K.on(id)); K.snd.stamp() }]),
+          [3200, K => { K.on('ret'); K.snd.beep(1400); K.snd.beep(1800, .1) }]] },
+      { label: 'Anton', min: 4300, cues: [
+          [0, K => { K.on('ph1', 'bz'); buzz(K) }],
+          [300, K => { K.off('ph1', 'bz'); K.on('bm2'); K.snd.ping(); typed(K, 'sm2', 'Appelle-moi Anton.') }],
+          [1800, K => { K.type('ph1sn', '« ANTON »', 520, true); K.$('lg1n').textContent = K.$('lg2n').textContent = '« ANTON »'; K.glitch(160, .6) }],
+          [2500, K => K.type('ph1si', 'IDENTITÉ INCONNUE', 650, true)],
+          [3500, K => { K.off('ph1', 'sms'); H(K) }]] },
+      // 9 · la vengeance : le téléphone baisse, travelling sur « ? »
+      { label: 'la vengeance', who: 'VIKTOR', pre: 600, post: 800, say: 'Ils voulaient mon silence. Ils auront ma vengeance.',
         cues: [
-          ...[['mt1'], ['mt2'], ['mt3'], ['mt4a', 'mt4b', 'mt4c'], ['mt5'], ['mt6']].map((ids, i) => [150 + i * 260, K => { ids.forEach(id => K.on(id)); K.snd.stamp() }]),
-          [1900, K => { K.on('ret'); K.snd.beep(1400); K.snd.beep(1800, .1) }]] },
-      // 11 — la vengeance : travelling sur « ? »
-      { label: 'la vengeance', who: 'VIKTOR', post: 800, say: 'Ils voulaient mon silence. Ils auront ma vengeance.',
-        cues: [
-          [150, K => { K.on('bdolly', 'q'); K.on('ret', 'q'); K.snd.sweep() }],
-          [500, H], [1450, H], [2400, H], [2900, G(220, .75)], [3300, H]] },
-      // 12 — carton-titre
+          [0, K => { K.$('sub').textContent = ''; K.off('rig') }],
+          [450, K => { K.on('bdolly', 'q'); K.on('ret', 'q'); K.snd.sweep() }],
+          [1100, H], [2050, H], [3000, H], [3500, G(220, .75)], [3900, H]] },
+      // 10 · carton-titre
       { label: 'carton-titre', min: 3300, cues: [
-          [0, K => { K.$('sub').textContent = ''; K.off('radio'); K.music(null); K.lost(500) }],
+          [0, K => { K.$('sub').textContent = ''; K.music(null); K.lost(500) }],
           [500, K => K.on('sBoard', 'out')], [750, K => K.title()], [2100, K => K.black()]] },
     ],
   })

@@ -152,8 +152,9 @@ refreshMenuButtons()
 const resetBtn = document.getElementById('btn-reset-save')
 if (resetBtn) resetBtn.onclick = () => { resetProgress(); refreshMenuButtons() }
 
-// Prologue, une fois par campagne : A (l'offre, le 14 mars) → l'enquête dans l'appartement → B (le message, le
-// rappel, le tableau de chasse) → mission 1, avec son briefing s'il n'a pas été vu. Chaque pièce se passe à part.
+// Prologue, une fois par campagne : A (l'offre, le 14 mars) → l'enquête dans l'appartement → B (le message de sa
+// femme, l'appel d'Anton, le tableau de chasse) → mission 1, avec son briefing s'il n'a pas été vu. Chaque pièce se
+// passe à part.
 function playPrologue() {
   menuEl.style.display = 'none'
   hudEl.style.display = 'none'

@@ -12,10 +12,15 @@ describe('données de l\'enquête', () => {
     expect(CLUES.find(c => c.id === 'corps').acouphene).toBe(true)
   })
 
-  it('le téléphone s\'ouvre à 4 indices, montre deux appels manqués et deux phrases', () => {
+  // prologue v2 (spec 2026-10-11-prologue-v2 §1 et §3) : Anton a tenté d'appeler à 18:52 sans laisser de message ;
+  // le message est celui de sa femme, depuis la maison, à 19:04
+  it('le téléphone s\'ouvre à 4 indices, montre deux appels manqués (le message est celui de la maison) et deux phrases', () => {
     expect(PHONE.id).toBe('telephone')
     expect(PHONE.seuil).toBe(4)
-    expect(PHONE.appels.map(a => `${a.de} · ${a.heure}`)).toEqual(['06 39 98 41 07 · 18:52', 'MAISON · 19:04'])
+    expect(PHONE.appels.map(a => `${a.de} · ${a.heure} · ${a.note}`)).toEqual([
+      '06 39 98 41 07 · 18:52 · MANQUÉ',
+      'MAISON · 19:04 · MANQUÉ · 1 MESSAGE',
+    ])
     expect(PHONE.viktor).toEqual(['Ce jour-là, j\'avais oublié mon téléphone.', 'Elle m\'a appelé. Il était là, en silencieux.'])
     expect(PHONE.verrouille).toBe('Pas encore… Je dois comprendre ce qui s\'est passé.')
   })

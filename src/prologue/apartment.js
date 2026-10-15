@@ -3,6 +3,9 @@
 // lumière : nuit bleue par les fenêtres + la lampe renversée (seule ombre) + la veilleuse de la chambre.
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+// prologue v2 (N4) : RoundedBoxGeometry dérive de BoxGeometry, déjà dans le bundle principal ; elle reste dans le
+// morceau de l'enquête
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 const H = 2.6          // hauteur sous plafond
 const T = 0.12         // épaisseur des murs, centrés sur leur ligne
@@ -23,15 +26,19 @@ function canvasTexture(w, h, draw, { repeat = null } = {}) {
 // Générateur pseudo-aléatoire de la maquette (même graine que la ville des cinématiques : 7)
 function makeRnd(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646 } }
 
+// Géométrie non indexée (faite de triangles à plat) rendue indexée : la fusion veut des géométries toutes indexées.
+function indexed(g) { if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]); return g }
+
 // Rassemble des géométries par matériau, puis fusionne : un maillage par matériau.
 function createBatcher() {
   const buckets = new Map()   // matériau → géométries déjà transformées
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3()
   return {
-    // geo : géométrie indexée ; place : { x, y, z, rx, ry, rz, sx, sy, sz }
+    // geo : géométrie (indexée ou non) ; place : { x, y, z, rx, ry, rz, order, sx, sy, sz } (order : ordre des rotations,
+    // 'XYZ' par défaut ; 'YXZ' incline un meuble dans son propre repère avant de le tourner)
     add(mat, geo, place = {}) {
-      const g = geo.clone()
-      m4.compose(p.set(place.x || 0, place.y || 0, place.z || 0), q.setFromEuler(e.set(place.rx || 0, place.ry || 0, place.rz || 0)),
+      const g = indexed(geo.clone())
+      m4.compose(p.set(place.x || 0, place.y || 0, place.z || 0), q.setFromEuler(e.set(place.rx || 0, place.ry || 0, place.rz || 0, place.order || 'XYZ')),
         s.set(place.sx ?? 1, place.sy ?? 1, place.sz ?? 1))
       g.applyMatrix4(m4)
       if (!buckets.has(mat)) buckets.set(mat, [])
@@ -67,6 +74,172 @@ function between(geo, a, b) {
   return geo
 }
 const rod = (a, b, r, seg = 8) => between(new THREE.CylinderGeometry(r, r, a.distanceTo(b), seg), a, b)
+const UP = new THREE.Vector3(0, 1, 0)   // jamais modifié
+
+// Constructeurs maison plutôt qu'ExtrudeGeometry et LatheGeometry : three est d'un seul bloc dans le bundle principal,
+// et toute classe qu'on n'y utilisait pas l'y ferait grossir ; ceux-ci restent dans le morceau de l'enquête.
+// Géométrie faite de triangles à plat (sommets [x, y, z] trois par trois) : une normale par face, uv nulles.
+function fromTriangles(v) {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(v.length / 3 * 2), 2))
+  g.computeVertexNormals()
+  return indexed(g)
+}
+// Le polygone simple pts ([x, y]) tiré le long de z, de 0 à len : côtés à arêtes vives, bouts triangulés.
+function extrude(pts, len) {
+  const c = pts.map(([x, y]) => new THREE.Vector2(x, y)), v = [], tri = (a, b, d) => v.push(...a, ...b, ...d)
+  if (THREE.ShapeUtils.isClockWise(c)) c.reverse()
+  for (let i = 0; i < c.length; i++) {
+    const p = c[i], q = c[(i + 1) % c.length]
+    tri([p.x, p.y, 0], [q.x, q.y, 0], [q.x, q.y, len]); tri([p.x, p.y, 0], [q.x, q.y, len], [p.x, p.y, len])
+  }
+  for (const [a, b, d] of THREE.ShapeUtils.triangulateShape(c, [])) {
+    const A = c[a], ccw = (c[b].x - A.x) * (c[d].y - A.y) - (c[b].y - A.y) * (c[d].x - A.x) > 0
+    const [P, Q] = ccw ? [c[b], c[d]] : [c[d], c[b]]           // dans le sens direct, vu de +z
+    tri([A.x, A.y, len], [P.x, P.y, len], [Q.x, Q.y, len]); tri([A.x, A.y, 0], [Q.x, Q.y, 0], [P.x, P.y, 0])
+  }
+  return fromTriangles(v)
+}
+// Révolution d'un profil [r, y] autour de l'axe y, en seg côtés ; un profil qui s'éloigne de l'axe regarde vers le bas.
+function lathe(profile, seg) {
+  const v = [], at = (r, y, a) => [r * Math.cos(a), y, r * Math.sin(a)]
+  for (let s = 0; s < seg; s++) {
+    const a0 = s / seg * Math.PI * 2, a1 = (s + 1) / seg * Math.PI * 2
+    for (let i = 0; i + 1 < profile.length; i++) {
+      const [r0, y0] = profile[i], [r1, y1] = profile[i + 1], A = at(r0, y0, a0), C = at(r1, y1, a1)
+      v.push(...A, ...at(r1, y1, a0), ...C)
+      if (r0 > 0) v.push(...A, ...C, ...at(r0, y0, a1))
+    }
+  }
+  return fromTriangles(v)
+}
+
+// Prisme : un profil [u, v] (plan de coupe, en mètres) tiré en ligne droite de p0 à p1, son point (0, 0) sur cette
+// ligne ; u suit le vecteur unitaire au, v le vecteur unitaire av (perpendiculaires). Moulures, appuis.
+function prism(profile, au, av, p0, p1) {
+  const ax = new THREE.Vector3().crossVectors(au, av), d = new THREE.Vector3().subVectors(p1, p0)
+  return extrude(profile, d.length()).applyMatrix4(new THREE.Matrix4().makeBasis(au, av, ax).setPosition(ax.dot(d) >= 0 ? p0 : p1))   // repère direct
+}
+// Profils des moulures (mètres). Plinthe : u saillie hors du mur, v hauteur ; épaisse au pied, amincie en tête.
+const P_PLINTHE = [[0, 0], [0.016, 0], [0.016, 0.07], [0.013, 0.08], [0.009, 0.09], [0.004, 0.1], [0, 0.1]]
+// Corniche en gorge : u saillie hors du mur, v sous le plafond (négatif). Elle déborde de plus en plus en montant :
+// dans un angle rentrant, l'union des deux longueurs qui se croisent dessine l'onglet, sans coupe.
+const P_CORNICHE = [[0, 0], [0, -0.11], [0.008, -0.11], [0.008, -0.1], [0.018, -0.094], [0.034, -0.082], [0.05, -0.064],
+  [0.062, -0.044], [0.07, -0.028], [0.074, -0.02], [0.086, -0.02], [0.086, -0.01], [0.095, -0.01], [0.095, 0]]
+// Chambranle : u depuis le bord de l'ouverture vers l'extérieur, v saillie. Plus épais vers l'extérieur : au coin, l'union
+// du montant et de la traverse dessine l'onglet.
+const P_CHAMBRANLE = [[0, 0], [0, 0.01], [0.012, 0.012], [0.016, 0.015], [0.03, 0.016], [0.034, 0.019], [0.052, 0.02],
+  [0.056, 0.024], [0.068, 0.025], [0.072, 0.022], [0.072, 0]]
+const W_CHAMBRANLE = 0.072
+// Appui de fenêtre : u vers la pièce depuis la face du mur (négatif : sous la menuiserie), v hauteur ; nez arrondi.
+const P_APPUI = [[-0.24, 0], [0.03, 0], [0.038, 0.004], [0.042, 0.012], [0.042, 0.022], [0.038, 0.03], [0.03, 0.034], [-0.24, 0.034]]
+
+// Panneau à plate-bande, w × h, centré : posé sur la face d'un battant (z = 0), son pourtour monte en biseau (largeur b)
+// jusqu'au champ du panneau, t plus haut ; le dessous, dans le battant, n'a pas de face.
+function raisedPanel(w, h, b = 0.02, t = 0.01) {
+  const X = w / 2, Y = h / 2, x = X - b, y = Y - b, v = [], tri = (p, q, r) => v.push(...p, ...q, ...r)
+  const lo = [[-X, -Y], [X, -Y], [X, Y], [-X, Y]], hi = [[-x, -y], [x, -y], [x, y], [-x, y]]
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4, A = [...lo[i], 0], C = [...hi[j], t]
+    tri(A, [...lo[j], 0], C); tri(A, C, [...hi[i], t])
+  }
+  tri([-x, -y, t], [x, -y, t], [x, y, t]); tri([-x, -y, t], [x, y, t], [-x, y, t])
+  return fromTriangles(v)
+}
+// Rectangle w × h à coins arrondis (rayon r, k segments par coin), centré : la tranche d'un élément de radiateur.
+function roundedRect(w, h, r, k = 2) {
+  const pts = []
+  for (const [cx, cy, a0] of [[w / 2 - r, -h / 2 + r, -Math.PI / 2], [w / 2 - r, h / 2 - r, 0], [-w / 2 + r, h / 2 - r, Math.PI / 2], [-w / 2 + r, -h / 2 + r, Math.PI]])
+    for (let i = 0; i <= k; i++) { const a = a0 + i / k * Math.PI / 2; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]) }
+  return pts
+}
+
+// ── le mobilier (prologue v2, N4) : arêtes adoucies, coussins, couette ──
+// Boîte w × h × d aux arêtes arrondies (rayon r), normales lissées ; seg 1 : deux facettes par quart de rond (108
+// triangles), seg 2 : quatre (300 triangles). Elle n'est pas indexée : B.add l'indexe ; une fusion faite à part passe
+// par indexed().
+const rounded = (w, h, d, r, seg = 1) => new RoundedBoxGeometry(w, h, d, seg, r)
+// Effile une géométrie centrée vers le bas : à son pied, x et z sont multipliés par k (normales gardées : la pente est faible).
+function taper(g, k) {
+  const p = g.attributes.position
+  g.computeBoundingBox()
+  const { min, max } = g.boundingBox
+  for (let i = 0; i < p.count; i++) { const s = k + (1 - k) * (p.getY(i) - min.y) / (max.y - min.y); p.setX(i, p.getX(i) * s); p.setZ(i, p.getZ(i) * s) }
+  return g
+}
+// Déforme une géométrie indexée point par point (fn : (x, y, z) → [x, y, z]), puis relisse ses normales.
+function warp(g, fn) {
+  const p = g.attributes.position
+  for (let i = 0; i < p.count; i++) { const [x, y, z] = fn(p.getX(i), p.getY(i), p.getZ(i)); p.setXYZ(i, x, y, z) }
+  g.computeVertexNormals()
+  return g
+}
+// Coussin w × h × d (superquadrique tirée d'une sphère) : e1 règle le bombé de la tranche (1 : rond, vers 0 : carré),
+// e2 l'arrondi des coins en plan. Le dessus (+y) bombe : plus haut au milieu qu'au bord. Les restes d'arrondi (sin π
+// vaut 1,2e-16, que la puissance 0,2 grossit en 6,6e-4) sont ramenés à zéro : sans cela, les deux colonnes de sommets
+// de la couture de la sphère s'écartaient de 0,3 mm, une fente au travers du coussin.
+function cushion(w, h, d, e1 = 0.5, e2 = 0.2, ws = 16, hs = 10) {
+  const sp = (t, e) => Math.abs(t) < 1e-9 ? 0 : Math.sign(t) * Math.pow(Math.abs(t), e)
+  return warp(new THREE.SphereGeometry(1, ws, hs), (x, y, z) => {
+    const c = Math.hypot(x, z), th = Math.atan2(z, x)
+    return [w / 2 * sp(c, e1) * sp(Math.cos(th), e2), h / 2 * sp(y, e1), d / 2 * sp(c, e1) * sp(Math.sin(th), e2)]
+  })
+}
+// Couette posée sur un matelas (dessus en y0, demi-largeur half, centré en x = cx), de z0 à z1 : dessus bombé à plis doux,
+// qui tourne sur les bords du matelas et tombe le long du lit jusqu'en yLow. Une seule nappe (matériau double face).
+function duvet(cx, z0, z1, half, y0, yLow, seed) {
+  const rnd = makeRnd(seed), rr = 0.045, puff = 0.04
+  const topAt = u => y0 + 0.012 + puff * (1 - Math.pow(Math.min(1, Math.abs(u) / (half + 0.03)), 2.5))
+  const yEdge = topAt(half), fall = yEdge - rr - yLow
+  // coupe d'un côté (abscisse ≥ 0) : le dessus en 7 pas (y calculé avec les plis), le tour du bord en 3, la chute en 2
+  const side = []
+  for (let k = 0; k <= 7; k++) side.push([half * k / 7, null])
+  for (let k = 1; k <= 3; k++) { const a = k / 3 * Math.PI / 2; side.push([half + rr * Math.sin(a), yEdge - rr + rr * Math.cos(a)]) }
+  for (let k = 1; k <= 2; k++) side.push([half + rr + 0.006 * k, yEdge - rr - fall * k / 2])
+  const cols = [...side.slice(1).reverse().map(([x, y]) => [-x, y]), ...side]
+  const NU = cols.length - 1, NV = 18, ph = [rnd() * 6, rnd() * 6, rnd() * 6]
+  // plan (x, y) → monde (x, z croissant avec la rangée) : la face avant regarde vers le haut
+  const g = new THREE.PlaneGeometry(1, 1, NU, NV), p = g.attributes.position
+  for (let j = 0; j <= NV; j++) for (let i = 0; i <= NU; i++) {
+    const z = z0 + (z1 - z0) * j / NV
+    let [x, y] = cols[i]
+    const fold = 0.003 * Math.sin(x * 9 + z * 6 + ph[0]) + 0.002 * Math.sin(-x * 5 + z * 13 + ph[1])
+    if (y === null) y = topAt(x) + fold
+    else { y += fold * 0.5; if (Math.abs(x) > half + rr) x += Math.sign(x) * 0.004 * Math.sin(z * 17 + ph[2]) }
+    p.setXYZ(j * (NU + 1) + i, cx + x, y, z)
+  }
+  g.computeVertexNormals()
+  return g
+}
+// Écharpe pendue à un crochet : une bande de tissu d'épaisseur t tirée le long d'un chemin, du bout du pan de devant,
+// par-dessus le crochet, jusqu'au bout du pan de derrière ; une seule pièce fermée (boîte de nu × ns segments déformée).
+// path(s) → point du milieu de la bande (s de 0 à 1, une rangée tous les 1 / ns) ; wide(s) sa largeur ; folds(u, s) l'écart
+// des plis le long de la normale (u de −1 à 1 en travers, qui suit l'axe x du monde). Aux deux bouts, n brins de franges
+// pendent tout droit. Rend la bande puis les brins.
+function scarf(path, wide, folds, t, nu, ns, n, seed) {
+  const T = new THREE.Vector3(), X = new THREE.Vector3(), N = new THREE.Vector3()
+  const at = (u, s, k) => {
+    const P = path(s)
+    T.subVectors(path(Math.min(1, s + 1e-4)), path(Math.max(0, s - 1e-4))).normalize()
+    X.set(1, 0, 0).addScaledVector(T, -T.x).normalize()   // en travers, perpendiculaire au chemin
+    N.crossVectors(X, T)                                   // repère direct : la boîte garde ses faces vers l'extérieur
+    return P.addScaledVector(X, u * wide(s) / 2).addScaledVector(N, k * t + folds(u, s))
+  }
+  const out = [warp(new THREE.BoxGeometry(1, 1, 1, nu, ns, 1), (x, y, z) => at(x * 2, y + 0.5, z).toArray())], rnd = makeRnd(seed)
+  for (const s of [0, 1]) for (let i = 0; i < n; i++) {
+    const p = at(((i + 0.5) / n * 2 - 1) * 0.9, s, 0), len = 0.03 + 0.012 * rnd()
+    out.push(new THREE.BoxGeometry(0.005, len, 0.004).translate(0, -len / 2, 0).rotateZ((rnd() - 0.5) * 0.25).translate(p.x, p.y + 0.003, p.z))
+  }
+  return out
+}
+// Image w × h, face +z, aux UV recadrées sur le rectangle [x, y, largeur, hauteur] (pixels) de la planche des images.
+const PIC_W = 1024, PIC_H = 512
+function pictureGeo(w, h, [x, y, rw, rh]) {
+  const g = new THREE.PlaneGeometry(w, h), uv = g.attributes.uv
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (x + uv.getX(i) * rw) / PIC_W, 1 - (y + rh) / PIC_H + uv.getY(i) * rh / PIC_H)
+  return g
+}
 
 // UV planaires (x, z) en mètres / tuile : le parquet et le carrelage gardent la même échelle d'une pièce à l'autre.
 function worldUV(geo, tu, tv = tu) {
@@ -471,6 +644,88 @@ function drawDrop(g, w, h) {
   g.fillStyle = gr; g.fillRect(w / 2 - 1, 0, 2, h)
 }
 
+// La planche des images aux murs (PIC_W × PIC_H) : deux vues de vacances (la mer au soir, un lac de montagne), le dessin
+// de la petite, une gravure de voilier. Aucun personnage. Rectangles [x, y, largeur, hauteur] en pixels.
+const PIC = { mer: [0, 0, 340, 255], lac: [342, 0, 340, 255], dessin: [684, 0, 340, 255], voilier: [0, 257, 192, 255] }
+function drawPictures(g) {
+  const rnd = makeRnd(83)
+  const inRect = ([x, y, w, h], draw) => { g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip(); g.translate(x, y); draw(w, h); g.restore() }
+  const lin = (y0, y1, stops) => { const gr = g.createLinearGradient(0, y0, 0, y1); stops.forEach(([t, c]) => gr.addColorStop(t, c)); return gr }
+  const wash = (w, h, n, rgb, a) => { for (let i = 0; i < n; i++) { g.fillStyle = `rgba(${rgb},${a * rnd()})`; g.beginPath(); g.arc(rnd() * w, rnd() * h, 6 + rnd() * 26, 0, Math.PI * 2); g.fill() } }
+  g.fillStyle = '#808080'; g.fillRect(0, 0, PIC_W, PIC_H)
+  // la mer au soir, à l'aquarelle : ciel pêche, soleil bas, reflets, un cap sombre
+  inRect(PIC.mer, (w, h) => {
+    g.fillStyle = lin(0, h * 0.6, [[0, '#56688a'], [0.55, '#c49c88'], [1, '#ecc79c']]); g.fillRect(0, 0, w, h * 0.6)
+    g.fillStyle = 'rgba(255,238,204,.9)'; g.beginPath(); g.arc(w * 0.66, h * 0.52, h * 0.07, 0, Math.PI * 2); g.fill()
+    g.fillStyle = lin(h * 0.58, h, [[0, '#5a6e80'], [1, '#26323f']]); g.fillRect(0, h * 0.58, w, h * 0.42)
+    g.lineCap = 'round'
+    for (let i = 0; i < 46; i++) {
+      const y = h * (0.6 + rnd() * 0.36), x = w * 0.66 + (rnd() - 0.5) * w * (0.1 + (y / h - 0.6) * 0.9)
+      g.strokeStyle = `rgba(255,214,170,${0.15 + rnd() * 0.35})`; g.lineWidth = 1 + rnd() * 2
+      g.beginPath(); g.moveTo(x - 4 - rnd() * 14, y); g.lineTo(x + 4 + rnd() * 14, y); g.stroke()
+    }
+    g.fillStyle = '#2a2a34'; g.beginPath(); g.moveTo(0, h * 0.5); g.quadraticCurveTo(w * 0.16, h * 0.44, w * 0.34, h * 0.6); g.lineTo(0, h * 0.6); g.closePath(); g.fill()
+    wash(w, h, 40, '255,240,220', 0.08)
+  })
+  // un lac de montagne : sommets enneigés, leur reflet, une rive de sapins
+  inRect(PIC.lac, (w, h) => {
+    g.fillStyle = lin(0, h * 0.55, [[0, '#8fa6c0'], [1, '#d8dde0']]); g.fillRect(0, 0, w, h * 0.55)
+    const range = (pts, c, snow) => {
+      g.fillStyle = c; g.beginPath(); g.moveTo(0, h * 0.55); for (const [x, y] of pts) g.lineTo(x * w, y * h); g.lineTo(w, h * 0.55); g.closePath(); g.fill()
+      if (snow) { g.fillStyle = 'rgba(245,248,252,.85)'; for (const [x, y] of pts) if (y < 0.32) { g.beginPath(); g.moveTo(x * w, y * h); g.lineTo(x * w - 14, y * h + 16); g.lineTo(x * w + 14, y * h + 16); g.closePath(); g.fill() } }
+    }
+    range([[0, 0.4], [0.18, 0.2], [0.34, 0.36], [0.52, 0.16], [0.7, 0.34], [0.86, 0.24], [1, 0.38]], '#56647a', true)
+    range([[0, 0.5], [0.25, 0.38], [0.5, 0.48], [0.75, 0.4], [1, 0.5]], '#3c4a5a', false)
+    g.fillStyle = lin(h * 0.55, h, [[0, '#6e8298'], [1, '#334252']]); g.fillRect(0, h * 0.55, w, h * 0.45)
+    g.save(); g.globalAlpha = 0.3; g.translate(0, h * 1.1); g.scale(1, -1); range([[0, 0.4], [0.18, 0.2], [0.34, 0.36], [0.52, 0.16], [0.7, 0.34], [0.86, 0.24], [1, 0.38]], '#56647a', false); g.restore()
+    g.fillStyle = '#1e2a24'
+    for (let x = -4; x < w; x += 9 + rnd() * 8) { const t = h * (0.5 + rnd() * 0.06), b = h * 0.6; g.beginPath(); g.moveTo(x, b); g.lineTo(x + 6, t); g.lineTo(x + 12, b); g.closePath(); g.fill() }
+    wash(w, h, 30, '230,236,240', 0.07)
+  })
+  // le dessin de la petite, aux craies grasses sur papier blanc : la maison, le soleil, un arbre, des fleurs, un arc-en-ciel
+  inRect(PIC.dessin, (w, h) => {
+    g.fillStyle = '#f2eee2'; g.fillRect(0, 0, w, h)
+    g.lineCap = 'round'; g.lineJoin = 'round'
+    const crayon = (c, lw, pts, close = false) => {
+      g.strokeStyle = c; g.lineWidth = lw
+      for (let pass = 0; pass < 2; pass++) {
+        g.beginPath(); pts.forEach(([x, y], i) => { const jx = (rnd() - 0.5) * 3, jy = (rnd() - 0.5) * 3; if (i) g.lineTo(x + jx, y + jy); else g.moveTo(x + jx, y + jy) })
+        if (close) g.closePath(); g.stroke()
+      }
+    }
+    const scribble = (c, x0, y0, x1, y1, n = 14) => { g.strokeStyle = c; g.lineWidth = 4; g.beginPath(); for (let i = 0; i <= n; i++) { const t = i / n; g.lineTo(x0 + (x1 - x0) * t + (i % 2 ? 6 : -6), y0 + (y1 - y0) * t) } g.stroke() }
+    for (let x = 4; x < w; x += 7) crayon('#4a9a3a', 4, [[x, h - 6], [x + 3, h - 30 - rnd() * 12]])                  // l'herbe
+    crayon('#c83a2a', 5, [[60, 112], [130, 62], [200, 112]], true); scribble('#d85a3a', 80, 100, 180, 100, 6)          // le toit
+    crayon('#9a5a2a', 5, [[70, 112], [190, 112], [190, 214], [70, 214]], true)                                          // les murs
+    crayon('#5a3a1a', 5, [[118, 214], [118, 166], [146, 166], [146, 214]])                                              // la porte
+    crayon('#3a6ac8', 4, [[84, 128], [108, 128], [108, 152], [84, 152]], true); crayon('#3a6ac8', 3, [[96, 128], [96, 152]]); crayon('#3a6ac8', 3, [[84, 140], [108, 140]])
+    crayon('#3a6ac8', 4, [[156, 128], [180, 128], [180, 152], [156, 152]], true)
+    g.fillStyle = '#f0c020'; g.beginPath(); g.arc(34, 34, 18, 0, Math.PI * 2); g.fill()                                // le soleil
+    for (let k = 0; k < 9; k++) { const a = k / 9 * Math.PI * 2; crayon('#e8a818', 3, [[34 + Math.cos(a) * 24, 34 + Math.sin(a) * 24], [34 + Math.cos(a) * 36, 34 + Math.sin(a) * 36]]) }
+    crayon('#7a4a20', 7, [[262, 214], [264, 140]]); g.fillStyle = 'rgba(70,150,60,.9)'                                  // l'arbre
+    for (let k = 0; k < 7; k++) { g.beginPath(); g.arc(250 + rnd() * 30, 108 + rnd() * 34, 18 + rnd() * 8, 0, Math.PI * 2); g.fill() }
+    for (const [c, r] of [['#d83a3a', 70], ['#f0a020', 62], ['#3a9ad8', 54]]) { g.strokeStyle = c; g.lineWidth = 6; g.beginPath(); g.arc(300, 80, r, Math.PI * 1.05, Math.PI * 1.55); g.stroke() }   // l'arc-en-ciel
+    for (const [x, c] of [[216, '#e05a8a'], [236, '#8a5ad0'], [318, '#e05a8a']]) {                                       // des fleurs
+      crayon('#3a8a3a', 3, [[x, 236], [x, 214]])
+      for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; g.fillStyle = c; g.beginPath(); g.arc(x + Math.cos(a) * 6, 208 + Math.sin(a) * 6, 5, 0, Math.PI * 2); g.fill() }
+      g.fillStyle = '#f0c020'; g.beginPath(); g.arc(x, 208, 3.5, 0, Math.PI * 2); g.fill()
+    }
+    g.fillStyle = '#d8344a'; g.beginPath(); g.moveTo(40, 150); g.bezierCurveTo(28, 136, 14, 156, 40, 176); g.bezierCurveTo(66, 156, 52, 136, 40, 150); g.fill()   // un cœur
+  })
+  // une gravure de voilier, papier jauni, trait sépia
+  inRect(PIC.voilier, (w, h) => {
+    g.fillStyle = '#d6c6a0'; g.fillRect(0, 0, w, h); wash(w, h, 30, '150,120,70', 0.08)
+    g.strokeStyle = '#4a3420'; g.lineWidth = 1.4; g.strokeRect(10, 10, w - 20, h - 20)
+    g.fillStyle = '#3a2816'; g.beginPath(); g.moveTo(44, 168); g.lineTo(150, 168); g.lineTo(136, 186); g.lineTo(56, 186); g.closePath(); g.fill()   // la coque
+    g.strokeStyle = '#3a2816'; g.lineWidth = 2; g.beginPath(); g.moveTo(98, 168); g.lineTo(98, 48); g.stroke()                                     // le mât
+    g.fillStyle = '#efe4c8'; g.lineWidth = 1.2
+    for (const pts of [[[100, 52], [100, 160], [150, 160]], [[96, 60], [96, 160], [52, 160]]]) { g.beginPath(); g.moveTo(...pts[0]); g.lineTo(...pts[1]); g.lineTo(...pts[2]); g.closePath(); g.fill(); g.stroke() }
+    g.lineWidth = 1
+    for (let i = 0; i < 9; i++) { const y = 194 + i * 6; g.beginPath(); for (let x = 16; x < w - 16; x += 12) { g.moveTo(x, y + (i % 2) * 2); g.quadraticCurveTo(x + 3, y - 3, x + 6, y) } g.stroke() }
+    for (const [x, y] of [[40, 70], [56, 60], [150, 84]]) { g.beginPath(); g.moveTo(x - 6, y - 3); g.quadraticCurveTo(x - 3, y - 5, x, y); g.quadraticCurveTo(x + 3, y - 5, x + 6, y - 3); g.stroke() }   // des mouettes
+  })
+}
+
 // ───────────────────────────── l'appartement ─────────────────────────────
 
 export function buildApartment() {
@@ -499,6 +754,7 @@ export function buildApartment() {
   const T_palier = tex(2048, 512, drawPalier); T_palier.anisotropy = 8
   const T_palierLit = tex(2048, 512, (g, w, h) => drawPalierLit(g, w, h, T_palier.image)); T_palierLit.anisotropy = 8
   const T_neonGrad = tex(4, 64, (g, w, h) => { const gr = g.createLinearGradient(0, h, 0, 0); gr.addColorStop(0, '#000'); gr.addColorStop(0.45, '#2a2a2a'); gr.addColorStop(1, '#ffffff'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
+  const T_pictures = tex(PIC_W, PIC_H, drawPictures); T_pictures.anisotropy = 4
 
   const M = {
     parquet: lambert(0xb08a68, { map: T_parquet }),
@@ -513,8 +769,11 @@ export function buildApartment() {
     tissu: lambert(0x2f3440, {}, { cast: true }),
     rideau: lambert(0x2a2a38, { side: THREE.DoubleSide }, { cast: true }),
     tapis: lambert(0xffffff, { map: T_rug }),
-    tissuRose: lambert(0x8a5a6a),
+    tissuRose: lambert(0x8a5a6a, { side: THREE.DoubleSide }),   // double face : la couette est une nappe qui tombe du lit
+    velours: lambert(0x5a3428, {}, { cast: true }),             // le fauteuil, velours rouille
+    tableaux: lambert(0xffffff, { map: T_pictures }),            // les images aux murs
     blanc: lambert(0xb8b4ac, {}, { cast: true }),
+    boiserie: lambert(0xb8b4ac, {}, { cast: true }),   // portes intérieures, chambranles, bâtis : peints comme les plinthes, ils arrêtent la visée
     livres: lambert(0xffffff, { vertexColors: true }, { cast: true }),
     metal: lambert(0x6a6e76),
     miroir: new THREE.MeshPhongMaterial({ color: 0x10141a, specular: 0x8899aa, shininess: 90 }),
@@ -538,6 +797,58 @@ export function buildApartment() {
   const glows = []   // lueurs additives (fausse lumière), fusionnées en un seul maillage
   const box = (m, cx, cy, cz, w, h, d, place) => B.box(m, cx, cy, cz, w, h, d, place)
   const solid = (minX, maxX, minZ, maxZ) => colliders.push({ minX, maxX, minZ, maxZ })
+  // Bords souples d'un tapis posé à plat (de x0 à x1, de z0 à z1, à 4 mm du sol) : un ourlet roulé tout autour (un jonc
+  // dans la couleur de sa bordure sombre), des franges de coton aux deux petits côtés (x0 et x1) : un brin tous les
+  // 12 mm, effilé (un triangle de 4 mm à sa base), de 3 à 5 cm, un peu de travers. Plus clairsemées, elles se lisaient
+  // comme les graduations d'une règle.
+  function rugEdges(x0, x1, z0, z1, seed) {
+    const e = 0.003, at = (x, z) => V(x, 0.003, z)
+    const border = g => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.02, 0.5); return g }
+    for (const [a, b] of [[at(x0 + e, z0 + e), at(x1 - e, z0 + e)], [at(x0 + e, z1 - e), at(x1 - e, z1 - e)],
+      [at(x0 + e, z0 + e), at(x0 + e, z1 - e)], [at(x1 - e, z0 + e), at(x1 - e, z1 - e)]]) B.add(M.tapis, border(rod(a, b, 0.0045, 8)))
+    const rnd = makeRnd(seed), n = Math.round((z1 - z0) / 0.012), y = 0.0015, hw = 0.002, v = []
+    for (const [x, s] of [[x0, -1], [x1, 1]]) for (let k = 0; k < n; k++) {
+      const z = z0 + (k + 0.5) * (z1 - z0) / n + (rnd() - 0.5) * 0.004, len = 0.03 + rnd() * 0.02, a = (rnd() - 0.5) * 0.3
+      const [za, zb] = s > 0 ? [z - hw, z + hw] : [z + hw, z - hw]   // face vers le haut
+      v.push(x, y, za, x, y, zb, x + s * len * Math.cos(a), y, z + len * Math.sin(a))
+    }
+    B.add(M.blanc, fromTriangles(v))
+  }
+  // Une image encadrée sur un mur : f, la face du mur { alongX, at, n (±1, vers la pièce) } ; centrée en (a, y) ; cadre
+  // w × h de baguettes arrondies (largeur border, épaisseur depth), passe-partout, image pw × ph prise sur la planche (pic).
+  function picture(f, a, y, w, h, pic, pw, ph, wood, border = 0.03, depth = 0.025) {
+    const P = (u, d) => f.alongX ? V(a + u, y, f.at + f.n * d) : V(f.at + f.n * d, y, a + u)
+    const ry = f.alongX ? (f.n > 0 ? 0 : Math.PI) : (f.n > 0 ? Math.PI / 2 : -Math.PI / 2)
+    const put = (mat, geo, u, v, d) => { const c = P(u, d); B.add(mat, geo, { x: c.x, y: c.y + v, z: c.z, ry }) }
+    const sw = w - 2 * border, sh = h - 2 * border
+    for (const s of [-1, 1]) {
+      put(wood, rounded(border, h, depth, 0.005), s * (w - border) / 2, 0, depth / 2)
+      put(wood, rounded(sw + 0.004, border, depth, 0.005), 0, s * (h - border) / 2, depth / 2)
+    }
+    put(M.blanc, new THREE.BoxGeometry(sw + 0.004, sh + 0.004, 0.012), 0, 0, 0.006)
+    put(M.tableaux, pictureGeo(pw, ph, pic), 0, 0, 0.0125)
+  }
+
+  // les pièces dessinées, d'axe de mur à axe de mur (la cuisine et la chambre des parents ne le sont pas)
+  const rooms = [
+    { x0: 5, x1: 7, z0: 7, z1: 8.5, sol: M.carrelage },     // palier
+    { x0: 4.5, x1: 7.5, z0: 4.5, z1: 7, sol: M.parquet },   // entrée
+    { x0: 7.5, x1: 12.5, z0: 1, z1: 7, sol: M.parquet },    // salon
+    { x0: 0.5, x1: 4.5, z0: 4.5, z1: 5.8, sol: M.parquet }, // couloir
+    { x0: 0.5, x1: 4.5, z0: 0.8, z1: 4.5, sol: M.parquet }, // chambre
+  ]
+  // Étendues [a, b] d'un morceau de mur (de a à b le long de x si alongX, sinon de z) dont la face, à la cote q, borde
+  // une pièce dessinée : coupées aux axes des murs de la pièce (dans un angle, les deux plinthes se croisent dans
+  // l'épaisseur du mur), et seulement s'il en reste un bout entre les faces de ces murs.
+  function roomSpans(alongX, q, a, b) {
+    const spans = []
+    for (const r of rooms) {
+      const [p0, p1, r0, r1] = alongX ? [r.z0, r.z1, r.x0, r.x1] : [r.x0, r.x1, r.z0, r.z1]
+      if (q <= p0 || q >= p1 || Math.min(b, r1 - T / 2) - Math.max(a, r0 + T / 2) <= 1e-6) continue
+      spans.push([Math.max(a, r0), Math.min(b, r1)])
+    }
+    return spans
+  }
 
   // ── murs ──
   // Un segment horizontal (z constant) ou vertical (x constant) ; ouvertures { from, to, bottom = 0, top }.
@@ -565,40 +876,51 @@ export function buildApartment() {
       }
       if (p.y0 === 0) {   // seuls les morceaux qui partent du sol arrêtent le joueur (jamais un linteau)
         if (alongX) solid(p.a, p.b, line - T / 2, line + T / 2); else solid(line - T / 2, line + T / 2, p.a, p.b)
-        for (const side of [-1, 1]) {   // plinthes (sombres sur le palier, blanches dans l'appartement)
-          const o = line + side * (T / 2 + 0.006), pm = (side < 0 ? matNeg : matPos) === M.murPalier ? M.boisSombre : M.blanc
-          if (alongX) box(pm, mid, 0.04, o, len, 0.08, 0.012); else box(pm, o, 0.04, mid, 0.012, 0.08, len)
+        // plinthes, seulement côté pièce dessinée (ni cuisine, ni parents, ni dehors) : droites et sombres sur le palier,
+        // moulurées et blanches dans l'appartement
+        for (const side of [-1, 1]) for (const [a, b] of roomSpans(alongX, line + side * (T / 2 + 0.01), p.a, p.b)) {
+          if ((side < 0 ? matNeg : matPos) === M.murPalier) {
+            const o = line + side * (T / 2 + 0.006), sl = b - a, sm = (a + b) / 2
+            if (alongX) box(M.boisSombre, sm, 0.04, o, sl, 0.08, 0.012); else box(M.boisSombre, o, 0.04, sm, 0.012, 0.08, sl)
+          } else {
+            const f = line + side * T / 2, at = u => alongX ? V(u, 0, f) : V(f, 0, u)
+            B.add(M.blanc, prism(P_PLINTHE, alongX ? V(0, 0, side) : V(side, 0, 0), UP, at(a), at(b)))
+          }
         }
       }
     }
   }
 
+  // les ouvertures : mur le long de x (alongX, z = line) ou de z (x = line), de from à to, jusqu'à top
+  const O = {
+    entree: { alongX: true, line: 7, from: 5.55, to: 6.45, top: 2.05 },
+    cuisine: { alongX: true, line: 4.5, from: 5.6, to: 6.5, top: 2.05 },
+    parents: { alongX: true, line: 5.8, from: 1.5, to: 2.4, top: 2.05 },
+    chambre: { alongX: true, line: 4.5, from: 2.0, to: 2.9, top: 2.05 },
+    arcSalon: { alongX: false, line: 7.5, from: 5.0, to: 6.6, top: 2.2 },
+    arcCouloir: { alongX: false, line: 4.5, from: 4.6, to: 5.7, top: 2.2 },
+    baie: { alongX: false, line: 12.5, from: 2, to: 6, bottom: 0.9, top: 2.3 },
+    fenetre: { alongX: true, line: 0.8, from: 1.4, to: 3.2, bottom: 1.0, top: 2.2 },
+  }
   // palier
   // les murs latéraux partent de l'épaisseur du mur z = 7 : leur bout (prolongé de T/2) y est noyé, et non à fleur de sa face côté entrée
   wall(5, 7 + T / 2, 5, 8.5, [], M.murPalier); wall(7, 7 + T / 2, 7, 8.5, [], M.murPalier); wall(5, 8.5, 7, 8.5, [], M.murPalier)
   // entrée
-  wall(4.5, 7, 7.5, 7, [{ from: 5.55, to: 6.45, top: 2.05 }], M.mur, M.murPalier)
-  wall(4.5, 4.5, 7.5, 4.5)
-  wall(7.5, 1, 7.5, 7, [{ from: 5.0, to: 6.6, top: 2.2 }])
-  wall(4.5, 4.5, 4.5, 7, [{ from: 4.6, to: 5.7, top: 2.2 }])
+  wall(4.5, 7, 7.5, 7, [O.entree], M.mur, M.murPalier)
+  wall(4.5, 4.5, 7.5, 4.5, [O.cuisine])
+  wall(7.5, 1, 7.5, 7, [O.arcSalon])
+  wall(4.5, 4.5, 4.5, 7, [O.arcCouloir])
   // salon
   wall(7.5, 1, 12.5, 1); wall(7.5, 7, 12.5, 7)
-  wall(12.5, 1, 12.5, 7, [{ from: 2, to: 6, bottom: 0.9, top: 2.3 }])
+  wall(12.5, 1, 12.5, 7, [O.baie])
   // couloir
-  wall(0.5, 4.5, 0.5, 5.8); wall(0.5, 5.8, 4.5, 5.8)
-  wall(0.5, 4.5, 4.5, 4.5, [{ from: 2.0, to: 2.9, top: 2.05 }], M.murEnfant, M.mur)
+  wall(0.5, 4.5, 0.5, 5.8); wall(0.5, 5.8, 4.5, 5.8, [O.parents])
+  wall(0.5, 4.5, 4.5, 4.5, [O.chambre], M.murEnfant, M.mur)
   // chambre de la petite
   wall(0.5, 0.8, 0.5, 4.5, [], M.murEnfant); wall(4.5, 0.8, 4.5, 4.5, [], M.murEnfant)
-  wall(0.5, 0.8, 4.5, 0.8, [{ from: 1.4, to: 3.2, bottom: 1.0, top: 2.2 }], M.murEnfant)
+  wall(0.5, 0.8, 4.5, 0.8, [O.fenetre], M.murEnfant)
 
   // ── sols et plafonds ──
-  const rooms = [
-    { x0: 5, x1: 7, z0: 7, z1: 8.5, sol: M.carrelage },     // palier
-    { x0: 4.5, x1: 7.5, z0: 4.5, z1: 7, sol: M.parquet },   // entrée
-    { x0: 7.5, x1: 12.5, z0: 1, z1: 7, sol: M.parquet },    // salon
-    { x0: 0.5, x1: 4.5, z0: 4.5, z1: 5.8, sol: M.parquet }, // couloir
-    { x0: 0.5, x1: 4.5, z0: 0.8, z1: 4.5, sol: M.parquet }, // chambre
-  ]
   for (const r of rooms) {
     const w = r.x1 - r.x0, d = r.z1 - r.z0, cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2
     const sol = new THREE.BoxGeometry(w, 0.02, d); sol.translate(cx, -0.01, cz)
@@ -606,40 +928,85 @@ export function buildApartment() {
     box(M.plafond, cx, H + 0.01, cz, w, 0.02, d)
   }
 
-  // ── chambranles ──
-  function frame(alongX, line, from, to, top, mat = M.boisSombre, skipB = false) {
-    const fw = 0.06, fd = T + 0.03
-    if (alongX) {
-      box(mat, from - fw / 2, top / 2, line, fw, top, fd)
-      if (!skipB) box(mat, to + fw / 2, top / 2, line, fw, top, fd)
-      box(mat, (from + to) / 2, top + fw / 2, line, to - from + 2 * fw, fw, fd)
-    } else {
-      box(mat, line, top / 2, from - fw / 2, fd, top, fw)
-      box(mat, line, top / 2, to + fw / 2, fd, top, fw)
-      box(mat, line, top + fw / 2, (from + to) / 2, fd, fw, to - from + 2 * fw)
+  // ── corniches : une gorge sous le plafond, le long des quatre murs de chaque pièce de l'appartement (pas du palier) ──
+  for (const r of rooms.slice(1)) {
+    const x0 = r.x0 + T / 2, x1 = r.x1 - T / 2, z0 = r.z0 + T / 2, z1 = r.z1 - T / 2
+    for (const [n, a, b] of [[V(0, 0, 1), V(x0, H, z0), V(x1, H, z0)], [V(0, 0, -1), V(x0, H, z1), V(x1, H, z1)],
+      [V(1, 0, 0), V(x0, H, z0), V(x0, H, z1)], [V(-1, 0, 0), V(x1, H, z0), V(x1, H, z1)]]) B.add(M.blanc, prism(P_CORNICHE, n, UP, a, b))
+  }
+
+  // ── chambranles et bâtis des portes et des arches, peints comme les portes intérieures (boiserie : ils arrêtent la
+  // visée, comme les murs) ──
+  // point de la face s (±1) d'une ouverture o, à l'abscisse a le long du mur et à la hauteur y
+  const onFace = (o, s, a, y) => { const f = o.line + s * T / 2; return o.alongX ? V(a, y, f) : V(f, y, a) }
+  // chambranle mouluré sur la face s : montants (côtés listés) et traverse, d'onglet ; head : étendue de la traverse
+  function architrave(o, s, { sides = ['from', 'to'], head = null } = {}) {
+    const n = o.alongX ? V(0, 0, s) : V(s, 0, 0), w = o.alongX ? V(1, 0, 0) : V(0, 0, 1), W = W_CHAMBRANLE
+    if (sides.includes('from')) B.add(M.boiserie, prism(P_CHAMBRANLE, w.clone().negate(), n, onFace(o, s, o.from, 0), onFace(o, s, o.from, o.top + W)))
+    if (sides.includes('to')) B.add(M.boiserie, prism(P_CHAMBRANLE, w, n, onFace(o, s, o.to, 0), onFace(o, s, o.to, o.top + W)))
+    const [h0, h1] = head || [sides.includes('from') ? o.from - W : o.from, sides.includes('to') ? o.to + W : o.to]
+    B.add(M.boiserie, prism(P_CHAMBRANLE, UP, n, onFace(o, s, h0, o.top), onFace(o, s, h1, o.top)))
+  }
+  // bâti : deux montants et une traverse de 2 cm qui habillent l'épaisseur du mur (5 mm de débord de chaque côté)
+  function lining(o, th = 0.02) {
+    const d = T + 0.01, bx = (a0, a1, y0, y1) => o.alongX
+      ? box(M.boiserie, (a0 + a1) / 2, (y0 + y1) / 2, o.line, a1 - a0, y1 - y0, d) : box(M.boiserie, o.line, (y0 + y1) / 2, (a0 + a1) / 2, d, y1 - y0, a1 - a0)
+    bx(o.from, o.from + th, 0, o.top); bx(o.to - th, o.to, 0, o.top); bx(o.from, o.to, o.top - th, o.top)
+  }
+  // la porte d'entrée garde son bâti d'origine (côté palier, éclairé par le néon) ; le montant côté gâche appartient à
+  // l'indice « serrure »
+  {
+    const fw = 0.06, fd = T + 0.03, o = O.entree
+    box(M.boisSombre, o.from - fw / 2, o.top / 2, o.line, fw, o.top, fd)
+    box(M.boisSombre, (o.from + o.to) / 2, o.top + fw / 2, o.line, o.to - o.from + 2 * fw, fw, fd)
+    // côté palier, le chambranle reçoit la lumière du néon (fine peau émissive, UV verticales du monde)
+    for (const [cx, cy, w, h] of [[5.52, 1.025, 0.06, 2.05], [6.0, 2.08, 1.02, 0.06]]) { const g = new THREE.BoxGeometry(w, h, 0.004); g.translate(cx, cy, 7 + fd / 2 + 0.002); B.add(M.portePalier, heightUV(g)) }
+    architrave(o, -1, { sides: ['from'], head: [o.from - W_CHAMBRANLE, o.to + W_CHAMBRANLE] })   // côté entrée : la traverse, intacte, court au-dessus de la gâche
+  }
+  for (const o of [O.chambre, O.cuisine, O.parents, O.arcSalon, O.arcCouloir]) lining(o)
+  architrave(O.chambre, 1); architrave(O.chambre, -1)
+  architrave(O.cuisine, 1); architrave(O.parents, -1)   // l'autre face donne sur une pièce fermée
+  architrave(O.arcSalon, 1); architrave(O.arcSalon, -1)
+  // l'arche du couloir touche presque les murs du couloir : côté entrée, un seul montant et la traverse jusqu'à l'angle ;
+  // côté couloir, la traverse seule, d'un mur à l'autre
+  architrave(O.arcCouloir, 1, { sides: ['to'], head: [4.5 + T / 2, O.arcCouloir.to + W_CHAMBRANLE] })
+  architrave(O.arcCouloir, -1, { sides: [], head: [4.5 + T / 2, 5.8 - T / 2] })
+
+  // ── portes intérieures : battants logés dans leur bâti, à deux panneaux à plate-bande, béquille sur rosace ──
+  const DOOR_Y = [0.16, 0.86, 1.0, 1.9]   // panneau du bas, panneau du haut (y0, y1)
+  // panneaux sur la face d'un battant (le long de x) en z, tournée vers s
+  function doorPanels(cx, z, s) {
+    for (const [y0, y1] of [[DOOR_Y[0], DOOR_Y[1]], [DOOR_Y[2], DOOR_Y[3]]]) {
+      const g = raisedPanel(0.6, y1 - y0); if (s < 0) g.rotateY(Math.PI)
+      B.add(M.boiserie, g, { x: cx, y: (y0 + y1) / 2, z })
     }
   }
-  frame(true, 7, 5.55, 6.45, 2.05, M.boisSombre, true)   // le montant côté gâche appartient à l'indice « serrure »
-  // côté palier, le chambranle reçoit la lumière du néon (fine peau émissive, UV verticales du monde)
-  for (const [cx, cy, w, h] of [[5.52, 1.025, 0.06, 2.05], [6.0, 2.08, 1.02, 0.06]]) { const g = new THREE.BoxGeometry(w, h, 0.004); g.translate(cx, cy, 7 + (T + 0.03) / 2 + 0.002); B.add(M.portePalier, heightUV(g)) }
-  frame(true, 4.5, 2.0, 2.9, 2.05)
-  frame(true, 4.5, 5.6, 6.5, 2.05); frame(true, 5.8, 1.5, 2.4, 2.05)   // cuisine, parents (portes fermées)
-
-  // ── portes fermées (battants en saillie, poignées) et porte ouverte de la chambre ──
-  box(M.boisSombre, 6.05, 1.025, 4.58, 0.88, 2.04, 0.04); solid(5.6, 6.5, 4.44, 4.6)
-  box(M.metal, 6.38, 1.0, 4.62, 0.12, 0.02, 0.02); box(M.metal, 6.42, 1.0, 4.61, 0.05, 0.12, 0.012)
-  box(M.boisSombre, 1.95, 1.025, 5.72, 0.88, 2.04, 0.04); solid(1.5, 2.4, 5.7, 5.86)
-  box(M.metal, 1.62, 1.0, 5.68, 0.12, 0.02, 0.02); box(M.metal, 1.58, 1.0, 5.69, 0.05, 0.12, 0.012)
-  for (const [mx, mz] of [[6.05, 4.612], [1.95, 5.688]]) for (const dy of [0.55, 1.5]) box(M.boisSombre, mx, dy, mz, 0.64, 0.6, 0.01)   // panneaux moulurés
-  // porte de la chambre, grande ouverte, rabattue contre le mur (gond en x = 2,9, côté chambre)
-  box(M.boisSombre, 3.36, 1.025, 4.41, 0.88, 2.04, 0.04); solid(2.9, 3.82, 4.37, 4.44)
-  box(M.metal, 3.72, 1.0, 4.375, 0.12, 0.02, 0.02)
+  // béquille : rosace, tige, et le levier tourné vers le gond (dir : ±1 le long de x)
+  function handle(x, z, s, dir) {
+    B.add(M.metal, new THREE.CylinderGeometry(0.024, 0.024, 0.008, 16).rotateX(Math.PI / 2), { x, y: 1.0, z: z + s * 0.004 })
+    B.add(M.metal, new THREE.CylinderGeometry(0.007, 0.007, 0.04, 8).rotateX(Math.PI / 2), { x, y: 1.0, z: z + s * 0.024 })
+    box(M.metal, x + dir * 0.05, 1.0, z + s * 0.044, 0.11, 0.016, 0.018)
+  }
+  // portes fermées : 1 cm en retrait de la face vue s, un seuil dessous (la pièce derrière n'est pas dessinée). Le battant
+  // entre de 1 mm dans son bâti (2 cm), sur les côtés et en tête : aucun jour sur le vide de la pièce derrière.
+  function closedDoor(o, s, handleAt, dir) {
+    const zc = o.line + s * (T / 2 - 0.03), cx = (o.from + o.to) / 2, lap = 0.001, y0 = 0.01, y1 = o.top - 0.02 + lap
+    box(M.boiserie, cx, (y0 + y1) / 2, zc, o.to - o.from - 2 * (0.02 - lap), y1 - y0, 0.04)
+    box(M.boisSombre, cx, 0.005, o.line, o.to - o.from, 0.01, T)
+    doorPanels(cx, zc + s * 0.02, s); handle(handleAt, zc + s * 0.02, s, dir)
+  }
+  closedDoor(O.cuisine, 1, 6.4, -1); solid(5.6, 6.5, 4.44, 4.6)
+  closedDoor(O.parents, -1, 1.6, 1); solid(1.5, 2.4, 5.7, 5.86)
+  // porte de la chambre, grande ouverte, rabattue contre son chambranle (gond en x = 2,9, côté chambre)
+  { const zc = 4.5 - T / 2 - 0.025 - 0.02
+    box(M.boiserie, 3.35, 1.019, zc, 0.86, 2.018, 0.04); solid(2.9, 3.82, 4.37, 4.44)
+    doorPanels(3.35, zc - 0.02, -1); handle(3.71, zc - 0.02, -1, -1) }
 
   // ── la porte d'entrée : battant à part (il bouge), pivot au gond (5,6 ; 6,97) ──
   const pivot = new THREE.Object3D(); pivot.position.set(5.6, 0, 6.97); pivot.rotation.y = 30 * DEG; group.add(pivot)
-  const leafGeo = mergeGeometries([
+  const leafGeo = mergeGeometries([   // côté entrée, des panneaux à plate-bande comme les portes intérieures
     new THREE.BoxGeometry(0.9, 2.05, 0.041).translate(0.45, 1.025, -0.0005),
-    new THREE.BoxGeometry(0.62, 0.7, 0.01).translate(0.45, 0.55, -0.026), new THREE.BoxGeometry(0.62, 0.9, 0.01).translate(0.45, 1.5, -0.026),
+    raisedPanel(0.62, 0.7).rotateY(Math.PI).translate(0.45, 0.55, -0.021), raisedPanel(0.62, 0.9).rotateY(Math.PI).translate(0.45, 1.5, -0.021),
   ])
   const leaf = new THREE.Mesh(leafGeo, M.boisSombre); leaf.castShadow = true; leaf.receiveShadow = true; pivot.add(leaf)
   // face palier du battant (panneaux moulurés compris), éclairée par le néon
@@ -672,7 +1039,7 @@ export function buildApartment() {
   }
 
   // ── palier : paillasson, néon, minuterie, sonnette, porte du voisin ──
-  box(M.tapis, 6.0, 0.006, 7.4, 0.8, 0.012, 0.5)   // paillassons : le tapis rouge sombre du couloir des cinématiques
+  B.add(M.tapis, rounded(0.8, 0.012, 0.5, 0.005), { x: 6.0, y: 0.006, z: 7.4 })   // paillassons : le tapis rouge sombre du couloir des cinématiques
   // boîtes peintes comme les murs du palier, ou comme les portes (éclairées par le néon)
   const palBox = (cx, cy, cz, w, h, d) => B.add(M.murPalier, palierUV(new THREE.BoxGeometry(w, h, d).translate(cx, cy, cz)))
   const doorBox = (cx, cy, cz, w, h, d) => B.add(M.portePalier, heightUV(new THREE.BoxGeometry(w, h, d).translate(cx, cy, cz)))
@@ -701,7 +1068,7 @@ export function buildApartment() {
     box(brass, 5.7, 1.0, z - 0.055, 0.12, 0.018, 0.022); box(brass, 5.66, 0.98, z - 0.043, 0.045, 0.2, 0.006)
     B.add(brass, new THREE.CylinderGeometry(0.008, 0.008, 0.01, 10).rotateX(Math.PI / 2), { x: 6.0, y: 1.55, z: z - 0.052 })
     box(brass, 6.0, 1.42, z - 0.052, 0.1, 0.03, 0.004)
-    box(M.tapis, 6.0, 0.006, 8.15, 0.7, 0.012, 0.42, { ry: Math.PI + 0.04 })
+    B.add(M.tapis, rounded(0.7, 0.012, 0.42, 0.005), { x: 6.0, y: 0.006, z: 8.15, ry: Math.PI + 0.04 })
     B.add(M.veilleuse, tint(new THREE.BoxGeometry(0.84, 0.011, 0.038), 0xffb870), { x: 6.0, y: 0.0055, z: z - 0.02 })
     glows.push(tint(flat(1.3, 0.55, 6.0, 0.0135, z - 0.275, 0, [0, 0.5, 0.5, 1]), 0x3a2410))   // au-dessus des paillassons
   }
@@ -714,83 +1081,249 @@ export function buildApartment() {
   ])
   const halo = new THREE.Mesh(haloGeo, M.halo); halo.renderOrder = 2; group.add(halo)
 
-  // ── entrée : console, vide-poche, miroir ──
-  box(M.boisSombre, 4.78, 0.82, 6.35, 0.42, 0.04, 0.9)
-  for (const [lx, lz] of [[4.6, 5.93], [4.96, 5.93], [4.6, 6.77], [4.96, 6.77]]) box(M.boisSombre, lx, 0.4, lz, 0.035, 0.8, 0.035)
-  box(M.boisSombre, 4.78, 0.7, 6.35, 0.4, 0.16, 0.86)
-  box(M.metal, 4.99, 0.7, 6.35, 0.01, 0.02, 0.14)
+  // ── entrée : console à tiroir, vide-poche, miroir ──
+  // plateau aux arêtes adoucies (dessus à 84 cm : le téléphone y est posé), pieds effilés, caisson ; la façade (x = 4,965)
+  // est faite de traverses, de montants et du tiroir, séparés par un jour de 3 mm qui laisse voir le caisson, 3 cm derrière
+  B.add(M.boisSombre, rounded(0.42, 0.035, 0.9, 0.012, 2), { x: 4.78, y: 0.8225, z: 6.35 })
+  for (const [lx, lz] of [[4.6, 5.93], [4.96, 5.93], [4.6, 6.77], [4.96, 6.77]]) B.add(M.boisSombre, taper(rounded(0.034, 0.805, 0.034, 0.006), 0.7), { x: lx, y: 0.4025, z: lz })
+  {
+    const xf = 4.965, z0 = 5.947, z1 = 6.753, fbox = (y0, y1, a0, a1) => box(M.boisSombre, xf - 0.01, (y0 + y1) / 2, (a0 + a1) / 2, 0.02, y1 - y0, a1 - a0)
+    box(M.boisSombre, (4.6 + xf - 0.03) / 2, 0.735, 6.35, xf - 0.03 - 4.6, 0.14, z1 - z0)   // caisson
+    fbox(0.785, 0.805, z0, z1); fbox(0.665, 0.685, z0, z1); fbox(0.685, 0.785, z0, 6.02); fbox(0.685, 0.785, 6.68, z1)
+    fbox(0.688, 0.782, 6.023, 6.677)                                                          // le tiroir
+    B.add(brass, rod(V(xf, 0.735, 6.35), V(xf + 0.012, 0.735, 6.35), 0.005, 8))              // son bouton de laiton
+    B.add(brass, new THREE.SphereGeometry(0.013, 12, 8), { x: xf + 0.02, y: 0.735, z: 6.35 })
+  }
   solid(4.57, 4.99, 5.9, 6.8)
   B.add(M.metal, new THREE.CylinderGeometry(0.085, 0.06, 0.025, 16), { x: 4.8, y: 0.853, z: 6.58 })
   box(M.metal, 4.82, 0.87, 6.56, 0.06, 0.004, 0.012, { ry: 0.6 }); box(M.metal, 4.78, 0.87, 6.6, 0.05, 0.004, 0.01, { ry: -0.3 })
-  box(M.boisSombre, 4.575, 1.55, 6.35, 0.03, 0.82, 0.62)
+  B.add(M.boisSombre, rounded(0.03, 0.82, 0.62, 0.012), { x: 4.575, y: 1.55, z: 6.35 })
   const mirror = new THREE.BoxGeometry(0.006, 0.72, 0.52); mirror.translate(4.594, 1.55, 6.35); B.add(M.miroir, mirror)
+  {   // la patère, sur le mur de la cuisine : le ciré jaune de la petite pendu par sa capuche, son écharpe, ses bottes dessous
+    const zf = 4.5 + T / 2, YELLOW = 0xb08a2c, RED = 0x9a3440
+    B.add(M.boisSombre, rounded(0.66, 0.08, 0.022, 0.008), { x: 5.05, y: 1.64, z: zf + 0.011 })
+    for (const x of [4.85, 5.05, 5.25]) {
+      B.add(brass, rod(V(x, 1.625, zf + 0.02), V(x, 1.625, zf + 0.07), 0.005, 6)); B.add(brass, rod(V(x, 1.625, zf + 0.07), V(x, 1.655, zf + 0.082), 0.005, 6))
+    }
+    // le ciré : un corps évasé vers le bas (pendu, il garde le pli des épaules), deux manches, la capuche sur le crochet
+    B.add(M.livres, tint(warp(cushion(0.34, 0.07, 0.5, 0.45, 0.3), (x, y, z) => [x * (0.98 + 0.4 * z), y, z]), YELLOW), { x: 4.85, y: 1.36, z: zf + 0.046, rx: Math.PI / 2 })
+    for (const s of [-1, 1]) B.add(M.livres, tint(between(new THREE.CapsuleGeometry(0.03, 0.3, 3, 8), V(4.85 + s * 0.14, 1.55, zf + 0.05), V(4.85 + s * 0.18, 1.2, zf + 0.056)), YELLOW))
+    B.add(M.livres, tint(cushion(0.19, 0.09, 0.2, 0.6, 0.5), YELLOW), { x: 4.85, y: 1.6, z: zf + 0.058, rx: Math.PI / 2 + 0.35 })
+    // l'écharpe, pliée sur le crochet de droite (sa tige court en y = 1,625, de 2 à 7 cm du mur) : le pan de devant
+    // descend jusqu'à 1,06 m et dérive à gauche, celui de derrière, plus court, à droite, entre le mur et l'autre pan.
+    // Ramassée au crochet (4,5 cm), elle s'ouvre à 12 cm en 25 cm de chute ; des plis courent sur sa longueur, à peine
+    // marqués au pli du crochet ; des franges à ses deux bouts.
+    {
+      const C = V(5.25, 1.618, zf + 0.045), r = 0.017, a = 9 / 22, b = 14 / 22   // rangées : 9 au pan de devant, 5 au pli, 8 derrière
+      const F0 = V(5.218, 1.06, zf + 0.047), F1 = V(C.x, C.y, C.z + r), B1 = V(C.x, C.y, C.z - r), B0 = V(5.29, 1.12, zf + 0.024)
+      const Lf = F0.distanceTo(F1), Lb = B0.distanceTo(B1)
+      const path = s => s <= a ? F0.clone().lerp(F1, s / a)
+        : s < b ? V(C.x, C.y + r * Math.sin(Math.PI * (s - a) / (b - a)), C.z + r * Math.cos(Math.PI * (s - a) / (b - a)))
+          : B1.clone().lerp(B0, (s - b) / (1 - b))
+      const drop = s => s <= a ? (a - s) / a * Lf : s < b ? 0 : (s - b) / (1 - b) * Lb       // chute depuis le crochet
+      const geos = scarf(path, s => 0.045 + 0.075 * smooth(0, 0.25, drop(s)),
+        (u, s) => 0.006 * smooth(0, 0.1, drop(s)) * Math.sin(u * 1.5 * Math.PI + 0.6 + 2.5 * s), 0.008, 6, 22, 5, 83)
+      for (const g of geos) B.add(M.livres, tint(g, RED))
+    }
+    // les bottes de pluie, sous le ciré
+    for (const [x, z, ry] of [[4.8, zf + 0.13, 0.1], [4.93, zf + 0.115, -0.15]]) {
+      B.add(M.livres, tint(rounded(0.075, 0.17, 0.085, 0.025), YELLOW), { x, y: 0.135, z, ry })
+      B.add(M.livres, tint(rounded(0.08, 0.06, 0.15, 0.025), YELLOW), { x: x + Math.sin(ry) * 0.035, y: 0.03, z: z + Math.cos(ry) * 0.035, ry })
+    }
+  }
 
   // ── salon ──
+  // le tapis : à plat, un ourlet roulé tout autour, des franges aux deux petits côtés
   B.add(M.tapis, flat(3.2, 2.4, 9.6, 0.004, 3.4))
-  // canapé contre z = 1 (collision x 8,15–10,65, z 1,2–2,2)
-  box(M.tissu, 9.4, 0.175, 1.75, 2.2, 0.35, 0.85)
-  box(M.tissu, 9.4, 0.45, 1.31, 2.2, 0.9, 0.18)
-  box(M.tissu, 8.23, 0.305, 1.7, 0.16, 0.61, 0.95); box(M.tissu, 10.57, 0.305, 1.7, 0.16, 0.61, 0.95)
-  box(M.tissu, 8.85, 0.4, 1.82, 1.04, 0.12, 0.7, { rz: 0.02 }); box(M.tissu, 9.93, 0.39, 1.82, 1.04, 0.12, 0.7, { rz: -0.015 })
-  box(M.tissu, 8.7, 0.07, 2.55, 0.5, 0.12, 0.42, { ry: 0.5, rz: 0.04 })   // coussin tombé, entre le canapé et la table (hors de leurs emprises)
+  rugEdges(8.0, 11.2, 2.2, 4.6, 61)
+  // canapé contre z = 1 (collision x 8,15–10,65, z 1,2–2,2) : socle, dossier et accoudoirs roulés aux arêtes arrondies,
+  // deux coussins d'assise et deux coussins de dossier bombés, pieds tournés
+  B.add(M.tissu, rounded(2.0, 0.24, 0.92, 0.03), { x: 9.4, y: 0.18, z: 1.7 })
+  B.add(M.tissu, rounded(2.36, 0.68, 0.2, 0.05), { x: 9.4, y: 0.4, z: 1.2 })
+  for (const x of [8.31, 10.49]) B.add(M.tissu, rounded(0.18, 0.56, 0.96, 0.07, 2), { x, y: 0.34, z: 1.66 })
+  for (const x of [8.905, 9.895]) {
+    B.add(M.tissu, cushion(0.98, 0.15, 0.8), { x, y: 0.365, z: 1.72 })
+    B.add(M.tissu, cushion(0.98, 0.2, 0.5), { x, y: 0.67, z: 1.42, rx: Math.PI / 2 - 0.15 })   // dossier, un peu renversé
+  }
+  for (const [x, z] of [[8.27, 1.18], [10.53, 1.18], [8.27, 2.1], [10.53, 2.1]]) B.add(M.boisSombre, new THREE.CylinderGeometry(0.022, 0.015, 0.06, 8), { x, y: 0.03, z })
+  B.add(M.tissu, cushion(0.5, 0.12, 0.42), { x: 8.7, y: 0.058, z: 2.55, ry: 0.5, rz: 0.05 })   // coussin tombé, entre le canapé et la table (hors de leurs emprises)
   solid(8.15, 10.65, 1.2, 2.2)
-  // table basse (9,5 ; 0,2 ; 3,1) 1,1 × 0,4 × 0,6
-  box(M.boisSombre, 9.5, 0.38, 3.1, 1.1, 0.04, 0.6)
-  for (const [lx, lz] of [[9.0, 2.85], [10.0, 2.85], [9.0, 3.35], [10.0, 3.35]]) box(M.boisSombre, lx, 0.18, lz, 0.05, 0.36, 0.05)
-  box(M.boisSombre, 9.5, 0.1, 3.1, 1.0, 0.02, 0.5)
+  // table basse (9,5 ; 0,2 ; 3,1) 1,1 × 0,4 × 0,6 : plateau épais aux arêtes adoucies (dessus à 40 cm : le mot y est posé),
+  // ceinture, pieds fuselés, tablette
+  B.add(M.boisSombre, rounded(1.1, 0.06, 0.6, 0.015, 2), { x: 9.5, y: 0.37, z: 3.1 })
+  for (const [lx, lz] of [[9.0, 2.85], [10.0, 2.85], [9.0, 3.35], [10.0, 3.35]]) B.add(M.boisSombre, new THREE.CylinderGeometry(0.026, 0.017, 0.34, 10), { x: lx, y: 0.17, z: lz })
+  box(M.boisSombre, 9.5, 0.315, 2.85, 0.95, 0.05, 0.02); box(M.boisSombre, 9.5, 0.315, 3.35, 0.95, 0.05, 0.02)
+  box(M.boisSombre, 9.0, 0.315, 3.1, 0.02, 0.05, 0.45); box(M.boisSombre, 10.0, 0.315, 3.1, 0.02, 0.05, 0.45)
+  B.add(M.boisSombre, rounded(1.0, 0.025, 0.5, 0.008), { x: 9.5, y: 0.1, z: 3.1 })
   solid(8.95, 10.05, 2.8, 3.4)
-  // étagère contre z = 7 : (11,2 ; 0,95 ; 6,82) 1,4 × 1,9 × 0,3
-  box(M.boisSombre, 10.52, 0.95, 6.82, 0.03, 1.9, 0.3); box(M.boisSombre, 11.88, 0.95, 6.82, 0.03, 1.9, 0.3)
+  // étagère contre z = 7 : (11,2 ; 0,95 ; 6,82) 1,4 × 1,9 × 0,3, montants, planches et couronnement aux arêtes adoucies
+  for (const x of [10.52, 11.88]) B.add(M.boisSombre, rounded(0.03, 1.9, 0.3, 0.008), { x, y: 0.95, z: 6.82 })
   box(M.boisSombre, 11.2, 0.95, 6.96, 1.4, 1.9, 0.015)
-  for (const sy of [0.03, 0.5, 0.95, 1.4, 1.885]) box(M.boisSombre, 11.2, sy, 6.82, 1.34, 0.03, 0.29)
+  for (const sy of [0.03, 0.5, 0.95, 1.4]) B.add(M.boisSombre, rounded(1.34, 0.03, 0.29, 0.006), { x: 11.2, y: sy, z: 6.82 })
+  B.add(M.boisSombre, rounded(1.42, 0.04, 0.32, 0.012), { x: 11.2, y: 1.92, z: 6.815 })
   solid(10.5, 11.9, 6.67, 6.97)
   {
-    const rnd = makeRnd(13), cols = [0x6a2a24, 0x2a3a52, 0x3a4a2e, 0x7a6248, 0x4a2a3a, 0x8a7a5a, 0x2e2e34, 0x5a3a22]
-    for (const [sy, skip] of [[0.045, 0], [0.515, 0.45], [0.965, 0], [1.415, 0.7]]) {
+    // livres de toutes les couleurs (teintes de base, chaque livre un peu plus clair ou plus sombre), debout ; sur la
+    // troisième planche, une pile de livres couchés ; un vase sur le couronnement
+    const rnd = makeRnd(13), cols = [0x6a2a24, 0x2a3a52, 0x3a4a2e, 0x7a6248, 0x4a2a3a, 0x8a7a5a, 0x2e2e34, 0x5a3a22, 0xb4a484, 0x2a5656, 0x9a6230, 0x46506a]
+    const color = () => new THREE.Color(cols[Math.floor(rnd() * cols.length)]).offsetHSL(0, (rnd() - 0.5) * 0.06, (rnd() - 0.5) * 0.07).getHex()
+    for (const [sy, skip, end] of [[0.045, 0, 11.82], [0.515, 0.45, 11.82], [0.965, 0, 11.48], [1.415, 0.7, 11.82]]) {
       let x = 10.56
-      while (x < 11.82) {
+      while (x < end) {
         const bw = 0.025 + rnd() * 0.03, bh = 0.2 + rnd() * 0.16, bd = 0.17 + rnd() * 0.07
         if (skip && x > 10.56 + skip && x < 10.56 + skip + 0.32) { x += bw; continue }   // trous : ce qui est tombé
         const lean = rnd() < 0.08 ? 0.25 : 0
-        B.add(M.livres, tint(new THREE.BoxGeometry(bw, bh, bd), cols[Math.floor(rnd() * cols.length)]), { x: x + bw / 2, y: sy + bh / 2, z: 6.95 - bd / 2 - 0.01, rz: lean })
+        B.add(M.livres, tint(new THREE.BoxGeometry(bw, bh, bd), color()), { x: x + bw / 2, y: sy + bh / 2, z: 6.95 - bd / 2 - 0.01, rz: lean })
         x += bw + 0.003
       }
     }
+    let y = 0.965
+    for (const [w, t, d] of [[0.26, 0.04, 0.19], [0.24, 0.035, 0.18], [0.25, 0.045, 0.17], [0.22, 0.03, 0.16]]) {
+      B.add(M.livres, tint(new THREE.BoxGeometry(w, t, d), color()), { x: 11.64 + (rnd() - 0.5) * 0.02, y: y + t / 2, z: 6.94 - d / 2, ry: (rnd() - 0.5) * 0.12 })
+      y += t
+    }
+    B.add(M.livres, tint(new THREE.CylinderGeometry(0.035, 0.05, 0.16, 12), 0x3a5a5c), { x: 10.75, y: 2.02, z: 6.82 })
+    B.add(M.livres, tint(new THREE.SphereGeometry(0.06, 12, 8), 0x3a5a5c), { x: 10.75, y: 1.99, z: 6.82, sy: 0.8 })
     // livres tombés au sol
-    for (const [bx, bz, ry] of [[10.75, 6.25, 0.4], [11.55, 6.05, -0.9], [10.95, 5.95, 1.6]]) B.add(M.livres, tint(new THREE.BoxGeometry(0.16, 0.035, 0.24), cols[Math.floor(rnd() * cols.length)]), { x: bx, y: 0.018, z: bz, ry })
+    for (const [bx, bz, ry] of [[10.75, 6.25, 0.4], [11.55, 6.05, -0.9], [10.95, 5.95, 1.6]]) B.add(M.livres, tint(new THREE.BoxGeometry(0.16, 0.035, 0.24), color()), { x: bx, y: 0.018, z: bz, ry })
   }
-  // radiateur sous la fenêtre
-  for (let i = 0; i < 15; i++) box(M.blanc, 12.37, 0.44, 3.25 + i * 0.1, 0.09, 0.56, 0.06)
-  box(M.blanc, 12.37, 0.15, 4.0, 0.06, 0.03, 1.5); box(M.blanc, 12.37, 0.73, 4.0, 0.06, 0.03, 1.5)
-  solid(12.28, 12.44, 3.2, 4.8)
-  // fenêtre du salon : appui, menuiseries, vitre
-  box(M.blanc, 12.38, 0.91, 4.0, 0.18, 0.03, 4.1)
-  for (const z of [2.03, 3.33, 4.67, 5.97]) box(M.metal, 12.5, 1.6, z, 0.07, 1.4, 0.06)
-  for (const y of [0.93, 1.6, 2.27]) box(M.metal, 12.5, y, 4.0, 0.07, 0.06, 4.0)
-  { const g = new THREE.PlaneGeometry(4, 1.4); g.rotateY(-Math.PI / 2); g.translate(12.52, 1.6, 4.0); B.add(M.vitre, g) }
-  // rideaux (plans ondulés) et tringle
-  function curtain(mat, cx, cz, w, top, alongZ, facing, seed, bottom = 0.02) {
-    const rnd = makeRnd(seed), g = new THREE.PlaneGeometry(w, top, 28, 6), p = g.attributes.position
-    const ph = rnd() * 6
+  // fauteuil de velours, dans l'angle de la fenêtre, tourné vers la table basse : socle, coussin, accoudoirs roulés,
+  // dossier un peu renversé et son coussin, pieds tournés ; parties placées dans le repère du fauteuil
+  {
+    const cx = 11.45, cz = 1.85, RY = -0.95, c = Math.cos(RY), s = Math.sin(RY)
+    const at = (lx, y, lz, rx = 0) => ({ x: cx + lx * c + lz * s, y, z: cz - lx * s + lz * c, rx, ry: RY, order: 'YXZ' })
+    B.add(M.velours, rounded(0.76, 0.24, 0.74, 0.03), at(0, 0.2, 0))
+    B.add(M.velours, cushion(0.54, 0.14, 0.6), at(0, 0.38, 0.05))
+    for (const lx of [-0.325, 0.325]) B.add(M.velours, rounded(0.11, 0.34, 0.74, 0.05, 2), at(lx, 0.43, 0))
+    B.add(M.velours, rounded(0.76, 0.66, 0.14, 0.05), at(0, 0.59, -0.3, -0.12))
+    B.add(M.velours, cushion(0.52, 0.14, 0.44), at(0, 0.66, -0.17, Math.PI / 2 - 0.12))
+    for (const lx of [-0.3, 0.3]) for (const lz of [-0.3, 0.3]) B.add(M.boisSombre, new THREE.CylinderGeometry(0.02, 0.014, 0.08, 8), at(lx, 0.04, lz))
+    solid(10.9, 12.0, 1.3, 2.4)
+  }
+  // une sansevière dans son pot de terre cuite, contre le mur, entre le canapé et le fauteuil : on la voit de tout le
+  // salon (dans l'angle de la fenêtre, derrière le fauteuil, seules deux pointes de feuilles en dépassaient) ; ses
+  // feuilles penchent vers la pièce, à peine vers le mur
+  {
+    const px = 10.85, pz = 1.32, rnd = makeRnd(59), POT = 0x8a4a30
+    B.add(M.livres, tint(new THREE.CylinderGeometry(0.13, 0.1, 0.26, 16), POT), { x: px, y: 0.13, z: pz })
+    B.add(M.livres, tint(new THREE.TorusGeometry(0.128, 0.014, 6, 16), POT), { x: px, y: 0.255, z: pz, rx: Math.PI / 2 })
+    B.add(M.livres, tint(new THREE.CircleGeometry(0.12, 16), 0x2a1e16), { x: px, y: 0.235, z: pz, rx: -Math.PI / 2 })
+    for (let k = 0; k < 9; k++) {
+      const a = k / 9 * Math.PI * 2 + rnd() * 0.5, dx = Math.cos(a), dz = -Math.sin(a), r0 = 0.02 + rnd() * 0.06
+      const len = 0.42 + rnd() * 0.36, lean = (0.08 + rnd() * 0.16) * (dz < 0 ? 0.25 : 1)   // à peine vers le mur (−z)
+      const leaf = new THREE.CapsuleGeometry(0.028, len, 2, 6).scale(1, 1, 0.22).translate(0, len / 2 + 0.028, 0)
+      warp(leaf, (x, y, z) => { const t = Math.min(1, y / (len + 0.056)); return [x * (1 - 0.75 * t), y, z] })
+      leaf.rotateY(rnd() * Math.PI).rotateZ(-lean).rotateY(a).translate(px + dx * r0, 0.22, pz + dz * r0)
+      B.add(M.livres, tint(leaf, new THREE.Color(0x2c4a2a).offsetHSL(0, 0, (rnd() - 0.5) * 0.06).getHex()))
+    }
+    solid(px - 0.14, px + 0.14, pz - 0.14, pz + 0.14)
+  }
+  // deux vues de vacances au-dessus du canapé
+  picture({ alongX: true, at: 1 + T / 2, n: 1 }, 8.9, 1.52, 0.52, 0.4, PIC.mer, 0.36, 0.27, M.boisSombre)
+  picture({ alongX: true, at: 1 + T / 2, n: 1 }, 9.9, 1.52, 0.52, 0.4, PIC.lac, 0.36, 0.27, M.boisSombre)
+  // ── radiateur en fonte : éléments à tranche arrondie, deux collecteurs, le tuyau qui sort du sol et son robinet ──
+  // f : face du mur { alongX, at, n (vers la pièce) } ; de a0 à a1 le long du mur, de y0 à y1 ; pitch : pas visé d'un
+  // élément au suivant ; valve : côté du robinet (-1 : a0, 1 : a1)
+  function radiator(f, a0, a1, y0, y1, pitch, valve) {
+    const P = (a, y, u) => f.alongX ? V(a, y, f.at + f.n * u) : V(f.at + f.n * u, y, a)
+    const nIn = f.alongX ? V(0, 0, f.n) : V(f.n, 0, 0), along = new THREE.Vector3().crossVectors(nIn, UP)
+    const D = 0.075, uc = 0.035 + D / 2, count = Math.max(2, Math.round((a1 - a0) / pitch)), p = (a1 - a0) / count, thk = p * 0.7
+    const shape = roundedRect(D, y1 - y0, 0.03)
+    for (let k = 0; k < count; k++) {
+      const g = extrude(shape, thk).translate(0, 0, -thk / 2)
+      B.add(M.blanc, g.applyMatrix4(new THREE.Matrix4().makeBasis(nIn, UP, along).setPosition(P(a0 + (k + 0.5) * p, (y0 + y1) / 2, uc))))
+    }
+    for (const y of [y0 + 0.05, y1 - 0.05]) B.add(M.blanc, rod(P(a0 + 0.01, y, uc), P(a1 - 0.01, y, uc), 0.016))
+    const va = valve < 0 ? a0 - 0.035 : a1 + 0.035, end = valve < 0 ? a0 + 0.01 : a1 - 0.01, yt = y1 - 0.05
+    B.add(M.blanc, rod(P(va, 0, uc), P(va, yt, uc), 0.011)); B.add(M.blanc, rod(P(va, yt, uc), P(end, yt, uc), 0.011))
+    B.add(M.metal, rod(P(va, yt, uc), P(va, yt + 0.07, uc), 0.017, 10)); B.add(M.metal, rod(P(va, yt + 0.07, uc), P(va, yt + 0.095, uc), 0.024, 10))
+  }
+
+  // ── fenêtres : embrasure (tableaux peints), appui à nez arrondi, dormant, vantaux à petits bois, espagnolettes ──
+  // o : l'ouverture ; n : côté de la pièce (+1 : coordonnées croissantes) ; bays : travées de deux vantaux ; handleY :
+  // bas de la poignée. La menuiserie est posée au fond de l'embrasure, de 16 à 22 cm derrière la face du mur (les
+  // tableaux prolongent l'épaisseur du mur jusqu'à 24 cm) ; la pluie, la ville et la lumière de la nuit sont derrière.
+  function windowSet(o, n, bays, handleY) {
+    const at = o.line + n * T / 2
+    const P = (a, y, d) => o.alongX ? V(a, y, at - n * d) : V(at - n * d, y, a)   // d : profondeur derrière la face
+    const lbox = (mat, a0, a1, y0, y1, d0, d1) => {
+      const c = P((a0 + a1) / 2, (y0 + y1) / 2, (d0 + d1) / 2)
+      if (o.alongX) box(mat, c.x, c.y, c.z, a1 - a0, y1 - y0, d1 - d0); else box(mat, c.x, c.y, c.z, d1 - d0, y1 - y0, a1 - a0)
+    }
+    const nIn = o.alongX ? V(0, 0, n) : V(n, 0, 0), th = 0.02, DL = 0.24, F = [0.16, 0.22], L = [0.155, 0.205]
+    // tableaux, appui et bandeau sous son nez
+    lbox(M.blanc, o.from, o.from + th, o.bottom, o.top, -0.005, DL); lbox(M.blanc, o.to - th, o.to, o.bottom, o.top, -0.005, DL)
+    lbox(M.blanc, o.from, o.to, o.top - th, o.top, -0.005, DL)
+    B.add(M.blanc, prism(P_APPUI, nIn, UP, P(o.from - 0.05, o.bottom, 0), P(o.to + 0.05, o.bottom, 0)))
+    lbox(M.blanc, o.from - 0.03, o.to + 0.03, o.bottom - 0.05, o.bottom, -0.012, 0)
+    // dormant, puis le vitrage dans son épaisseur
+    const A0 = o.from + th, A1 = o.to - th, Y0 = o.bottom + 0.034, Y1 = o.top - th, fw = 0.05
+    lbox(M.blanc, A0, A0 + fw, Y0, Y1, ...F); lbox(M.blanc, A1 - fw, A1, Y0, Y1, ...F)
+    lbox(M.blanc, A0 + fw, A1 - fw, Y0, Y0 + fw, ...F); lbox(M.blanc, A0 + fw, A1 - fw, Y1 - fw, Y1, ...F)
+    const a0 = A0 + fw, a1 = A1 - fw, y0 = Y0 + fw, y1 = Y1 - fw
+    {
+      const g = new THREE.PlaneGeometry(a1 - a0, y1 - y0)
+      if (!o.alongX) g.rotateY(n < 0 ? -Math.PI / 2 : Math.PI / 2); else if (n < 0) g.rotateY(Math.PI)
+      const c = P((a0 + a1) / 2, (y0 + y1) / 2, 0.19); g.translate(c.x, c.y, c.z); B.add(M.vitre, g)
+    }
+    // travées : un meneau entre deux ; deux vantaux chacune (montants, traverses, deux petits bois), battement, espagnolette
+    const mw = 0.06, bw = (a1 - a0 - (bays - 1) * mw) / bays, st = 0.045
+    for (let k = 0; k < bays; k++) {
+      const b0 = a0 + k * (bw + mw), b1 = b0 + bw, mid = (b0 + b1) / 2
+      if (k) lbox(M.blanc, b0 - mw, b0, y0, y1, ...F)
+      for (const [l0, l1] of [[b0, mid], [mid, b1]]) {
+        lbox(M.blanc, l0, l0 + st, y0, y1, ...L); lbox(M.blanc, l1 - st, l1, y0, y1, ...L)
+        lbox(M.blanc, l0 + st, l1 - st, y0, y0 + 0.06, ...L); lbox(M.blanc, l0 + st, l1 - st, y1 - 0.05, y1, ...L)
+        const g0 = y0 + 0.06, g1 = y1 - 0.05
+        for (const f of [1 / 3, 2 / 3]) { const y = g0 + (g1 - g0) * f; lbox(M.blanc, l0 + st, l1 - st, y - 0.011, y + 0.011, 0.165, 0.2) }
+      }
+      lbox(M.blanc, mid - 0.014, mid + 0.014, y0 + 0.02, y1 - 0.02, 0.145, L[0])
+      B.add(brass, rod(P(mid, y0 + 0.06, 0.138), P(mid, y1 - 0.06, 0.138), 0.006, 6))
+      lbox(brass, mid - 0.01, mid + 0.01, handleY, handleY + 0.13, 0.125, 0.137)
+    }
+  }
+
+  // ── rideaux : un plan plissé, plis serrés sous la tringle qui s'ouvrent vers le bas, ourlet ; tringle à anneaux ──
+  function curtain(mat, cx, cz, w, y0, y1, alongZ, facing, seed) {
+    const h = y1 - y0, rnd = makeRnd(seed), g = new THREE.PlaneGeometry(w, h, 40, 8), p = g.attributes.position
+    const ph = rnd() * 6, folds = Math.max(4, Math.round(w / 0.11))
     for (let i = 0; i < p.count; i++) {
-      const u = p.getX(i), v = p.getY(i)
-      p.setZ(i, 0.035 * Math.sin(u * 30 + ph) + 0.012 * Math.sin(u * 71 + ph * 2) + (v < -top / 2 + 0.05 ? 0.01 : 0))
+      const u = p.getX(i) / w + 0.5, v = p.getY(i) / h + 0.5   // de 0 à 1 : de gauche à droite, de bas en haut
+      const k = u * folds * Math.PI * 2 + ph, amp = 0.022 + 0.014 * (1 - v)
+      p.setZ(i, amp * Math.sin(k) + 0.006 * Math.sin(k * 2.3 + ph) + (v < 0.03 ? 0.006 : 0))
     }
     g.computeVertexNormals()
     if (alongZ) g.rotateY(facing < 0 ? -Math.PI / 2 : Math.PI / 2); else if (facing < 0) g.rotateY(Math.PI)
-    g.translate(cx, bottom + top / 2, cz)
+    g.translate(cx, (y0 + y1) / 2, cz)
     B.add(mat, g)
   }
-  curtain(M.rideau, 12.34, 1.7, 0.75, 2.42, true, -1, 41); curtain(M.rideau, 12.34, 6.3, 0.75, 2.42, true, -1, 43)
-  B.add(M.metal, rod(V(12.36, 2.47, 1.15), V(12.36, 2.47, 6.85), 0.012))
-  // chaise renversée près de l'arche, hors du passage (8,0 ; 6,65), sans collision
+  // barre de p0 à p1, embouts en boule, supports scellés au mur (paires [mur, barre]), anneaux aux points donnés
+  function curtainRod(p0, p1, supports, rings) {
+    B.add(M.metal, rod(p0, p1, 0.011))
+    for (const q of [p0, p1]) B.add(M.metal, new THREE.SphereGeometry(0.022, 8, 6), { x: q.x, y: q.y, z: q.z })
+    for (const [w, r] of supports) B.add(M.metal, rod(w, r, 0.006, 6))
+    const alongX = Math.abs(p1.x - p0.x) > Math.abs(p1.z - p0.z)
+    for (const q of rings) B.add(M.metal, new THREE.TorusGeometry(0.019, 0.0035, 3, 8), { x: q.x, y: q.y, z: q.z, ry: alongX ? Math.PI / 2 : 0 })
+  }
+  const ringsOver = (c, w, at) => { const m = Math.round(w / 0.1), r = []; for (let k = 0; k <= m; k++) r.push(at(c - w / 2 + k * w / m)); return r }
+
+  // le salon : radiateur, baie à trois travées, rideaux sombres jusqu'au sol
+  radiator({ alongX: false, at: 12.5 - T / 2, n: -1 }, 3.25, 4.75, 0.12, 0.72, 0.075, -1)
+  solid(12.28, 12.44, 3.2, 4.8)
+  windowSet(O.baie, -1, 3, 1.3)
+  curtain(M.rideau, 12.34, 1.7, 0.7, 0.02, 2.45, true, -1, 41); curtain(M.rideau, 12.34, 6.3, 0.7, 0.02, 2.45, true, -1, 43)
+  {
+    const at = z => V(12.34, 2.47, z), wallAt = z => V(12.44, 2.47, z)
+    curtainRod(at(1.22), at(6.78), [1.32, 4.0, 6.68].map(z => [wallAt(z), at(z)]), [...ringsOver(1.7, 0.7, at), ...ringsOver(6.3, 0.7, at)])
+  }
+  // chaise renversée près de l'arche, hors du passage (8,0 ; 6,65), sans collision ; siège et dossier aux arêtes adoucies
   {
     const c = new THREE.Group(), parts = []
     const leg = (x, z) => parts.push(new THREE.BoxGeometry(0.035, 0.45, 0.035).translate(x, 0.225, z))
     leg(-0.19, -0.19); leg(0.19, -0.19); leg(-0.19, 0.19); leg(0.19, 0.19)
-    parts.push(new THREE.BoxGeometry(0.44, 0.035, 0.44).translate(0, 0.46, 0))
+    parts.push(indexed(rounded(0.44, 0.035, 0.44, 0.01)).translate(0, 0.46, 0))   // RoundedBoxGeometry n'est pas indexée
     parts.push(new THREE.BoxGeometry(0.035, 0.45, 0.035).translate(-0.19, 0.7, -0.19), new THREE.BoxGeometry(0.035, 0.45, 0.035).translate(0.19, 0.7, -0.19))
-    parts.push(new THREE.BoxGeometry(0.42, 0.14, 0.025).translate(0, 0.86, -0.2))
+    parts.push(indexed(rounded(0.42, 0.14, 0.025, 0.008)).translate(0, 0.86, -0.2))
     const chair = mergeGeometries(parts); parts.forEach(p => p.dispose())
     c.rotation.set(-Math.PI / 2, -Math.PI / 2 + 0.35, 0, 'YXZ'); c.position.set(7.85, 0.22, 6.6); c.updateMatrix()
     chair.applyMatrix4(c.matrix); B.add(M.boisSombre, chair)
@@ -842,32 +1375,49 @@ export function buildApartment() {
   glows.push(tint(flat(1.5, 1.1, 2.25, 0.008, 3.25, 0, [0.5, 0.5 + 2 / 6, 0, 1]), 0x0c1220))
   B.add(M.lueurs, mergeGeometries(glows)); glows.forEach(g => g.dispose())
 
-  // ── couloir : tapis de passage, un cadre ──
+  // ── couloir : tapis de passage (ourlet, franges), une gravure encadrée ──
   B.add(M.tapis, flat(3.0, 0.7, 2.7, 0.004, 5.15, 0, [0.1, 0.9, 0.2, 0.8]))
-  box(M.boisSombre, 3.3, 1.55, 5.73, 0.5, 0.62, 0.025); box(M.blanc, 3.3, 1.55, 5.715, 0.42, 0.54, 0.008); box(M.tissu, 3.3, 1.55, 5.71, 0.26, 0.36, 0.006)
+  rugEdges(1.2, 4.2, 4.8, 5.5, 67)
+  picture({ alongX: true, at: 5.8 - T / 2, n: -1 }, 3.3, 1.55, 0.46, 0.6, PIC.voilier, 0.27, 0.36, M.boisSombre)
 
   // ── chambre de la petite ──
-  box(M.boisClair, 2.3, 0.14, 1.8, 0.95, 0.24, 1.8)                    // lit (2,3 ; 0,2 ; 1,75) 0,95 × 0,4 × 1,8
-  box(M.boisClair, 2.3, 0.4, 0.93, 0.95, 0.76, 0.05); box(M.boisClair, 2.3, 0.28, 2.68, 0.95, 0.52, 0.05)
-  box(M.blanc, 2.3, 0.32, 1.8, 0.88, 0.12, 1.68)
-  box(M.blanc, 2.3, 0.43, 1.17, 0.56, 0.1, 0.32, { rz: 0.04 })          // oreiller
-  box(M.tissuRose, 2.3, 0.39, 2.12, 0.94, 0.05, 1.1); box(M.tissuRose, 1.84, 0.27, 2.12, 0.025, 0.26, 1.1); box(M.tissuRose, 2.76, 0.27, 2.12, 0.025, 0.26, 1.1)
-  box(M.tissuRose, 2.3, 0.41, 1.5, 0.92, 0.07, 0.34, { rx: 0.2 })       // couverture rabattue
+  // lit (2,3 ; 0,2 ; 1,75) 0,95 × 0,4 × 1,8 : tête et pied aux arêtes arrondies, longerons, matelas, oreiller bombé, couette
+  // moelleuse qui tombe sur les côtés, son revers sous l'oreiller
+  B.add(M.boisClair, rounded(0.95, 0.76, 0.05, 0.02), { x: 2.3, y: 0.4, z: 0.93 })
+  B.add(M.boisClair, rounded(0.95, 0.52, 0.05, 0.02), { x: 2.3, y: 0.28, z: 2.68 })
+  for (const x of [1.845, 2.755]) B.add(M.boisClair, rounded(0.04, 0.16, 1.7, 0.012), { x, y: 0.2, z: 1.805 })
+  B.add(M.blanc, rounded(0.88, 0.14, 1.7, 0.035), { x: 2.3, y: 0.31, z: 1.805 })
+  B.add(M.blanc, cushion(0.56, 0.13, 0.32, 0.75, 0.3), { x: 2.3, y: 0.435, z: 1.13, rx: -0.12 })   // oreiller
+  B.add(M.tissuRose, duvet(2.3, 1.4, 2.64, 0.44, 0.38, 0.25, 71))
+  B.add(M.tissuRose, cushion(0.98, 0.07, 0.2, 0.6, 0.15), { x: 2.3, y: 0.43, z: 1.42 })           // revers de la couette
   solid(1.82, 2.78, 0.86, 2.71)
-  box(M.boisClair, 3.05, 0.25, 1.1, 0.38, 0.5, 0.34); solid(2.86, 3.24, 0.93, 1.27)   // table de chevet
-  box(M.boisClair, 1.0, 0.2, 3.9, 0.7, 0.4, 0.42); box(M.boisClair, 1.0, 0.41, 3.9, 0.72, 0.03, 0.44, { rx: -0.03 }); solid(0.62, 1.38, 3.66, 4.14)   // coffre à jouets
+  // table de chevet : un tiroir et son bouton
+  B.add(M.boisClair, rounded(0.38, 0.5, 0.34, 0.015, 2), { x: 3.05, y: 0.25, z: 1.1 }); solid(2.86, 3.24, 0.93, 1.27)
+  B.add(M.boisClair, rounded(0.32, 0.13, 0.012, 0.004), { x: 3.05, y: 0.37, z: 1.276 })
+  B.add(brass, new THREE.SphereGeometry(0.011, 10, 6), { x: 3.05, y: 0.37, z: 1.29 })
+  // coffre à jouets, couvercle entrouvert
+  B.add(M.boisClair, rounded(0.7, 0.39, 0.42, 0.02), { x: 1.0, y: 0.195, z: 3.9 })
+  B.add(M.boisClair, rounded(0.72, 0.03, 0.44, 0.012), { x: 1.0, y: 0.41, z: 3.9, rx: -0.03 }); solid(0.62, 1.38, 3.66, 4.14)
+  // tapis rond, son bord roulé
   B.add(M.tissuRose, new THREE.CircleGeometry(0.8, 32), { x: 2.4, y: 0.004, z: 2.9, rx: -Math.PI / 2 })
-  {
+  B.add(M.tissuRose, new THREE.TorusGeometry(0.8, 0.005, 4, 48), { x: 2.4, y: 0.003, z: 2.9, rx: Math.PI / 2 })
+  {   // cubes de bois aux arêtes adoucies
     const rnd = makeRnd(19), cols = [0xd04848, 0x3a78c0, 0xe0b030, 0x48a060]
-    for (let i = 0; i < 6; i++) B.add(M.livres, tint(new THREE.BoxGeometry(0.06, 0.06, 0.06), cols[i % 4]), { x: 1.35 + rnd() * 0.5, y: 0.03, z: 3.4 + rnd() * 0.35, ry: rnd() * 2 })
-    B.add(M.livres, tint(new THREE.BoxGeometry(0.06, 0.06, 0.06), 0xe0b030), { x: 1.0, y: 0.45, z: 3.85, ry: 0.4 })
+    for (let i = 0; i < 6; i++) B.add(M.livres, tint(rounded(0.06, 0.06, 0.06, 0.008), cols[i % 4]), { x: 1.35 + rnd() * 0.5, y: 0.03, z: 3.4 + rnd() * 0.35, ry: rnd() * 2 })
+    B.add(M.livres, tint(rounded(0.06, 0.06, 0.06, 0.008), 0xe0b030), { x: 1.0, y: 0.456, z: 3.85, ry: 0.4 })
   }
-  // fenêtre de la chambre
-  box(M.blanc, 2.3, 1.01, 0.88, 1.9, 0.03, 0.16)
-  for (const x of [1.43, 2.3, 3.17]) box(M.metal, x, 1.6, 0.8, 0.06, 1.2, 0.07)
-  for (const y of [1.03, 2.17]) box(M.metal, 2.3, y, 0.8, 1.8, 0.06, 0.07)
-  { const g = new THREE.PlaneGeometry(1.8, 1.2); g.translate(2.3, 1.6, 0.78); B.add(M.vitre, g) }
-  curtain(M.tissuRose, 1.1, 0.92, 0.55, 1.4, false, 1, 47, 0.9); curtain(M.tissuRose, 3.5, 0.92, 0.55, 1.4, false, 1, 53, 0.9)
+  // son dessin, encadré au mur
+  picture({ alongX: false, at: 4.5 - T / 2, n: -1 }, 2.2, 1.3, 0.44, 0.35, PIC.dessin, 0.36, 0.27, M.boisClair, 0.02, 0.018)
+  // fenêtre de la chambre, à deux vantaux ; rideaux roses sur leur tringle ; un petit radiateur sous la fenêtre, à gauche
+  // du lit (la tête du lit est contre l'allège)
+  windowSet(O.fenetre, 1, 1, 1.45)
+  curtain(M.tissuRose, 1.1, 0.96, 0.55, 0.9, 2.4, false, 1, 47); curtain(M.tissuRose, 3.5, 0.96, 0.55, 0.9, 2.4, false, 1, 53)
+  {
+    const at = x => V(x, 2.42, 0.96), wallAt = x => V(x, 2.42, 0.8 + T / 2)
+    curtainRod(at(0.72), at(3.88), [0.82, 2.3, 3.78].map(x => [wallAt(x), at(x)]), [...ringsOver(1.1, 0.55, at), ...ringsOver(3.5, 0.55, at)])
+  }
+  radiator({ alongX: true, at: 0.8 + T / 2, n: 1 }, 1.46, 1.76, 0.15, 0.6, 0.055, -1)
+  solid(1.38, 1.8, 0.86, 0.98)
   // veilleuse en étoile sur la table de chevet
   {
     const star = new THREE.Shape(), R = 0.065, r = 0.028
@@ -1134,9 +1684,50 @@ export function buildApartment() {
     tg.done()
   }
 
+  // ── interrupteurs (près des portes, côté poignée, à 1,1 m) et prises (à 28 cm) : plaques sur la face d'un mur ──
+  function plate(f, a, y, outlet = false) {
+    const at = u => f.alongX ? [a, y, f.at + f.n * u] : [f.at + f.n * u, y, a]
+    const bx = (mat, w, h, u0, u1, da = 0) => { const [x, yy, z] = at((u0 + u1) / 2); if (f.alongX) box(mat, x + da, yy, z, w, h, u1 - u0); else box(mat, x, yy, z + da, u1 - u0, h, w) }
+    bx(M.blanc, 0.08, 0.08, 0, 0.009)
+    if (!outlet) { bx(M.blanc, 0.026, 0.04, 0.009, 0.014); return }
+    const [x, yy, z] = at(0.0095)   // le puits de la prise et ses deux trous
+    B.add(M.metal, new THREE.CylinderGeometry(0.021, 0.021, 0.001, 16), { x, y: yy, z, rx: f.alongX ? Math.PI / 2 : 0, rz: f.alongX ? 0 : Math.PI / 2 })
+    for (const d of [-0.0095, 0.0095]) bx(M.miroir, 0.006, 0.006, 0.0098, 0.0102, d)
+  }
+  plate({ alongX: true, at: 7 - T / 2, n: -1 }, 6.66, 1.1)            // entrée, à côté de la porte palière
+  plate({ alongX: false, at: 7.5 + T / 2, n: 1 }, 4.72, 1.1)          // salon, à côté de l'arche
+  plate({ alongX: true, at: 5.8 - T / 2, n: -1 }, 1.26, 1.1)          // couloir, à côté de la porte des parents
+  plate({ alongX: true, at: 4.5 - T / 2, n: -1 }, 1.78, 1.1)          // chambre, à côté de sa porte
+  plate({ alongX: true, at: 4.5 + T / 2, n: 1 }, 7.1, 0.28, true)     // entrée
+  plate({ alongX: true, at: 1 + T / 2, n: 1 }, 7.85, 0.28, true)      // salon, au bout du canapé
+  plate({ alongX: true, at: 5.8 - T / 2, n: -1 }, 3.95, 0.28, true)   // couloir
+  plate({ alongX: true, at: 0.8 + T / 2, n: 1 }, 3.42, 0.28, true)    // chambre, près de la veilleuse
+
+  // ── luminaires, éteints (aucune lumière de plus) : suspension à globe opalin sous une rosace (salon), plafonniers
+  // (entrée, couloir), lanterne de papier rose (chambre) ──
+  {
+    // rosace en relief (d'en dessous, un disque presque plat se lisait comme une tache unie) : bouton central, gorge,
+    // anneau en tore, champ, grand tore, ressaut ; leurs flancs prennent la lumière du ciel et de la lune, pas leurs fonds
+    const rose = lathe([[0, -0.05], [0.026, -0.05], [0.036, -0.044], [0.04, -0.03], [0.052, -0.024],
+      [0.066, -0.03], [0.078, -0.034], [0.09, -0.03], [0.1, -0.022], [0.135, -0.02],
+      [0.152, -0.03], [0.17, -0.038], [0.188, -0.034], [0.2, -0.022], [0.21, -0.012], [0.232, -0.008], [0.245, 0]], 24)
+    B.add(M.blanc, rose, { x: 10.0, y: H, z: 4.0 })
+    B.add(M.metal, new THREE.CylinderGeometry(0.035, 0.045, 0.03, 12), { x: 10.0, y: H - 0.063, z: 4.0 })   // cache-piton, sous le bouton
+    B.add(M.metal, rod(V(10.0, H - 0.076, 4.0), V(10.0, 2.11, 4.0), 0.004, 6))                             // fil
+    B.add(M.metal, new THREE.CylinderGeometry(0.03, 0.04, 0.04, 12), { x: 10.0, y: 2.1, z: 4.0 })           // douille
+    B.add(M.blanc, new THREE.SphereGeometry(0.14, 18, 12), { x: 10.0, y: 1.97, z: 4.0 })                    // globe
+    for (const [x, z, r] of [[6.0, 5.75, 0.17], [2.5, 5.15, 0.13]]) {
+      B.add(M.metal, new THREE.CylinderGeometry(r + 0.012, r + 0.012, 0.012, 20), { x, y: H - 0.006, z })
+      B.add(M.blanc, new THREE.SphereGeometry(r, 18, 5, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), { x, y: H - 0.012, z, sy: 0.45 })
+    }
+    B.add(M.metal, rod(V(2.5, H, 2.65), V(2.5, 2.37, 2.65), 0.004, 6))
+    B.add(M.blanc, new THREE.SphereGeometry(0.13, 18, 12), { x: 2.5, y: 2.25, z: 2.65 })
+    for (const dy of [-0.06, 0, 0.06]) B.add(M.metal, new THREE.TorusGeometry(Math.sqrt(0.13 ** 2 - dy * dy) + 0.002, 0.002, 3, 28), { x: 2.5, y: 2.25 + dy, z: 2.65, rx: Math.PI / 2 })
+  }
+
   // ── fusion du décor : un maillage par matériau ──
   const meshes = B.finish(group)
-  for (const m of meshes) if ([M.mur, M.murPalier, M.murEnfant, M.boisSombre].includes(m.material)) occluders.push(m)
+  for (const m of meshes) if ([M.mur, M.murPalier, M.murEnfant, M.boisSombre, M.boiserie].includes(m.material)) occluders.push(m)
 
   // ── animation : porte, pluie, néon qui grésille ──
   const neonState = { t: 0, next: 1.2, burst: 0, level: 1 }

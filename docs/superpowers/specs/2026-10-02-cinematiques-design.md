@@ -17,7 +17,7 @@ Ce que le joueur doit ressentir : un écran de surveillance qui grésille, des d
 | Habillage commun | Allumage CRT, scanlines, grain, ligne de tracking, glitchs aléatoires (déchirure horizontale + séparation rouge/cyan), coupures fortes aux changements de plan, « SIGNAL PERDU » avant le carton-titre. |
 | Narrateur | **Anton, le fixeur** : marchand d'informations, jamais vu, uniquement une voix radio. Un peu cynique, parle de ses sources et de ce que l'info lui coûte, loyal envers Viktor. |
 | Héros | **Viktor**, ancien tireur d'élite de l'armée. Le réseau a voulu le recruter, il a refusé par principe, et sa femme et sa fille ont été tuées pour le lui faire payer. Il parle en **voix intérieure**. |
-| Lien Viktor ↔ Anton | Anton avait appris le contrat et a tenté de prévenir Viktor : appel manqué de 18:52 + message vocal « Viktor, sors ta famille de là. Maintenant. ». Trop tard. Viktor rappelle ce numéro. Anton l'aide d'abord par culpabilité. |
+| Lien Viktor ↔ Anton | Anton avait appris le contrat et a tenté de prévenir Viktor : appel manqué de 18:52, sans message. Le message laissé ce soir-là est celui de sa femme (MAISON, 19:04 : « Il y a des gens à la porte. »). Trop tard. À 22:41, Anton appelle : il peut aider, ils ont dépassé les bornes, il n'en dit pas plus ; puis il envoie le dossier. Il l'aide d'abord par culpabilité. (Prologue v2 du 11 octobre 2026, spec `2026-10-11-prologue-v2-design.md`.) |
 | Règle de cohérence | Viktor tire toujours depuis un poste éloigné et en hauteur. Anton ne dit jamais « tu entres ». |
 | Voix | Pour l'instant, **bips synthétiques** (marmonnement radio procédural) + sous-titres tapés. Plus tard, une fois les textes figés : vraies voix (service de voix IA, offre gratuite à vérifier) jouées à travers un filtre radio ou téléphone. Les voix Windows sont écartées (effet « Siri »). |
 | Son | 100 % procédural, comme `src/audio.js`, et soumis au volume général du jeu. |
@@ -46,7 +46,7 @@ Les maquettes validées servent de référence exacte (textes, timing, mise en p
 |---|---|---|
 | Prologue (cinématique 1) | Vue subjective : le téléphone en main, l'appel du recruteur (« Un tir, cent mille »), Viktor raccroche. | ~15 s |
 | Prologue (enquête) | Appartement en vue à la première personne (§ 5). | 2 à 4 min (joueur) |
-| Prologue (cinématique 2) | Message vocal d'Anton → rappel → « Je vends des infos… » → tableau de chasse épinglé fiche par fiche → titre « SNIPER ». | ~45 s |
+| Prologue (cinématique 2) | Message de sa femme → appel d'Anton (« Je peux t'aider. ») → le dossier, épinglé fiche par fiche au tableau de chasse → titre « SNIPER ». | ~66 s |
 | M1 — Markov | L'écoute téléphonique, le dossier, les victimes, le toit du marché. | ~40 s |
 | M2 — Les frères | L'écran fendu en deux, les dossiers en miroir, les étiquettes de boucherie. | ~36 s |
 | M3 — Le passeur | Vosko et Mira (agrandissement d'image de surveillance, fiches côte à côte, ordre de tir), le manifeste au second plan, la grue. | ~44 s |
@@ -55,12 +55,12 @@ Les maquettes validées servent de référence exacte (textes, timing, mise en p
 | M6 — Le commanditaire | Le dossier caviardé, les sources barrées, l'invitation, le plan de la fête, la verrière. | ~45 s |
 | Épilogue | Le mur barré, le dernier appel d'Anton, la variante du port, le cadre photo au matin. | ~50 s |
 
-La cinématique 2 du prologue **remplace** le passage maquetté « couloir → cadre photo → rapport classé → Anton appelle », puisque ces moments deviennent jouables. On garde son tableau de chasse et sa conclusion. Il y a une adaptation : dans la maquette Anton appelle, alors qu'ici **Viktor rappelle**. L'écran du téléphone montre donc un appel sortant vers « NUMÉRO MASQUÉ » qui sonne puis décroche, et la première réplique d'Anton répond au rappel : *« Tu as eu mon message. Trop tard, je sais. »*
+La cinématique 2 du prologue **remplace** le passage maquetté « couloir → cadre photo → rapport classé → Anton appelle », puisque ces moments deviennent jouables. On garde son tableau de chasse et sa conclusion. Depuis le prologue v2 (11 octobre 2026, spec `2026-10-11-prologue-v2-design.md` §2), **Anton appelle**, comme dans la maquette d'origine : un appel entrant depuis son numéro jetable, après le message de sa femme écouté sur la messagerie ; il envoie ensuite le dossier par message. La version du 4 octobre, où Viktor le rappelait, est abandonnée.
 
 > **Écarts assumés au Plan 2 (4 octobre 2026)** — ils font foi pour la suite, y compris l'enquête (§5) :
-> - Anton appelle et se fait rappeler depuis un **numéro jetable affiché en clair**, `06 39 98 41 07` (tranche réservée à la fiction), car un numéro masqué ne se rappelle pas. « NUMÉRO MASQUÉ » reste la signature du recruteur (appel du 21 février). Partout où ce document écrit « NUMÉRO MASQUÉ · 18:52 », lire ce numéro.
+> - Anton appelle depuis un **numéro jetable affiché en clair**, `06 39 98 41 07` (tranche réservée à la fiction) : appel manqué à 18:52, sans message ; appel entrant à 22:41, puis le message du dossier (prologue v2) ; son dernier appel, dans l'épilogue. « NUMÉRO MASQUÉ » reste la signature du recruteur (appel du 21 février).
 > - Prologue A (≈ 21 s) : carton « 21 FÉVR. · 23:12 / L'OFFRE », l'offre, le refus, puis carton « 14 MARS · 21:47 / LE SILENCE » et « Trois semaines plus tard, je suis rentré plus tôt que prévu. ». L'enquête commence là.
-> - Prologue B (≈ 53 s) : messagerie (le message de 18:52 joué), rappel sortant, « Tu as eu mon message. Trop tard, je sais. », « Tu ne me connais pas. Et tu ne verras jamais mon visage. », puis la fin de la maquette d'origine. Journal d'appels : « ANTON » sortant 22:41, MAISON 19:04 manqué, le numéro jetable 18:52 manqué avec message, le refus du 21 février.
+> - Prologue B, réécrit par le prologue v2 du 11 octobre 2026 (≈ 66 s) : le message de sa femme sur la messagerie (MAISON, 19:04), le silence, l'appel entrant d'Anton depuis le numéro de 18:52 (« Je peux t'aider. », « Ils ont dépassé les bornes. », « Tu vas savoir qui. »), le journal d'appels, le dossier envoyé par message et épinglé au tableau de chasse, « Je te donne les noms. Toi, tu as le fusil. », « Appelle-moi Anton. », puis la fin de la maquette d'origine. Journal d'appels : le numéro jetable entrant à 22:41 (« ANTON » une fois le contact enregistré), MAISON 19:04 manqué avec message, le numéro jetable 18:52 manqué, le refus du 21 février.
 > - Le prologue se joue une fois par campagne (`upgradeState.prologueSeen`, sauvegardé). Détails : `docs/superpowers/plans/2026-10-04-cinematiques-plan2-prologue.md`.
 
 ## 5. L'enquête jouable du prologue
@@ -78,10 +78,10 @@ La cinématique 2 du prologue **remplace** le passage maquetté « couloir → c
    - le mot laissé par les tueurs : *« Tu aurais dû dire oui. »* ;
    - le téléphone de Viktor, sur le meuble de l'entrée. Ce jour-là, il l'avait oublié en partant : c'est pour ça que l'avertissement ne lui est jamais parvenu. *« Ce jour-là, j'avais oublié mon téléphone. »*
 4. Le téléphone ne s'ouvre qu'après au moins **4 indices**. Avant, l'examiner donne seulement une phrase de Viktor (*« Pas encore… Je dois comprendre ce qui s'est passé. »*) et il reste en surbrillance. Une fois débloqué, il affiche deux appels manqués :
-   - « 06 39 98 41 07 · 18:52 » (le numéro jetable d'Anton), avec un message vocal : celui d'Anton ;
-   - « MAISON · 19:04 » : sa femme a essayé de le joindre.
+   - « 06 39 98 41 07 · 18:52 » (le numéro jetable d'Anton), sans message ;
+   - « MAISON · 19:04 » : sa femme a essayé de le joindre, et elle a laissé un message.
 
-   Le joueur écoute le message, puis choisit « Rappeler », et on passe à la cinématique 2.
+   Le joueur écoute le message, et on passe à la cinématique 2, qui s'ouvre sur ce message (prologue v2 du 11 octobre 2026).
 5. **Ambiance :** nuit, lumière de rue par les fenêtres, pluie, battements de cœur près du salon, acouphène quand on examine les corps.
 
 **Contraintes :**

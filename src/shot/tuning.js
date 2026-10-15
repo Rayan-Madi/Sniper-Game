@@ -117,7 +117,7 @@ export const SON = {
 // ─── Pluie du port (M3) ────────────────────────────────────────────
 // La pluie de l'enquête (src/prologue/ambience.js), démarrée et coupée avec la nappe de la mission (src/audio.js).
 export const PLUIE = {
-  niveau: 0.06,         // niveau de la pluie, celui de l'enquête : plus haut, elle couvre davantage le reste du son
+  niveau: 0.04,         // niveau de la pluie du port : au-dessus de celle de l'enquête (0,03, RAIN_GAIN, jugée trop forte à 0,06 par Rayan), on est dehors ; plus haut, elle couvre le reste du son
   monteeS: 2,           // montée de la pluie au départ de la mission (elle s'éteint avec la nappe, en 1,2 s)
 }
 

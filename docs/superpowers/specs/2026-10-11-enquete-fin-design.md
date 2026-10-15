@@ -20,7 +20,7 @@ Aujourd'hui (`src/prologue/state.js`, `investigation.js`, `clues.js`) :
 
 **Choix : B**, avec la vibration de C gardée comme **coup de pouce** (pas comme fin forcée) pour un joueur bloqué. Et la question ouverte est réglée au passage : avant les 6 indices, on peut **reposer** le téléphone.
 
-Cohérence avec l'histoire : le téléphone de Viktor est resté en **silencieux** sur la console (fiche du téléphone : « Il était là, en silencieux. »). Il ne sonne donc pas : il **vibre** et son écran s'allume, comme pour le rappel de messagerie qu'envoient les opérateurs (« 1 NOUVEAU MESSAGE »). Anton n'appelle pas : c'est Viktor qui le rappellera à 22:41 dans la cinématique B.
+Cohérence avec l'histoire : le téléphone de Viktor est resté en **silencieux** sur la console (fiche du téléphone : « Il était là, en silencieux. »). Il ne sonne donc pas : il **vibre** et son écran s'allume, comme pour le rappel de messagerie qu'envoient les opérateurs (« 1 NOUVEAU MESSAGE »). Anton n'appelle pas encore : il appellera à 22:41, dans la cinématique B (prologue v2 du 11 octobre 2026).
 
 ## 3. Conception
 

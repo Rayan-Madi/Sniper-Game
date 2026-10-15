@@ -7,8 +7,8 @@
 ## 1. Place dans le jeu
 
 COMMENCER (niveau 1, prologue non vu) → cinématique **prologue-a** (l'offre, le refus, carton « 14 MARS · 21:47 /
-LE SILENCE ») → **l'enquête** → cinématique **prologue-b** (inchangée : elle s'ouvre sur la messagerie dans la main de
-Viktor, puis le rappel) → mission 1. `prologueSeen` reste posé à la fin de B : un rechargement pendant l'enquête
+LE SILENCE ») → **l'enquête** → cinématique **prologue-b** (elle s'ouvre sur la messagerie dans la main de Viktor, le
+message de sa femme, puis l'appel d'Anton ; prologue v2 du 11 octobre 2026) → mission 1. `prologueSeen` reste posé à la fin de B : un rechargement pendant l'enquête
 rejoue A puis l'enquête.
 
 ## 2. Le parcours
@@ -35,8 +35,8 @@ rejoue A puis l'enquête.
 
 - **Le téléphone** (sur le meuble de l'entrée, hors compteur) :
   - moins de 4 indices : pas de fiche, une phrase : « Pas encore… Je dois comprendre ce qui s'est passé. » ;
-  - à partir de 4 : fiche « LE TÉLÉPHONE · 2 APPELS MANQUÉS » — `06 39 98 41 07 · 18:52 · 1 MESSAGE`,
-    `MAISON · 19:04` — et deux phrases : « Ce jour-là, j'avais oublié mon téléphone. » puis « Elle m'a appelé. Il
+  - à partir de 4 : fiche « LE TÉLÉPHONE · 2 APPELS MANQUÉS » : `06 39 98 41 07 · 18:52`,
+    `MAISON · 19:04 · 1 MESSAGE` (le message de sa femme ; prologue v2 du 11 octobre 2026), et deux phrases : « Ce jour-là, j'avais oublié mon téléphone. » puis « Elle m'a appelé. Il
     était là, en silencieux. » (sa femme appelait du fixe ; le portable, en silencieux, n'a pas sonné) ;
   - action « E — ÉCOUTER LE MESSAGE » : fondu au noir, fin de l'enquête, cinématique B.
 - **Guidage discret** : compteur « INDICES n / 6 » ; après 40 s d'exploration sans nouvelle découverte, Viktor

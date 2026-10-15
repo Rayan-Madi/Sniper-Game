@@ -11,9 +11,11 @@ export const CLUES = [
 export const PHONE = {
   id: 'telephone', lieu: 'L\'ENTRÉE', titre: 'LE TÉLÉPHONE', seuil: 4,
   verrouille: 'Pas encore… Je dois comprendre ce qui s\'est passé.',
+  // prologue v2 (spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §1) : Anton a tenté d'appeler à 18:52
+  // sans laisser de message ; le message est celui de sa femme, depuis la maison (joué au début de la cinématique B)
   appels: [
-    { de: '06 39 98 41 07', heure: '18:52', note: 'MANQUÉ · 1 MESSAGE' },
-    { de: 'MAISON', heure: '19:04', note: 'MANQUÉ' },
+    { de: '06 39 98 41 07', heure: '18:52', note: 'MANQUÉ' },
+    { de: 'MAISON', heure: '19:04', note: 'MANQUÉ · 1 MESSAGE' },
   ],
   viktor: ['Ce jour-là, j\'avais oublié mon téléphone.', 'Elle m\'a appelé. Il était là, en silencieux.'],
   piste: 'Mon téléphone… dans l\'entrée.',
