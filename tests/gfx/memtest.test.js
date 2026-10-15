@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { memtestSteps, withSeed, seedOf, measure, runMemtest } from '../../src/gfx/memtest.js'
-import { checkMemtest, parseDump, memtestUrl } from '../../scripts/memtest.mjs'
+import { checkMemtest, parseDump, memtestUrl, measureWithRetry, compareM6 } from '../../scripts/memtest.mjs'
 
 describe('memtestSteps : la partie scriptée de la spec du lot 1 §4.1', () => {
   const steps = memtestSteps()
@@ -268,6 +268,85 @@ describe('parseDump : sortie de Chrome --dump-dom', () => {
   it('page sans mesure : titre lu, aucune étape', () => {
     expect(parseDump('<html><head><title>Sniper</title></head><body></body></html>'))
       .toEqual({ title: 'Sniper', qualite: '', etapes: [] })
+  })
+})
+
+// Critère de performance du lot 2 (spec du lot 2, §5) : triangles et appels de dessin de M6, à la vue de départ, à
+// ±3 % d'une mesure de référence (celle du lot 1, en Moyen).
+describe('compareM6 : M6 à ±3 % d\'une mesure de référence', () => {
+  const avec = (appels, triangles) => [{ etape: 'menu', appels: 540, triangles: 10506 }, { etape: 'M6', appels, triangles }]
+  const ref = avec(294, 1422955)
+  const failed = r => r.filter(c => !c.ok).map(c => c.critere)
+
+  it('mêmes compteurs : tenu ; un critère pour les triangles, un pour les appels', () => {
+    const r = compareM6(avec(294, 1422955), ref)
+    expect(r.map(c => c.critere)).toEqual(['triangles de M6', 'appels de M6'])
+    expect(failed(r)).toEqual([])
+  })
+
+  it('écart de 3 % au plus, dans les deux sens : tenu ; au-delà : échec', () => {
+    expect(failed(compareM6(avec(294, 1422955 * 1.03), ref))).toEqual([])
+    expect(failed(compareM6(avec(294, 1422955 * 0.97), ref))).toEqual([])
+    expect(failed(compareM6(avec(294, 1422955 * 1.031), ref))).toEqual(['triangles de M6'])
+    expect(failed(compareM6(avec(294, 1422955 * 0.969), ref))).toEqual(['triangles de M6'])
+    expect(failed(compareM6(avec(302, 1422955), ref))).toEqual([])          // 294 × 1,03 = 302,8
+    expect(failed(compareM6(avec(303, 1422955), ref))).toEqual(['appels de M6'])
+    expect(failed(compareM6(avec(285, 1422955), ref))).toEqual(['appels de M6'])   // 294 × 0,97 = 285,2
+  })
+
+  it('M6 absente ou en erreur, d\'un côté ou de l\'autre : échec, jamais un succès par défaut', () => {
+    const sans = [{ etape: 'menu', appels: 540, triangles: 10506 }]
+    expect(failed(compareM6(sans, ref))).toEqual(['triangles de M6', 'appels de M6'])
+    expect(failed(compareM6(ref, sans))).toEqual(['triangles de M6', 'appels de M6'])
+    expect(failed(compareM6([{ etape: 'M6', erreur: 'x' }], ref))).toEqual(['triangles de M6', 'appels de M6'])
+  })
+})
+
+// Serveur Vite fraîchement lancé (plan du lot 2, tâche T8) : la première mesure peut s'arrêter à « memtest:modeles »
+// sans aucune étape, les modules se compilant à la première visite pendant que le temps virtuel de Chrome s'écoule ;
+// une seconde mesure trouve les modules prêts. measureWithRetry la relance alors une fois, et le dit.
+describe('measureWithRetry : un nouvel essai après un arrêt sur serveur froid', () => {
+  const page = (title, etapes = []) => `<html><head><title>${title}</title></head><body>` +
+    (title.startsWith('memtest:') ? `<pre id="memtest" data-qualite="moyen">${JSON.stringify(etapes)}</pre>` : '') + '</body></html>'
+  const froid = page('memtest:modeles')
+  const fini = page('memtest:fini', [{ etape: 'menu', geometries: 409 }])
+  // Fausse mesure : rend les pages données, une par appel, et compte les appels.
+  const mesures = (...pages) => {
+    const appels = []
+    const measure = async essai => { appels.push(essai); return { html: pages[appels.length - 1], code: 0, secondes: appels.length } }
+    return { measure, appels }
+  }
+
+  it('arrêt à memtest:modeles sans aucune étape : un second essai, signalé, dont le résultat est rendu', async () => {
+    const { measure, appels } = mesures(froid, fini)
+    const log = []
+    const r = await measureWithRetry(measure, { log: m => log.push(m) })
+    expect(appels).toEqual([1, 2])
+    expect(r.essais).toBe(2)
+    expect(r.dump.title).toBe('memtest:fini')
+    expect(r.dump.etapes).toEqual([{ etape: 'menu', geometries: 409 }])
+    expect(r.secondes).toBe(2)
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatch(/memtest:modeles/)
+    expect(log[0]).toMatch(/nouvel essai/)
+  })
+
+  it('un seul nouvel essai : deux arrêts de suite rendent le second, inachevé', async () => {
+    const { measure, appels } = mesures(froid, froid, fini)
+    const r = await measureWithRetry(measure, { log: () => {} })
+    expect(appels).toEqual([1, 2])
+    expect(r.essais).toBe(2)
+    expect(r.dump.title).toBe('memtest:modeles')
+  })
+
+  it('mesure finie, en erreur, arrêtée en cours d\'étapes ou page sans mesure : aucun nouvel essai', async () => {
+    for (const p of [fini, page('memtest:erreur'), page('memtest:en-cours', [{ etape: 'menu' }, { etape: 'M1' }]),
+      page('memtest:modeles', [{ etape: 'menu' }]), page('Sniper'), '']) {
+      const { measure, appels } = mesures(p, fini)
+      const log = []
+      const r = await measureWithRetry(measure, { log: m => log.push(m) })
+      expect([p, appels, r.essais, log]).toEqual([p, [1], 1, []])
+    }
   })
 })
 

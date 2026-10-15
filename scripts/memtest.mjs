@@ -2,11 +2,13 @@
 // ?memtest=1, attend la fin de la partie scriptée, lit le JSON du <pre id="memtest"> dans la sortie de --dump-dom,
 // l'écrit dans shots/memtest-<horodatage>.json et, sur demande, l'inscrit dans les annexes ou applique les seuils.
 // Prérequis : npm run dev (port 5173, réutilisé tel quel).
-// Usage : node scripts/memtest.mjs [--reference] [--annexe=<nom>.json] [--check] [--images=3] [--qualite=bas]
-//                                  [--temps-reel] [--gpu] [--sans-precompilation]
+// Usage : node scripts/memtest.mjs [--reference] [--annexe=<nom>.json] [--check] [--comparer=<nom>.json] [--images=3]
+//                                  [--qualite=bas] [--temps-reel] [--gpu] [--sans-precompilation]
 //   --reference   copie le résultat dans docs/superpowers/specs/annexes/2026-10-07-memtest-reference.json
 //   --annexe=nom  copie le résultat dans docs/superpowers/specs/annexes/<nom>
 //   --check       applique les seuils du §6 ; code de sortie 1 si l'un d'eux est dépassé
+//   --comparer=nom  triangles et appels de M6 à ±3 % de ceux de l'annexe <nom> (critère du lot 2, spec §5) ; code de
+//                 sortie 1 sinon
 //   --temps-reel  sans temps virtuel, page pilotée par le protocole DevTools : seule façon d'avoir les durées de
 //                 l'étape premiere-image (sous le temps virtuel de --dump-dom, performance.now ne bouge pas pendant
 //                 une tâche : elles y valent 0)
@@ -16,8 +18,10 @@
 // Variables : CHROME (chemin de Chrome), BASE_URL (défaut http://localhost:5173/), BUDGET_MS (temps virtuel,
 // défaut 1 200 000).
 // Rendu SwiftShader par défaut : les durées n'y valent rien, seuls les compteurs (géométries, textures, programmes,
-// appels, triangles) servent de critère. Profil jetable ; aucun port de débogage avec --dump-dom, et en temps réel un
-// port choisi par Chrome (--remote-debugging-port=0, relu dans DevToolsActivePort), jamais un port fixe.
+// appels, triangles) servent de critère. Sur un serveur Vite fraîchement lancé, la première mesure peut s'arrêter avant
+// toute étape (titre « memtest:modeles ») : elle est alors relancée une fois, et la sortie le dit (measureWithRetry).
+// Profil jetable ; aucun port de débogage avec --dump-dom, et en temps réel un port choisi par Chrome
+// (--remote-debugging-port=0, relu dans DevToolsActivePort), jamais un port fixe.
 import { spawn, execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, copyFileSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -104,6 +108,42 @@ export function checkMemtest(entries, { qualite } = {}) {
     detail: `${tri ? tri.triangles : 'absente'} ≤ ${limit === Infinity ? 'sans seuil en Haut' : limit} (qualité ${q})`,
   })
   return out
+}
+
+// Critère de performance du lot 2 (spec du lot 2, §5) : triangles et appels de dessin de M6 à la vue de départ, à
+// ±tolerance de la même étape d'une mesure de référence (celle du lot 1). Chaque critère : { critere, ok, detail } ;
+// une étape M6 absente ou en erreur, d'un côté ou de l'autre, fait échouer les deux.
+export function compareM6(entries, reference, { tolerance = 0.03 } = {}) {
+  const m6 = list => list.find(e => e.etape === 'M6' && !e.erreur)
+  const now = m6(entries), ref = m6(reference)
+  return [['triangles', 'triangles de M6'], ['appels', 'appels de M6']].map(([k, critere]) => {
+    const ecart = now && ref && Number.isFinite(now[k]) && ref[k] > 0 ? now[k] / ref[k] - 1 : null
+    return {
+      critere,
+      ok: ecart !== null && Math.abs(ecart) <= tolerance + 1e-12,
+      detail: `${now ? now[k] : 'absente'} contre ${ref ? ref[k] : 'absente'} (référence)` +
+        (ecart === null ? '' : `, écart ${(ecart * 100).toFixed(2).replace('.', ',')} % (±${tolerance * 100} % au plus)`),
+    }
+  })
+}
+
+// Mesure arrêtée avant toute étape, la page attendant encore les modèles (titre « memtest:modeles ») : sur un serveur
+// Vite fraîchement lancé, les modules se compilent à la première visite pendant que le temps virtuel de Chrome
+// s'écoule, et le budget s'épuise avant la fin du chargement. Une seconde visite trouve les modules prêts.
+const arretServeurFroid = dump => dump.title === 'memtest:modeles' && dump.etapes.length === 0
+
+// Une mesure : measure(essai) → { html, code, secondes } (sortie de Chrome). Arrêtée sur un serveur froid, elle est
+// relancée une fois, et log le dit ; toute autre fin (finie, en erreur, arrêtée en cours d'étapes, page sans mesure)
+// est rendue telle quelle. Rend le résultat de la dernière mesure, sa sortie lue (dump) et le nombre de mesures faites
+// (essais).
+export async function measureWithRetry(measure, { log = console.log } = {}) {
+  for (let essai = 1; ; essai++) {
+    const r = await measure(essai)
+    const dump = parseDump(r.html)
+    if (essai >= 2 || !arretServeurFroid(dump)) return { ...r, dump, essais: essai }
+    log(`memtest : mesure arrêtée à « memtest:modeles » sans aucune étape (serveur Vite froid : modules compilés à la ` +
+      `première visite) ; nouvel essai (${essai + 1}/2)`)
+  }
 }
 
 // ─── Ligne de commande ────────────────────────────────────────────────────────────────────────────────────────────
@@ -219,11 +259,11 @@ async function main(argv) {
   const rendu = `${opt('gpu') ? 'carte graphique' : 'SwiftShader'} (Chrome sans interface, ${tempsReel ? 'temps réel' : 'temps virtuel'})`
 
   console.log(`memtest : ${url} (${rendu})`)
-  const { html, code, secondes } = await (tempsReel ? dumpMemtestTempsReel : dumpMemtest)(url, gl)
-  const dump = parseDump(html)
+  // Sur un serveur froid, un nouvel essai (measureWithRetry) : la durée est celle de la dernière mesure, essais leur nombre
+  const { code, secondes, dump, essais } = await measureWithRetry(() => (tempsReel ? dumpMemtestTempsReel : dumpMemtest)(url, gl))
   const result = {
     date: new Date().toISOString(), commit: gitState(repo), url, rendu,
-    images, qualite: dump.qualite || qualite || null, duree_s: secondes, etat: dump.title, etapes: dump.etapes,
+    images, qualite: dump.qualite || qualite || null, duree_s: secondes, essais, etat: dump.title, etapes: dump.etapes,
   }
   mkdirSync(join(repo, 'shots'), { recursive: true })
   const stamp = result.date.replace(/[:.]/g, '-').slice(0, 19)
@@ -247,9 +287,9 @@ async function main(argv) {
       `, programmes des images suivantes ${p.programmesImagesSuivantes}` +
       (tempsReel ? '' : ' (temps virtuel : durées sans valeur, voir --temps-reel)'))
   }
-  console.log(`résultat : ${file} (${secondes} s, Chrome sorti en ${code})`)
+  console.log(`résultat : ${file} (${secondes} s, Chrome sorti en ${code}${essais > 1 ? `, ${essais}e essai` : ''})`)
   if (dump.title !== 'memtest:fini') {
-    console.error(`mesure inachevée : titre « ${dump.title || 'absent'} », ${dump.etapes.length} étape(s). Le serveur de dev tourne-t-il ? Sinon augmenter BUDGET_MS.`)
+    console.error(`mesure inachevée : titre « ${dump.title || 'absent'} », ${dump.etapes.length} étape(s)${essais > 1 ? `, au ${essais}e essai` : ''}. Le serveur de dev tourne-t-il ? Sinon augmenter BUDGET_MS.`)
     return 1
   }
 
@@ -261,14 +301,23 @@ async function main(argv) {
     console.log(`annexe : ${dest}`)
   }
 
+  let ko = 0
   if (opt('check')) {
     const crit = checkMemtest(dump.etapes, { qualite: result.qualite })
     for (const c of crit) console.log(`${c.ok ? 'TENU  ' : 'ÉCHEC '} ${c.critere} : ${c.detail}`)
-    const ko = crit.filter(c => !c.ok).length
-    console.log(ko ? `${ko} seuil(s) dépassé(s) sur ${crit.length}` : `${crit.length} seuils tenus`)
-    return ko ? 1 : 0
+    const n = crit.filter(c => !c.ok).length
+    console.log(n ? `${n} seuil(s) dépassé(s) sur ${crit.length}` : `${crit.length} seuils tenus`)
+    ko += n
   }
-  return 0
+  // --comparer=<annexe>.json : M6 (triangles, appels) à ±3 % de cette mesure des annexes (critère du lot 2, §5)
+  if (typeof opt('comparer') === 'string') {
+    const ref = JSON.parse(readFileSync(join(repo, 'docs', 'superpowers', 'specs', 'annexes', opt('comparer')), 'utf8'))
+    if (ref.qualite !== result.qualite) console.log(`attention : référence en ${ref.qualite}, mesure en ${result.qualite}`)
+    const crit = compareM6(dump.etapes, ref.etapes)
+    for (const c of crit) console.log(`${c.ok ? 'TENU  ' : 'ÉCHEC '} ${c.critere} : ${c.detail}, contre ${opt('comparer')}`)
+    ko += crit.filter(c => !c.ok).length
+  }
+  return ko ? 1 : 0
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
