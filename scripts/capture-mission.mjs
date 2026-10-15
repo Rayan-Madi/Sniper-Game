@@ -174,7 +174,7 @@ async function shoot(target) {
       await js(c, mouse('mousedown', { button: 2 }))
       await js(c, `__step(${lunette[1] ? 5 : 15})`)
       console.log('  visée :', JSON.stringify(await js(c,
-        `(({ fov, ouverture, pret }) => ({ fov: +fov.toFixed(2), ouverture: +ouverture.toFixed(3), pret }))(__aim())`)))
+        `(({ fov, ouverture, pret }) => ({ fov: +fov.toFixed(2), ouverture: ouverture === undefined ? null : +ouverture.toFixed(3), pret }))(__aim())`)))
     } else if (tir) {
       await js(c, mouse('mousedown', { button: 2 }))
       if (process.env.VISER && !await js(c, `__aimAt(${JSON.stringify(process.env.VISER)})`)) throw new Error(`rien à viser : ${process.env.VISER}`)

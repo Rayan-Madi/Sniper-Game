@@ -138,25 +138,35 @@ const frames = (c, n) => js(c, `new Promise(r => { let k = ${n}; const f = () =>
 // §3.3) et aucune balle en vol. Le clic gauche ne tire qu'alors : __aim().pret.
 const scopeOpen = c => until(c, '__aim().pret', 3000)
 
+// La balle est arrivée, ou ne le fera jamais : hors de la phase de jeu (échec tombé pendant son vol, une cible ayant
+// fui), elle reste figée en vol.
+const BALLE_ARRIVEE = `!__mission().balle || __mission().phase !== 'playing'`
+
+// Avance d'un tir sur un PNJ qui marche ou qui fuit : le délai de la balle (0,45 s sans Vélocité), plus l'image où la
+// visée est prise (comme shootAhead).
+const AVANCE = 0.45 + 1 / 60
+
 // Lunette ouverte, souffle retenu, visée sur `what` (voir __aimAt), puis un tir dont on attend l'impact. Un PNJ qui
-// marche ou qui fuit est visé là où il sera à l'arrivée de la balle (délai de 0,45 s sans Vélocité, plus l'image où la
-// visée est prise, comme shootAhead) : depuis la culasse du lot 2 (1,2 s entre deux coups), le tir suivant tombe
-// souvent sur une cible lancée dans sa fuite (environ 6 m/s au port), qu'un tir au centre manquait.
-// Faux si la visée n'a rien trouvé.
-async function aimAndShoot(c, what, n = 0) {
+// marche ou qui fuit est visé là où il sera à l'arrivée de la balle (AVANCE) : depuis la culasse du lot 2 (1,2 s entre
+// deux coups), le tir suivant tombe souvent sur une cible lancée dans sa fuite (environ 6 m/s au port), qu'un tir au
+// centre manquait. Options : zone visée ('torse', 'tete', 'membre' : __aimAt), apnee (faux : souffle relâché, le
+// tremblement entier), avance (0 : au centre du PNJ, sans le mener).
+// Faux si la visée n'a rien trouvé ; null si la mission a pris fin avant que le tir soit prêt (une cible sortie du
+// champ l'a fait échouer pendant la culasse).
+async function aimAndShoot(c, what, n = 0, { zone = 'torse', apnee = true, avance = what === 'cadenas' ? 0 : AVANCE } = {}) {
   await mouse(c, 'mousedown', 2)
-  await key(c, 'keydown', 'Shift', 'ShiftLeft')
+  await key(c, apnee ? 'keydown' : 'keyup', 'Shift', 'ShiftLeft')
   await frames(c, 10)   // le tremblement se calme
-  await scopeOpen(c)
+  await until(c, `__aim().pret || __mission().phase !== 'playing'`, 3000)
+  if ((await mission(c)).phase !== 'playing') return null
   const tirs = (await mission(c)).tirs
-  const avance = what === 'cadenas' ? 0 : 0.45 + 1 / 60
   const ok = await js(c, `new Promise(r => {
-    if (!__aimAt(${JSON.stringify(what)}, ${n}, ${avance})) return r(false)
+    if (!__aimAt(${JSON.stringify(what)}, ${n}, ${avance}, ${JSON.stringify(zone)})) return r(false)
     requestAnimationFrame(() => { document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); r(true) })
   })`)
   if (!ok) return false
   await until(c, `__mission().tirs === ${tirs + 1}`, 3000)
-  await until(c, `!__mission().balle`)
+  await until(c, BALLE_ARRIVEE)
   return true
 }
 
@@ -175,13 +185,43 @@ async function shootAhead(c, what, avance) {
   })`)
   if (!ok) return false
   await until(c, `__mission().tirs === ${tirs + 1}`, 3000)
-  await until(c, `!__mission().balle`)
+  await until(c, BALLE_ARRIVEE)
   return true
 }
 
-// Un civil abattu, en essayant les civils un par un (un garde ou une cible peut être sur la ligne de tir).
+// RECOMMENCER la mission en cours (pause, puis RECOMMENCER LE NIVEAU ; RÉESSAYER depuis l'écran d'échec), une fois la
+// balle arrivée et un échec en attente tombé : la même mission repart, stress à zéro, PNJ placés à neuf. Pas pendant
+// la kill-cam ni après une réussite (la campagne est passée à la mission suivante).
+async function restart(c) {
+  await until(c, `__mission().phase !== 'playing' || (!__mission().balle && !__mission().failPending)`, 3000)
+  const { phase } = await mission(c)
+  if (phase === 'playing') {
+    await escape(c)
+    await until(c, `__mission().phase === 'paused'`)
+    await click(c, 'btn-restart')
+  } else if (phase === 'dead') {
+    await click(c, 'btn-retry')
+  } else throw new Error(`relance impossible depuis la phase ${phase}`)
+  await until(c, `__mission().phase === 'playing' && __mission().tirs === 0`)
+}
+
+// Vitesse au sol (m/s) du PNJ d'indice i de __mission().pnj, mesurée sur `ms` millisecondes.
+async function groundSpeed(c, i, ms = 200) {
+  const a = (await mission(c)).pnj[i]
+  const t0 = Date.now()
+  await sleep(ms)
+  const b = (await mission(c)).pnj[i]
+  return Math.hypot(b[0] - a[0], b[2] - a[2]) / ((Date.now() - t0) / 1000)
+}
+
+// Un civil abattu (M1) : posé au milieu de la rue, à découvert et immobile (__placer), puis visé au torse. Depuis le
+// lot 2, le décor arrête la balle : un civil visé là où il marchait pouvait être derrière un banc ou un étal, le tir
+// manqué faisait fuir la cible, et l'échec « Une cible a fui » tombait parfois avant la touche suivante. Les civils
+// sont essayés un par un (un garde ou une cible peut encore se trouver sur la ligne de tir).
 async function shootCivilian(c) {
   for (let n = 0; n < 8; n++) {
+    if (!await js(c, `__placer('civil', ${n}, 0, 2)`)) break
+    await frames(c, 3)
     if (!await aimAndShoot(c, 'civil', n)) break
     if (await js(c, `[...document.querySelectorAll('.kill-entry')].some(e => e.textContent.includes('CIVIL ABATTU'))`)) return
     if ((await mission(c)).phase !== 'playing') break
@@ -191,6 +231,8 @@ async function shootCivilian(c) {
 
 // ── Scénarios ──
 const check = (ok, what, seen) => { if (!ok) throw new Error(`${what} (vu : ${JSON.stringify(seen)})`); console.log('    ok :', what) }
+// La même, sans rien afficher : les essais répétés d'une mesure (difficulte).
+const need = (ok, what, seen) => { if (!ok) throw new Error(`${what} (vu : ${JSON.stringify(seen)})`) }
 
 const SCENARIOS = {
   // Retour au menu dans les 5 s : l'aide CLIC DROIT ne reste pas sous le menu.
@@ -270,10 +312,13 @@ const SCENARIOS = {
   },
 
   // Réussite avant le minuteur de 5 s (M1 : une seule cible, ralenti de 1,5 s) : l'aide s'éteint avec l'écran de
-  // réussite.
+  // réussite. La cible est posée au milieu de la rue, à découvert (sinon un civil se trouvait parfois sur la ligne de
+  // tir : scénario non concluant).
   async 'aide-reussite'() {
     const c = await play(1)
     try {
+      check(await js(c, `__placer('cible', 0, 0, 2)`), 'cible posée au milieu de la rue', null)
+      await frames(c, 3)
       for (let i = 0; i < 3 && (await mission(c)).cibles > 0 && (await mission(c)).phase === 'playing'; i++) {
         await aimAndShoot(c, 'cible')
       }
@@ -317,6 +362,147 @@ const SCENARIOS = {
       check(m.dernierImpact && m.dernierImpact.role === 'decor' && m.dernierImpact.surface === 'metal',
         'la balle s\'est arrêtée sur le conteneur (décor en métal)', m.dernierImpact)
     } finally { await c.close() }
+  },
+
+  // Tir à la tête au repos (spec du lot 2, §4 et §5) : la tête est détectée sur l'os, en plongée (M2, du toit, à une
+  // trentaine de mètres) comme sur une cible assise (M6, le commanditaire sur son canapé). Lunette ouverte, souffle
+  // retenu, visée au milieu du crâne (__aimAt, zone 'tete'), sur une cible immobile : en M2, elle est posée à découvert
+  // sur la place, entre la fontaine et les bancs (__placer), car une cible qui marche peut changer de pas pendant le vol
+  // de la balle et le tir mené passer à côté de la tête (vu une fois sur une vingtaine ; les tirs sur des cibles qui
+  // marchent sont mesurés par le scénario difficulte). Avant le lot 2, la tête était « tout ce qui dépasse 1,45 m »
+  // au-dessus des pieds, sur une boîte de 0,8 × 2 × 0,8 m : la tête d'une cible assise n'y était jamais.
+  async tete() {
+    for (const n of [2, 6]) {
+      // M6 : un danseur peut passer entre la fenêtre et le canapé ; la mission est rejouée (trois essais au plus)
+      for (let essai = 1; ; essai++) {
+        const c = await play(n)
+        try {
+          if (n === 2) {
+            check(await js(c, `__placer('cible', 0, 5, -5)`), 'mission 2 : cible posée sur la place, à découvert', null)
+            await frames(c, 3)
+          }
+          const avant = await mission(c)
+          check(await aimAndShoot(c, 'cible', 0, { zone: 'tete' }), `mission ${n} : cible visée à la tête`, null)
+          const m = await mission(c)
+          const i = m.dernierImpact
+          if (n === 6 && i?.role === 'civilian' && essai < 3) { console.log(`    un civil sur la ligne de tir : essai ${essai + 1}`); continue }
+          check(i?.role === 'target' && i.part === 'tete', `mission ${n} : la balle touche la cible à la tête`, i)
+          check(m.cibles === avant.cibles - 1, `mission ${n} : la cible tombe`, { avant: avant.cibles, apres: m.cibles })
+          const fil = await js(c, `[...document.querySelectorAll('.kill-entry')].map(e => e.textContent).join(' | ')`)
+          check(fil.includes('HEADSHOT'), `mission ${n} : le fil dit HEADSHOT`, fil)
+          await capture(c, `tete-m${n}`)
+          break
+        } finally { await c.close() }
+      }
+    }
+  },
+
+  // Culasse (spec du lot 2, §3.3) : deux clics rapprochés ne donnent qu'un tir. Le second clic part après l'arrivée de
+  // la balle (0,45 s), pendant les 1,2 s de culasse : avant le lot 2, il tirait dès la résolution du premier (un clic
+  // pendant le vol, déjà refusé avant, l'est toujours). Visée dans le ciel : la balle part au loin, personne ne réagit,
+  // la mission continue. La culasse revenue, le clic suivant tire.
+  async culasse() {
+    const c = await play(1)
+    try {
+      await mouse(c, 'mousedown', 2)
+      await frames(c, 10)
+      await scopeOpen(c)
+      await js(c, `document.dispatchEvent(new MouseEvent('mousemove', { movementX: 0, movementY: -4000, bubbles: true }))`)
+      await frames(c, 3)
+      const t0 = (await mission(c)).tirs
+      await mouse(c, 'mousedown', 0)
+      const depart = Date.now()
+      await until(c, `__mission().tirs === ${t0 + 1}`, 3000)
+      await sleep(100)
+      await mouse(c, 'mousedown', 0)   // balle en vol
+      await until(c, `!__mission().balle`)
+      await mouse(c, 'mousedown', 0)   // balle arrivée, culasse en cours
+      const apresMs = Date.now() - depart
+      await frames(c, 5)
+      const m = await mission(c)
+      const a = await js(c, '__aim()')
+      check(m.tirs === t0 + 1 && !a.pret && a.culasse < 1, 'trois clics en moins de 1,2 s : un seul tir, culasse en cours',
+        { tirs: m.tirs - t0, culasse: a.culasse, clicApresMs: apresMs })
+      check(m.dernierImpact?.role === 'rien' && m.phase === 'playing', 'balle partie dans le ciel, mission en cours', { impact: m.dernierImpact, phase: m.phase })
+      await until(c, '__aim().pret', 3000)
+      const culasseMs = Date.now() - depart
+      check(culasseMs > 1100 && culasseMs < 1800, 'culasse revenue environ 1,2 s après le coup', culasseMs)
+      await mouse(c, 'mousedown', 0)
+      await until(c, `__mission().tirs === ${t0 + 2}`, 3000)
+      console.log('    ok : culasse revenue, le clic suivant tire')
+    } finally { await c.close() }
+  },
+
+  // Surveillance de la difficulté (spec du lot 2, §6 ; plan, tâche T8) : rapport sans seuil, le scénario ne rougit que
+  // si la mesure elle-même échoue. En M2, à une trentaine de mètres en plongée, la mission relancée avant chaque essai,
+  // souffle relâché (apnée en moins : le tremblement entier) :
+  // - au repos (stress proche de 0), visée au crâne d'une cible qui marche, menée : la touche doit rester quasi certaine ;
+  // - sous le stress (lunette tenue jusqu'au stress plein, 14 s), même visée : elle doit devenir incertaine (§3.6 : à
+  //   stress 1, environ 45 % à la tête) ;
+  // - une cible en fuite (une balle passée au-dessus d'elle l'a fait fuir, environ 4,8 m/s en M2), visée au torse après
+  //   la culasse, sans la mener (avance 0), puis en la menant : ce que coûte la fuite à un joueur qui ne mène pas
+  //   (relecture de T3).
+  // ESSAIS=n : nombre d'essais par mesure (défaut 8).
+  async difficulte() {
+    const N = +process.env.ESSAIS || 8
+    let c = await play(2)
+    // La mission repart avant chaque essai ; si les deux cibles sont tombées (une balle perdue a pu toucher la seconde),
+    // la campagne est passée à M3 : M2 est rouverte dans un Chrome neuf.
+    const relancer = async () => {
+      const m = await mission(c)
+      if (m.killcam || m.phase === 'cleared') { await c.close(); c = await play(2) } else await restart(c)
+    }
+    const bilan = {}
+    // i : __mission().dernierImpact du tir mesuré ; null : essai non concluant (la cible n'a pas fui, ou une cible en fuite,
+    // souvent l'autre, est sortie du champ avant le tir : échec « Une cible a fui »)
+    const note = (mesure, i) => {
+      const b = bilan[mesure] ||= { essais: 0, tete: 0, torse: 0, membre: 0, manque: 0, autre: 0, nonConcluant: 0 }
+      b.essais++
+      if (!i) b.nonConcluant++
+      else if (i.role === 'target' && b[i.part] !== undefined) b[i.part]++
+      else if (i.role === 'decor' || i.role === 'rien') b.manque++
+      else b.autre++   // garde ou civil sur la ligne de tir
+    }
+    try {
+      for (let k = 0; k < N; k++) {
+        if (k) await relancer()
+        need(await aimAndShoot(c, 'cible', 0, { zone: 'tete', apnee: false }), 'au repos : cible visée', null)
+        note('au repos, à la tête', (await mission(c)).dernierImpact)
+      }
+      for (let k = 0; k < N; k++) {
+        await relancer()
+        await mouse(c, 'mousedown', 2)
+        await until(c, '__aim().stress >= 0.98', 20000)
+        need(await aimAndShoot(c, 'cible', 0, { zone: 'tete', apnee: false }), 'sous le stress : cible visée', null)
+        note('stress plein, à la tête', (await mission(c)).dernierImpact)
+      }
+      for (const [mesure, avance] of [['en fuite, au centre sans avance', 0], ['en fuite, menée', AVANCE]]) {
+        for (let k = 0; k < N; k++) {
+          await relancer()
+          await mouse(c, 'mousedown', 2)
+          await frames(c, 10)
+          await scopeOpen(c)
+          // Une balle qui passe environ 1,5 m au-dessus de la cible et tombe derrière elle : la cible fuit
+          const ok = await js(c, `new Promise(r => {
+            if (!__aimAt('cible', 0, ${AVANCE})) return r(false)
+            document.dispatchEvent(new MouseEvent('mousemove', { movementX: 0, movementY: -45, bubbles: true }))
+            requestAnimationFrame(() => { document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); r(true) })
+          })`)
+          need(ok, `${mesure} : cible visée`, null)
+          await until(c, `__mission().tirs === 1 && (${BALLE_ARRIVEE})`, 3000)
+          const fuite = await groundSpeed(c, 0)   // la première cible, en tête des PNJ
+          if (fuite < 2.5 || (await mission(c)).phase !== 'playing') { note(mesure, null); continue }
+          const tir = await aimAndShoot(c, 'cible', 0, { apnee: false, avance })
+          if (tir === null) { note(mesure, null); continue }   // l'autre cible, en fuite, a quitté le champ : échec
+          need(tir, `${mesure} : cible visée`, null)
+          note(mesure, (await mission(c)).dernierImpact)
+        }
+      }
+    } finally { await c.close() }
+    for (const [mesure, b] of Object.entries(bilan)) {
+      console.log(`    mesure : ${mesure} : ${b.essais} essai(s), tête ${b.tete}, torse ${b.torse}, membre ${b.membre}, ` +
+        `manqué ${b.manque}, autre PNJ ${b.autre}${b.nonConcluant ? `, non concluant ${b.nonConcluant} (pas de fuite, ou une cible sortie du champ avant le tir)` : ''}`)
+    }
   },
 
   // Son du tir (spec du lot 2, §3.5) : au port, l'écho de la carte est monté (acoustique du port) et la pluie tombe ; une
@@ -519,7 +705,7 @@ const SCENARIOS = {
       check(m.jeeps.every(j => Math.abs(j[1] - 0.2) < 1e-3), 'jeeps posées sur la route', m.jeeps)
       check(seated(m), 'colonel assis sur la banquette, au-dessus de la route', { colonel: m.pnj[0], jeep: m.jeeps[1] })
       await until(c, `__mission().jeeps[1][0] > -12`, 15000)   // la jeep du colonel arrive devant le poste
-      for (let i = 0; i < 6 && (await mission(c)).cibles > 0; i++) await shootAhead(c, 'cible', 0.45 + 1 / 60)
+      for (let i = 0; i < 6 && (await mission(c)).cibles > 0; i++) await shootAhead(c, 'cible', AVANCE)
       m = await mission(c)
       check(m.cibles === 0, 'colonel abattu', { cibles: m.cibles, tirs: m.tirs })
       await frames(c, 30)   // ralenti de 1,5 s
