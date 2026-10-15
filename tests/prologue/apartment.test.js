@@ -22,8 +22,9 @@ const walk = (apt, from, to, steps = 400) => {
 describe('l\'appartement', () => {
   // budget relevé par le prologue v2 (spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §5, au lieu de 47 et
   // 16 600) : toujours fusionné par matériau. Mesuré par stats() après l'architecture intérieure et sa relecture :
-  // 48 objets, 27 398 triangles (en jeu : 45 appels, 27 294 triangles au départ). Toute hausse est un choix assumé :
-  // mettre ce test à jour en même temps que REPRISE.md.
+  // 48 objets, 27 398 triangles (en jeu : 45 appels, 27 294 triangles au départ) ; après le mobilier (N4) : 50 objets
+  // (le velours du fauteuil, les images aux murs), 42 962 triangles (en jeu : 47 appels, 42 858 triangles au départ).
+  // Toute hausse est un choix assumé : mettre ce test à jour en même temps que REPRISE.md.
   it('tient le budget relevé : au plus 80 objets dessinés et 45 000 triangles', () => {
     const apt = buildApartment()
     const { drawables, triangles } = apt.stats()
@@ -140,6 +141,11 @@ describe('l\'appartement', () => {
       for (const m of [].concat(o.material || [])) { mats.add(m); for (const k in m) if (m[k] && m[k].isTexture) maps.add(m[k]) }
     })
     expect(maps.size).toBeGreaterThan(10)
+    // le mobilier (N4) en est : le velours du fauteuil, les images aux murs et leur planche dessinée en canvas
+    const byName = n => [...mats].find(m => m.name === n)
+    expect(byName('velours'), 'velours du fauteuil').toBeDefined()
+    expect(byName('tableaux'), 'images aux murs').toBeDefined()
+    expect(maps.has(byName('tableaux').map)).toBe(true)
     const spies = [...geos, ...mats, ...maps].map(x => vi.spyOn(x, 'dispose'))
     const shadow = vi.spyOn(apt.lights.spot.shadow, 'dispose')
     apt.dispose()
@@ -208,34 +214,38 @@ describe('l\'appartement : l\'écran du téléphone', () => {
   })
 })
 
-// ── prologue v2 : un appartement moins cubique, l'architecture intérieure (spec
-// docs/superpowers/specs/2026-10-11-prologue-v2-design.md §5) ──
+// ── prologue v2 : un appartement moins cubique (spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §5) ──
 // Sondes au rayon contre le décor tel qu'il est dessiné : maillages visibles et opaques seulement (ni lueurs, ni vitres,
 // ni sang, ni volumes de visée invisibles, ni pluie).
-describe('l\'appartement : l\'architecture intérieure', () => {
-  const H = 2.6, V3 = (...a) => new THREE.Vector3(...a)
-  const visible = o => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true }
-  function probes(apt) {
-    apt.group.updateMatrixWorld(true)
-    const meshes = []; apt.group.traverse(o => { if (o.isMesh && !o.material.transparent && visible(o)) meshes.push(o) })
-    const ray = new THREE.Raycaster()
-    // distance au premier objet opaque, depuis o dans la direction d (Infinity si rien avant far)
-    const hit = (o, d, far = 10) => {
-      ray.set(new THREE.Vector3(...o), new THREE.Vector3(...d).normalize()); ray.near = 0; ray.far = far
-      const h = ray.intersectObjects(meshes, false)[0]
-      return h ? h.distance : Infinity
-    }
-    // saillie de ce qui est posé sur la face d'un mur au point (x, y, z) de cette face, normale (nx, nz) vers la pièce :
-    // 0 sur le mur nu, positive devant lui, négative dans un renfoncement
-    const proud = (x, y, z, nx, nz) => 0.2 - hit([x + nx * 0.2, y, z + nz * 0.2], [-nx, 0, -nz], 0.5)
-    // balaie la face le long du mur (de a à b, pas de 5 mm) : saillies relevées
-    const scan = (face, y, a, b, step = 0.005) => {
-      const out = []
-      for (let s = a; s <= b + 1e-9; s += step) out.push(face.alongX ? proud(s, y, face.at, 0, face.n) : proud(face.at, y, s, face.n, 0))
-      return out
-    }
-    return { hit, proud, scan }
+const H = 2.6, V3 = (...a) => new THREE.Vector3(...a)
+const r3 = v => Math.round(v * 1000) / 1000
+const visible = o => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true }
+function probes(apt) {
+  apt.group.updateMatrixWorld(true)
+  const meshes = []; apt.group.traverse(o => { if (o.isMesh && !o.material.transparent && visible(o)) meshes.push(o) })
+  const ray = new THREE.Raycaster()
+  // premier objet opaque touché depuis o dans la direction d (undefined si rien avant far)
+  const first = (o, d, far = 10) => {
+    ray.set(new THREE.Vector3(...o), new THREE.Vector3(...d).normalize()); ray.near = 0; ray.far = far
+    return ray.intersectObjects(meshes, false)[0]
   }
+  // distance au premier objet opaque, depuis o dans la direction d (Infinity si rien avant far)
+  const hit = (o, d, far = 10) => { const h = first(o, d, far); return h ? h.distance : Infinity }
+  // saillie de ce qui est posé sur la face d'un mur au point (x, y, z) de cette face, normale (nx, nz) vers la pièce :
+  // 0 sur le mur nu, positive devant lui, négative dans un renfoncement
+  const proud = (x, y, z, nx, nz) => 0.2 - hit([x + nx * 0.2, y, z + nz * 0.2], [-nx, 0, -nz], 0.5)
+  // balaie la face le long du mur (de a à b, pas de 5 mm) : saillies relevées
+  const scan = (face, y, a, b, step = 0.005) => {
+    const out = []
+    for (let s = a; s <= b + 1e-9; s += step) out.push(face.alongX ? proud(s, y, face.at, 0, face.n) : proud(face.at, y, s, face.n, 0))
+    return out
+  }
+  // hauteur du premier dessus touché par un rayon vertical tiré de y0 vers le bas (le sol est en y = 0)
+  const top = (x, z, y0 = 1.5) => y0 - hit([x, y0, z], [0, -1, 0], y0 + 0.1)
+  return { first, hit, proud, scan, top }
+}
+
+describe('l\'appartement : l\'architecture intérieure', () => {
   // un point libre de chaque mur des pièces (ni meuble, ni ouverture) : [lieu, x, z, nx, nz] sur la face du mur
   const WALLS = [
     ['entrée, mur du palier', 5.0, 6.94, 0, -1], ['entrée, mur du palier', 7.2, 6.94, 0, -1],
@@ -251,7 +261,6 @@ describe('l\'appartement : l\'architecture intérieure', () => {
     ['chambre, mur de gauche', 0.56, 2.65, 1, 0], ['chambre, mur de droite', 4.44, 2.65, -1, 0],
     ['chambre, mur du couloir', 1.2, 4.44, 0, -1], ['chambre, mur du couloir', 4.1, 4.44, 0, -1],
   ]
-  const r3 = v => Math.round(v * 1000) / 1000
 
   it('une corniche court sous le plafond de chaque pièce : elle déborde du mur en haut, le mur reparaît 20 cm plus bas', () => {
     const apt = buildApartment(), { proud } = probes(apt), bad = []
@@ -494,6 +503,188 @@ describe('l\'appartement : l\'architecture intérieure', () => {
     // la lampe, le ciel, la lune, la veilleuse : les seules lumières, comme avant
     expect(lights.length).toBe(Object.keys(apt.lights).length)
     for (const l of Object.values(apt.lights)) expect(lights.includes(l)).toBe(true)
+    apt.dispose()
+  })
+})
+
+// ── prologue v2, tâche N4 : un mobilier qui a vécu (spec docs/superpowers/specs/2026-10-11-prologue-v2-design.md §5,
+// « Mobilier ») : arêtes adoucies, canapé à coussins, fauteuil, table basse à plateau épais, étagère, lit de la petite,
+// console à tiroir, tapis aux bords souples, petits objets de famille ──
+describe('l\'appartement : le mobilier', () => {
+  // rotation autour de y (celle de three) : point local (lx, lz) d'un meuble centré en (cx, cz), tourné de ry
+  const turn = (cx, cz, ry, lx, lz) => [cx + lx * Math.cos(ry) + lz * Math.sin(ry), cz - lx * Math.sin(ry) + lz * Math.cos(ry)]
+  // longueurs des suites d'échantillons consécutifs qui vérifient ok
+  const runs = (vals, ok) => { const out = []; let n = 0; for (const v of vals) { if (ok(v)) n++; else { if (n) out.push(n); n = 0 } } if (n) out.push(n); return out }
+  const range = (a, b, step) => { const r = []; for (let s = a; s <= b + 1e-9; s += step) r.push(s); return r }
+
+  it('les meubles ont les arêtes adoucies : à 3 mm du bord, le dessus descend déjà un peu', () => {
+    const apt = buildApartment(), { top } = probes(apt), bad = []
+    // [meuble, point du dessus loin des bords, point à 3 mm d'un bord, d'où tirer le rayon]
+    const PIECES = [
+      ['table basse', [9.2, 3.1], [9.2, 2.803], 1.5],
+      ['console de l\'entrée', [4.78, 6.0], [4.987, 6.0], 1.2],
+      ['étagère, couronnement', [11.2, 6.82], [11.2, 6.658], 2.3],
+      ['table de chevet', [2.95, 1.0], [2.95, 1.267], 0.95],
+      ['coffre à jouets, couvercle', [1.2, 3.9], [1.357, 3.9], 0.95],
+      ['lit, tête', [2.3, 0.93], [2.3, 0.952], 0.95],
+      ['lit, pied', [2.3, 2.68], [2.3, 2.702], 0.95],
+      // la chaise renversée près de l'arche, couchée sur son dossier : le chant avant de son siège, debout, à 44 cm
+      // (épaisseur de 3,5 cm suivant (0,94 ; −0,34) : à 3 mm de sa face, 14,5 mm de son milieu)
+      ['chaise renversée, chant du siège', [8.2823, 6.4427], [8.2959, 6.4377], 0.8],
+    ]
+    for (const [nom, c, e, y0] of PIECES) {
+      const hc = top(...c, y0), he = top(...e, y0), drop = hc - he
+      // un bord vif ne descend pas ; un rayon qui manque le meuble tombe bien plus bas
+      if (!(drop >= 0.002 && drop <= 0.02)) bad.push(`${nom} : dessus ${r3(hc)}, à 3 mm du bord ${r3(he)}`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('le canapé : coussins d\'assise bombés, dossier à coussins, accoudoirs arrondis', () => {
+    const apt = buildApartment(), { top, hit } = probes(apt), bad = []
+    // assise : deux coussins (x 8,9 et 9,9), z 1,32 à 2,12 ; à 3 cm de leur bord avant, le dessus est plus bas qu'au milieu
+    for (const x of [8.9, 9.9]) {
+      const mid = top(x, 1.72, 1.0), front = top(x, 2.09, 1.0)
+      if (!(mid - front >= 0.015 && mid - front <= 0.08)) bad.push(`assise en x = ${x} : milieu ${r3(mid)}, avant ${r3(front)}`)
+    }
+    // dossier : vu de face à 72 cm, chaque coussin bombe ; entre les deux, un creux d'au moins 3 cm
+    const depth = x => hit([x, 0.72, 2.6], [0, 0, -1], 2)
+    const seam = Math.max(...range(9.38, 9.42, 0.005).map(depth)), mids = [depth(8.9), depth(9.9)]
+    if (!(seam - Math.max(...mids) >= 0.03)) bad.push(`dossier : creux ${r3(seam)} pour des coussins à ${mids.map(r3).join(' et ')}`)
+    // accoudoirs (x 8,22 à 8,40 et 10,40 à 10,58) : à 2 cm du bord extérieur, le dessus est déjà plus bas d'1 cm
+    for (const [nom, mid, out] of [['gauche', 8.31, 8.24], ['droit', 10.49, 10.56]]) {
+      const a = top(mid, 1.7, 1.0), b = top(out, 1.7, 1.0)
+      if (!(a - b >= 0.01 && a - b <= 0.1)) bad.push(`accoudoir ${nom} : milieu ${r3(a)}, bord ${r3(b)}`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  // les coussins sont tirés d'une sphère : sa couture (deux colonnes de sommets confondues) ne doit pas s'ouvrir ; une
+  // fente de 0,3 mm laissait voir le socle du canapé, et tout rayon tiré sur la couture passait au travers
+  it('les coussins d\'assise du canapé sont d\'un seul tenant : aucune fente sur leur couture', () => {
+    const apt = buildApartment(), { top } = probes(apt), bad = []
+    for (const cx of [8.905, 9.895]) for (const dx of range(-0.45, 0.45, 0.01)) {
+      const h = top(cx + dx, 1.72, 1.0)
+      if (!(h >= 0.4)) bad.push(`x = ${r3(cx + dx)} : ${r3(h)}`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('un fauteuil dans l\'angle du salon : une assise, un dossier, et on ne passe pas au travers', () => {
+    const apt = buildApartment(), { top } = probes(apt)
+    const C = [11.45, 1.85], RY = -0.95                         // tourné vers la table basse
+    const seat = top(...C, 1.5), back = top(...turn(...C, RY, 0, -0.3), 1.5)
+    expect(seat, 'assise').toBeGreaterThan(0.38); expect(seat, 'assise').toBeLessThan(0.52)
+    expect(back, 'dossier').toBeGreaterThan(0.75)
+    expect(walk(apt, { x: 11.4, z: 3.0 }, { x: 11.4, z: 1.3 }).z).toBeGreaterThan(2.2)
+    apt.dispose()
+  })
+
+  it('la table basse a un plateau épais : 6 cm sous le mot, posé au même endroit', () => {
+    const apt = buildApartment(), { top, hit } = probes(apt)
+    const upper = top(9.2, 3.1), under = 0.2 + hit([9.2, 0.2, 3.1], [0, 1, 0], 0.5)
+    expect(upper).toBeCloseTo(0.4, 2)                           // le mot reste posé à 40,5 cm
+    expect(upper - under).toBeGreaterThanOrEqual(0.055)
+    apt.dispose()
+  })
+
+  it('la console de l\'entrée a un vrai tiroir : façade entourée d\'un jour fin, un bouton pour l\'ouvrir', () => {
+    const apt = buildApartment(), { hit } = probes(apt)
+    // coupe verticale de la façade au milieu du tiroir (z = 6,35) : x touché par un rayon tiré vers le mur
+    const xs = range(0.66, 0.8, 0.0005).map(y => 5.2 - hit([5.2, y, 6.35], [-1, 0, 0], 1))
+    const front = [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]   // le plan de la façade (médiane)
+    // jours : suites de points en retrait d'au moins 4 mm, hautes d'au plus 6 mm, profondes d'au plus 5 cm
+    const grooves = []
+    let start = -1
+    xs.forEach((x, i) => {
+      const inGroove = x < front - 0.004
+      if (inGroove && start < 0) start = i
+      if ((!inGroove || i === xs.length - 1) && start >= 0) { grooves.push(xs.slice(start, inGroove ? i + 1 : i)); start = -1 }
+    })
+    const fine = grooves.filter(g => g.length * 0.0005 <= 0.006 && front - Math.min(...g) <= 0.05)
+    expect(fine.length, `jours : ${grooves.map(g => `${g.length * 0.5} mm de haut, ${r3(front - Math.min(...g))} m de fond`).join(' ; ')}`).toBeGreaterThanOrEqual(2)
+    expect(5.2 - hit([5.2, 0.735, 6.35], [-1, 0, 0], 1) - front, 'bouton').toBeGreaterThanOrEqual(0.015)
+    apt.dispose()
+  })
+
+  it('l\'étagère : des livres de hauteurs et de couleurs variées, et une pile de livres couchés', () => {
+    const apt = buildApartment(), { first } = probes(apt)
+    const heights = new Set(), colors = new Set(), stacks = []
+    for (const s of [0.045, 0.515, 0.965, 1.415]) {   // dessus des planches ; rayons tirés sous la planche du dessus
+      const hs = range(10.56, 11.84, 0.005).map(x => {
+        const h = first([x, s + 0.4, 6.8], [0, -1, 0], 0.5)
+        if (!h) return 0
+        const c = h.object.geometry.attributes.color
+        if (h.object.material.name === 'livres' && c) colors.add(new THREE.Color(c.getX(h.face.a), c.getY(h.face.a), c.getZ(h.face.a)).getHexString())
+        return s + 0.4 - h.distance - s
+      })
+      for (const h of hs) if (h > 0.17) heights.add(Math.round(h * 100))
+      stacks.push(Math.max(0, ...runs(hs, h => h >= 0.03 && h <= 0.16)) * 0.005)
+    }
+    expect(heights.size, 'hauteurs de livres debout (au cm)').toBeGreaterThanOrEqual(6)
+    expect(colors.size, 'couleurs de livres').toBeGreaterThanOrEqual(12)
+    expect(Math.max(...stacks), 'pile de livres couchés (largeur, m)').toBeGreaterThanOrEqual(0.12)
+    apt.dispose()
+  })
+
+  it('le lit de la petite : une couette moelleuse qui tombe sur les côtés, un oreiller bombé', () => {
+    const apt = buildApartment(), { top, hit } = probes(apt), bad = []
+    const mid = top(2.3, 2.0, 1.0)
+    for (const x of [1.9, 2.7]) { const e = top(x, 2.0, 1.0); if (!(mid - e >= 0.012 && mid - e <= 0.08)) bad.push(`couette : milieu ${r3(mid)}, en x = ${x} ${r3(e)}`) }
+    const side = 1.5 + hit([1.5, 0.3, 2.0], [1, 0, 0], 1)
+    if (!(side <= 1.83)) bad.push(`couette : rien ne tombe sur le côté avant x = ${r3(side)}`)
+    const p = top(2.3, 1.13, 1.0)
+    for (const x of [2.06, 2.54]) { const e = top(x, 1.13, 1.0); if (!(p - e >= 0.015 && p - e <= 0.1)) bad.push(`oreiller : milieu ${r3(p)}, en x = ${x} ${r3(e)}`) }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('les tapis ont des bords souples : un ourlet roulé sur les longs côtés, des franges aux petits côtés', () => {
+    const apt = buildApartment(), { top } = probes(apt), bad = []
+    // franges : à 1 cm du petit côté, une suite serrée de brins posés au sol, séparés par des jours (au moins un brin
+    // tous les 2 cm ; un brin tous les 6 cm se lisait comme les graduations d'une règle)
+    const FRINGES = [
+      ['salon, côté arche', 7.99, 2.25, 4.55], ['salon, côté fenêtre', 11.21, 2.25, 4.1],
+      ['couloir, côté fond', 1.19, 4.82, 5.48], ['couloir, côté entrée', 4.21, 4.82, 5.48],
+    ]
+    for (const [lieu, x, z0, z1] of FRINGES) {
+      const strands = runs(range(z0, z1, 0.002).map(z => top(x, z, 0.05)), h => h > 0.0008).length
+      if (strands < (z1 - z0) / 0.02) bad.push(`franges, ${lieu} : ${strands} brins sur ${r3(z1 - z0)} m`)
+    }
+    // ourlet : à 2 mm du long côté, le bord roulé dépasse le champ du tapis
+    for (const [lieu, x, z, zIn] of [['salon, côté canapé', 9.4, 2.202, 2.6], ['salon, côté arche', 9.0, 4.598, 4.3], ['couloir', 3.6, 4.802, 5.15]]) {
+      const edge = top(x, z, 0.05), field = top(x, zIn, 0.05)
+      if (!(edge - field >= 0.0015 && edge < 0.02)) bad.push(`ourlet, ${lieu} : bord ${r3(edge)}, champ ${r3(field)}`)
+    }
+    expect(bad).toEqual([])
+    apt.dispose()
+  })
+
+  it('des objets de famille : le manteau de la petite à la patère de l\'entrée, une plante, des images aux murs', () => {
+    const apt = buildApartment(), { top, proud, first } = probes(apt), bad = []
+    if (!(proud(5.05, 1.64, 4.56, 0, 1) >= 0.015)) bad.push('patère de l\'entrée')
+    if (!(proud(4.85, 1.3, 4.56, 0, 1) >= 0.04)) bad.push('manteau à la patère')
+    // la plante, entre le canapé et le fauteuil, contre le mur : on la voit de tout le salon (derrière le fauteuil, dans
+    // l'angle de la fenêtre, seules deux pointes de feuilles en dépassaient)
+    let plant = 0
+    for (const dx of range(-0.1, 0.1, 0.025)) for (const dz of range(-0.1, 0.1, 0.025)) plant = Math.max(plant, top(10.85 + dx, 1.32 + dz, 1.5))
+    if (!(plant >= 0.6)) bad.push(`plante du salon : ${r3(plant)} m`)
+    // les images : un cadre sur le mur, et ce qu'on voit au milieu est une image (une carte de texture)
+    const PICTURES = [
+      ['salon, au-dessus du canapé, à gauche', [8.9, 1.52, 1.26], [0, 0, -1], 1.06],
+      ['salon, au-dessus du canapé, à droite', [9.9, 1.52, 1.26], [0, 0, -1], 1.06],
+      ['couloir', [3.3, 1.55, 5.3], [0, 0, 1], 5.74],
+      ['chambre, le dessin', [4.2, 1.3, 2.2], [1, 0, 0], 4.44],
+    ]
+    for (const [lieu, o, d, wall] of PICTURES) {
+      const h = first(o, d, 1)
+      const off = h ? Math.abs(wall - (d[0] ? h.point.x : h.point.z)) : NaN
+      if (!h || !h.object.material.map || !(off >= 0.003 && off <= 0.06)) bad.push(`${lieu} : ${h ? `${h.object.material.name}, à ${r3(off)} m du mur` : 'rien'}`)
+    }
+    expect(bad).toEqual([])
     apt.dispose()
   })
 })
