@@ -9,7 +9,7 @@
 - **19:04** : un appel manqué de **MAISON**, avec **un message** : sa femme.
 - **21:47** : Viktor rentre (prologue A, enquête).
 - Il écoute le message de sa femme.
-- **22:41** : **Anton appelle** (appel entrant, depuis le numéro de 18:52). Il dit qu'il peut aider et que les bornes ont été dépassées, **sans en dire plus**, et raccroche sur un rendez-vous (« Demain, tu sauras qui. »).
+- **22:41** : **Anton appelle** (appel entrant, depuis le numéro de 18:52). Il dit qu'il peut aider et que les bornes ont été dépassées, **sans en dire plus**, et raccroche sur « Tu vas savoir qui. », que la scène tient aussitôt (le dossier, puis « Appelle-moi Anton. »).
 - Juste après, **un message d'Anton arrive** depuis le même numéro, avec une pièce jointe, **le dossier** : les cibles. Viktor les épingle au mur : c'est le **tableau de chasse**, gardé pour l'épilogue (« le mur du prologue, toutes les fiches barrées sauf ? »).
 
 Ce qui ne change pas : la règle « Anton n'est jamais vu », le numéro jetable de l'épilogue (« Ce numéro n'existera plus demain »), les voix en bips (pas de voix enregistrée), « aucun corps montré » pour la femme et la fille.
@@ -29,7 +29,7 @@ On garde le décor, le téléphone à l'écran, le tableau et le carton-titre ; 
 | | | « Je peux t'aider. » |
 | | | « Ils ont dépassé les bornes. » |
 | | VIKTOR | « Qui êtes-vous ? » |
-| | INCONNU | « Demain, tu sauras qui. » puis il raccroche (bips de fin d'appel) |
+| | INCONNU | « Tu vas savoir qui. » puis il raccroche (bips de fin d'appel) |
 | le dossier | MESSAGE · 06 39 98 41 07 | Vibration, une bulle de message avec une pièce jointe « DOSSIER » ; les fiches apparaissent une à une (Markov ; les frères Sanctechair ; Vosko, le passeur ; trois officiers ; un colonel sans visage ; « ? ») et se rangent au mur, comme le tableau actuel |
 | | (message tapé) | « Je te donne les noms. Toi, tu as le fusil. » |
 | | (message tapé) | « Appelle-moi Anton. » ; le contact s'enregistre « ANTON » sur l'écran (comme aujourd'hui) |
@@ -37,6 +37,8 @@ On garde le décor, le téléphone à l'écran, le tableau et le carton-titre ; 
 | carton-titre | | inchangé |
 
 Retirés : le rappel par Viktor, « Tu as eu mon message. Trop tard, je sais. », « Tu ne me connais pas… », « Appelle-moi Anton. Je vends des infos… », « On t'a offert du travail… » (le prologue A montre déjà l'offre et le refus). Le journal des appels montre désormais « 06 39 98 41 07 · 22:41 · ENTRANT » puis « ANTON » une fois le contact enregistré. L'indicateur radio (« CANAL INCONNU · NUMÉRO JETABLE ») n'est allumé que pendant l'appel : il s'éteint au raccrochage, le dossier et les messages arrivent sans canal ouvert ; « ANTON » ne s'affiche que sur le téléphone (contact et journal). Décidé à la relecture de N1.
+
+**Décidé à la relecture finale** : « Demain, tu sauras qui. » devient « Tu vas savoir qui. ». Le dossier, une minute plus tard, puis « Appelle-moi Anton. » démentaient le « demain » : la réplique annonçait un rendez-vous qui n'a pas lieu. La nouvelle est aussi sèche et la scène la tient, qu'on entende « qui a fait ça » (le dossier) ou « qui je suis » (le nom). Choix de ton pris sous la carte blanche, à confirmer par Rayan : revenir en arrière tient en une ligne de la maquette, puis `node scripts/port-maquette.mjs`. Gardés tels quels : « Ils frappent. » dans le message de sa femme et l'indice « serrure » de l'enquête (« Ils n'ont pas sonné. Ils ont fait sauter la serrure. ») se tiennent, ils ont frappé sans sonner puis forcé la porte ; dans l'épilogue, l'appel entrant s'affiche « NUMÉRO INCONNU » avant que « ANTON » s'y tape, alors que le contact est enregistré depuis le prologue (état d'avant cette branche) : l'écran fait désormais écho à l'appel de 22:41 ; à revoir dans un lot ultérieur si Rayan veut le contact affiché d'emblée.
 
 La scène `src/briefing/scenes/prologue-b.js` est **régénérée** par `node scripts/port-maquette.mjs` (jamais éditée à la main). Les durées des temps suivent la longueur des répliques comme ailleurs dans le kit. Captures de la maquette et du jeu aux temps clés.
 

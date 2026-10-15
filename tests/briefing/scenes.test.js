@@ -124,7 +124,7 @@ describe('prologue B : le message de sa femme, l\'appel d\'Anton, le dossier', (
       ['INCONNU', 'Je peux t\'aider.'],
       ['INCONNU', 'Ils ont dépassé les bornes.'],
       ['VIKTOR', 'Qui êtes-vous ?'],
-      ['INCONNU', 'Demain, tu sauras qui.'],
+      ['INCONNU', 'Tu vas savoir qui.'],
       [SMS, 'Je te donne les noms. Toi, tu as le fusil.'],
       [SMS, 'Appelle-moi Anton.'],
       ['VIKTOR', 'Ils voulaient mon silence. Ils auront ma vengeance.'],
