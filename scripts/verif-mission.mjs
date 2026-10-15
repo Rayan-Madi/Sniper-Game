@@ -3,7 +3,9 @@
 // par les accroches de dev __mission() et __aimAt(). Prérequis : npm run dev.
 // Usage : node scripts/verif-mission.mjs [scénario…]   (sans argument : tous ; CAPTURES=1 : images dans shots/)
 // Variables : CHROME (chemin de Chrome), BASE_URL (défaut http://localhost:5173/), TAILLE (défaut 1280,720),
-// SWIFTSHADER=1 (rendu logiciel au lieu de la carte graphique). Chaque scénario part d'un profil jetable.
+// SWIFTSHADER=1 (rendu logiciel au lieu de la carte graphique), RALENTI=n (processeur de la page ralenti n fois,
+// Emulation.setCPUThrottlingRate : une machine lente ou chargée, où le temps du jeu, au pas plafonné à 50 ms,
+// retarde sur l'horloge murale). Chaque scénario part d'un profil jetable.
 // Le port DevTools est choisi par Chrome (--remote-debugging-port=0, relu dans DevToolsActivePort) : jamais un port
 // fixe, qui pourrait désigner le navigateur d'une autre session.
 import { spawn } from 'node:child_process'
@@ -51,6 +53,7 @@ async function openChrome(save) {
     await js(c, `localStorage.setItem('sniper-save', ${JSON.stringify(JSON.stringify(save))}); window.__ancienne = true`)
     await c.send('Page.navigate', { url: BASE })
     await until(c, `!window.__ancienne && document.readyState === 'complete' && typeof window.__mission === 'function'`)
+    if (+process.env.RALENTI > 1) await c.send('Emulation.setCPUThrottlingRate', { rate: +process.env.RALENTI })
     return c
   } catch (e) { await close(); throw e }
 }
@@ -370,27 +373,48 @@ const SCENARIOS = {
   // sur la place, entre la fontaine et les bancs (__placer), car une cible qui marche peut changer de pas pendant le vol
   // de la balle et le tir mené passer à côté de la tête (vu une fois sur une vingtaine ; les tirs sur des cibles qui
   // marchent sont mesurés par le scénario difficulte). Avant le lot 2, la tête était « tout ce qui dépasse 1,45 m »
-  // au-dessus des pieds, sur une boîte de 0,8 × 2 × 0,8 m : la tête d'une cible assise n'y était jamais.
+  // au-dessus des pieds, sur une boîte de 0,8 × 2 × 0,8 m : la tête d'une cible assise n'y était jamais. En M2, la
+  // cible est visée debout, puis accroupie (__placer, état 'react' : la pose Crouch d'un PNJ qui se baisse après un
+  // tir proche), le milieu de son crâne de 0,87 à 0,96 m au-dessus des pieds selon le modèle : debout, toute sa tête
+  // dépasse 1,45 m (le bas de la zone, menton compris, de 1,51 à 1,54 m sur les sept modèles posés comme dans
+  // tests/shot/glb-bones.test.js) et l'ancienne règle la voyait aussi ; accroupie, toute sa tête est sous 1,45 m, et
+  // seule la tête calée sur l'os la trouve en plongée (relecture de T8).
   async tete() {
-    for (const n of [2, 6]) {
+    for (const [n, pose] of [[2, 'debout'], [2, 'accroupie'], [6, 'assise']]) {
+      const quoi = n === 2 ? `mission 2, cible ${pose}` : 'mission 6'
       // M6 : un danseur peut passer entre la fenêtre et le canapé ; la mission est rejouée (trois essais au plus)
       for (let essai = 1; ; essai++) {
         const c = await play(n)
         try {
           if (n === 2) {
-            check(await js(c, `__placer('cible', 0, 5, -5)`), 'mission 2 : cible posée sur la place, à découvert', null)
-            await frames(c, 3)
+            check(await js(c, `__placer('cible', 0, 5, -5, '${pose === 'accroupie' ? 'react' : 'idle'}')`), `${quoi} : posée sur la place, à découvert`, null)
+            // Le fondu des clips (0,25 s) : le crâne (__aimAt, zone 'tete') descend jusqu'à se poser, moins d'un
+            // centimètre entre deux relevés à 5 images d'écart (une trentaine d'images n'y suffisaient pas toujours)
+            let tete = null, pieds = null, h = null
+            for (let k = 0, prec = Infinity; k < 40; k++) {
+              await frames(c, 5)
+              tete = await js(c, `__aimAt('cible', 0, 0, 'tete')`)
+              pieds = (await mission(c)).pnj.find(p => p[0] === 5 && p[2] === -5)
+              h = Array.isArray(tete) && pieds ? +(tete[1] - pieds[1]).toFixed(2) : null
+              if (h === null || Math.abs(h - prec) < 0.01) break
+              prec = h
+            }
+            // Accroupie, la condition du témoin : toute la tête sous 1,45 m (le haut de la zone de tête est 0,10 m
+            // au-dessus du milieu du crâne). Debout, le crâne seulement au-dessus de 1,5 m : la cible est bien debout.
+            if (pose === 'accroupie') {
+              check(h !== null && h < 1.2, `${quoi} : le milieu du crâne à ${h} m au-dessus des pieds, toute la tête sous 1,45 m`, { tete, pieds })
+            } else check(h !== null && h > 1.5, `${quoi} : le milieu du crâne à ${h} m au-dessus des pieds`, { tete, pieds })
           }
           const avant = await mission(c)
-          check(await aimAndShoot(c, 'cible', 0, { zone: 'tete' }), `mission ${n} : cible visée à la tête`, null)
+          check(await aimAndShoot(c, 'cible', 0, { zone: 'tete' }), `${quoi} : visée à la tête`, null)
           const m = await mission(c)
           const i = m.dernierImpact
           if (n === 6 && i?.role === 'civilian' && essai < 3) { console.log(`    un civil sur la ligne de tir : essai ${essai + 1}`); continue }
-          check(i?.role === 'target' && i.part === 'tete', `mission ${n} : la balle touche la cible à la tête`, i)
-          check(m.cibles === avant.cibles - 1, `mission ${n} : la cible tombe`, { avant: avant.cibles, apres: m.cibles })
+          check(i?.role === 'target' && i.part === 'tete', `${quoi} : la balle touche la cible à la tête`, i)
+          check(m.cibles === avant.cibles - 1, `${quoi} : la cible tombe`, { avant: avant.cibles, apres: m.cibles })
           const fil = await js(c, `[...document.querySelectorAll('.kill-entry')].map(e => e.textContent).join(' | ')`)
-          check(fil.includes('HEADSHOT'), `mission ${n} : le fil dit HEADSHOT`, fil)
-          await capture(c, `tete-m${n}`)
+          check(fil.includes('HEADSHOT'), `${quoi} : le fil dit HEADSHOT`, fil)
+          await capture(c, `tete-m${n}${n === 2 ? `-${pose}` : ''}`)
           break
         } finally { await c.close() }
       }
@@ -400,7 +424,11 @@ const SCENARIOS = {
   // Culasse (spec du lot 2, §3.3) : deux clics rapprochés ne donnent qu'un tir. Le second clic part après l'arrivée de
   // la balle (0,45 s), pendant les 1,2 s de culasse : avant le lot 2, il tirait dès la résolution du premier (un clic
   // pendant le vol, déjà refusé avant, l'est toujours). Visée dans le ciel : la balle part au loin, personne ne réagit,
-  // la mission continue. La culasse revenue, le clic suivant tire.
+  // la mission continue. La culasse revenue, le clic suivant tire. Durées lues sur l'horloge de la mission
+  // (__aim().horloge, celle de la culasse), pas sur l'horloge murale : sur une machine lente ou chargée, le pas du jeu
+  // est plafonné à 50 ms et son temps retarde (à RALENTI=20, la culasse revenait 2,1 s après le coup à l'horloge
+  // murale). Une veille relève l'horloge à la première image où le clic gauche tire de nouveau : la culasse dure
+  // 1,2 s (sans Vélocité), à une image près (50 ms au plus).
   async culasse() {
     const c = await play(1)
     try {
@@ -410,23 +438,27 @@ const SCENARIOS = {
       await js(c, `document.dispatchEvent(new MouseEvent('mousemove', { movementX: 0, movementY: -4000, bubbles: true }))`)
       await frames(c, 3)
       const t0 = (await mission(c)).tirs
-      await mouse(c, 'mousedown', 0)
-      const depart = Date.now()
+      const depart = await js(c, `(() => {
+        document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }))
+        window.__culasseRevenue = new Promise(r => { const f = () => (__aim().pret ? r(__aim().horloge) : requestAnimationFrame(f)); requestAnimationFrame(f) })
+        return __aim().horloge
+      })()`)
       await until(c, `__mission().tirs === ${t0 + 1}`, 3000)
       await sleep(100)
       await mouse(c, 'mousedown', 0)   // balle en vol
       await until(c, `!__mission().balle`)
-      await mouse(c, 'mousedown', 0)   // balle arrivée, culasse en cours
-      const apresMs = Date.now() - depart
+      // balle arrivée, culasse en cours
+      const clic = await js(c, `(document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })), __aim().horloge)`)
       await frames(c, 5)
       const m = await mission(c)
       const a = await js(c, '__aim()')
       check(m.tirs === t0 + 1 && !a.pret && a.culasse < 1, 'trois clics en moins de 1,2 s : un seul tir, culasse en cours',
-        { tirs: m.tirs - t0, culasse: a.culasse, clicApresMs: apresMs })
+        { tirs: m.tirs - t0, culasse: a.culasse, clicApresS: clic - depart })
       check(m.dernierImpact?.role === 'rien' && m.phase === 'playing', 'balle partie dans le ciel, mission en cours', { impact: m.dernierImpact, phase: m.phase })
-      await until(c, '__aim().pret', 3000)
-      const culasseMs = Date.now() - depart
-      check(culasseMs > 1100 && culasseMs < 1800, 'culasse revenue environ 1,2 s après le coup', culasseMs)
+      const revenue = await Promise.race([js(c, '__culasseRevenue'), sleep(15000).then(() => null)])
+      const duree = revenue === null ? null : +(revenue - depart).toFixed(4)
+      check(duree !== null && duree >= 1.2 - 1e-6 && duree <= 1.25 + 1e-6,
+        `culasse revenue ${duree} s après le coup, à l'horloge de la mission (1,2 s, à une image près)`, duree)
       await mouse(c, 'mousedown', 0)
       await until(c, `__mission().tirs === ${t0 + 2}`, 3000)
       console.log('    ok : culasse revenue, le clic suivant tire')

@@ -9,8 +9,8 @@ import { MAIN_SRC, analyse, callsIn, callsInNode } from '../gfx/mainSource.js'
 // - le sillage finit au point d'impact du coup, et la résolution le recale si elle trouve autre chose ;
 // - un impact sur le décor laisse une marque orientée et une gerbe de sa matière, et les PNJ proches réagissent comme
 //   à un tir manqué ;
-// - développement : ?solides=1 teinte les solides ; __placer pose un PNJ (parcours réel de verif-mission.mjs) ;
-//   __mission() dit ce que la dernière balle a touché.
+// - développement : ?solides=1 teinte les solides ; __placer pose un PNJ, debout ou accroupi (parcours réel de
+//   verif-mission.mjs) ; __mission() dit ce que la dernière balle a touché.
 //
 // Témoin : au commit ac004b6, aucune de ces gardes ne tient (vu rouge avant le branchement).
 
@@ -141,5 +141,16 @@ describe('développement', () => {
     expect(texteDev).toMatch(/dernierImpact/)
     const calls = callsInNode(a, dev).map(c => c.callee)
     expect(calls).toContain('npc.mesh.position.set')
+  })
+
+  // Relecture de T8 (scripts/verif-mission.mjs) : la cible de M2 accroupie du scénario tete, la culasse mesurée à
+  // l'horloge de la mission (scénario culasse). Témoin vu rouge sur le main.js d'avant (__placer sans état, __aimAt
+  // qui rend true, __aim() sans horloge).
+  it('__placer peut accroupir un PNJ, __aimAt rend le point visé, __aim() lit l\'horloge de la mission', () => {
+    expect(texteDev).toMatch(/window\.__placer\s*=\s*\([^)]*etat\s*=\s*STATES\.IDLE\)/)
+    expect(texteDev).toMatch(/\[STATES\.IDLE,\s*STATES\.REACT\]\.includes\(etat\)/)
+    expect(texteDev).toMatch(/npc\.lockState\s*=\s*etat;\s*npc\.state\s*=\s*etat/)
+    expect(texteDev).toMatch(/window\.__aimAt\s*=[\s\S]{0,900}return p\.toArray\(\)/)
+    expect(texteDev).toMatch(/window\.__aim\s*=[\s\S]{0,400}horloge:\s*missionClock/)
   })
 })

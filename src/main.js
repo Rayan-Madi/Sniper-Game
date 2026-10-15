@@ -1576,10 +1576,11 @@ if (import.meta.env.DEV) {
   }
   // Visée (relectures du zoom choisi et affiché, de l'ouverture de la lunette, de la culasse, du stress, du
   // tremblement en milliradians et en pixels, du regard et du recul) : __aim() dans la console ; pret : le clic gauche
-  // tire (lunette ouverte à 100 %, culasse revenue, aucune balle en vol)
+  // tire (lunette ouverte à 100 %, culasse revenue, aucune balle en vol) ; horloge : le temps de la mission en secondes
+  // (missionClock, celui de la culasse), pour mesurer une durée du jeu sans dépendre de la vitesse de la machine
   window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), zoomAffiche: getEffectiveZoom(), scoped: isVisible(),
     ouverture: getScopeOpenness(), pret: isScopeReady() && bolt.ready(missionClock) && !bulletInFlight,
-    culasse: +bolt.progress(missionClock).toFixed(3), stress,
+    culasse: +bolt.progress(missionClock).toFixed(3), horloge: missionClock, stress,
     trembleMrad: getTrembleMrad(), tremblePx: getTrembleOffset(), regard: viewAngles(),
     reculDeg: { tangage: +THREE.MathUtils.radToDeg(recoilOffset.pitch).toFixed(4), lacet: +THREE.MathUtils.radToDeg(recoilOffset.yaw).toFixed(4) } })
   // ?solides=1 : chaque maillage qui arrête la balle prend la couleur de sa matière (pierre gris clair, métal bleu,
@@ -1597,7 +1598,8 @@ if (import.meta.env.DEV) {
     balle: bulletInFlight, sol: mapGround(), souffle: holdBreathKey, dernierImpact: lastImpact,
     jeeps: convoyCar ? convoyCar.vehicles.map(v => v.mesh.position.toArray().map(c => +c.toFixed(3))) : null })
   // Visée scriptée (scripts/verif-mission.mjs) : __aimAt('cadenas') vise le cadenas du port, __aimAt('civil', 2) le
-  // troisième civil vivant ('cible', 'garde', 'civil'). Faux si rien ne correspond. Le tir reste celui du joueur.
+  // troisième civil vivant ('cible', 'garde', 'civil'). Rend le point visé ([x, y, z], dans le monde), faux si rien ne
+  // correspond. Le tir reste celui du joueur.
   // avance (s) : vise là où le PNJ sera après le vol de la balle : une cible du convoi, qui roule (M5), ou un PNJ qui
   // marche ou qui fuit (vitesses de NPC._move : speed en marche, speed × 8 en fuite, déviations ignorées).
   // zone : 'torse' (défaut), 'tete' ou 'membre' : vise le milieu de la première zone touchée de cette partie (pour la
@@ -1615,15 +1617,17 @@ if (import.meta.env.DEV) {
     if (avance && convoyCar && npc) p.x += convoyCar.dir * convoyCar.speed * avance
     else if (avance && npc) p.addScaledVector(vitessePnj(npc), avance)
     ;({ yaw, pitch } = aimAngles(camera.position.toArray(), p.toArray()))
-    return true
+    return p.toArray()
   }
   // Pose un PNJ vivant (quoi, n : comme __aimAt) en (x, z), sur le sol de la carte, et l'y garde immobile jusqu'à ce
-  // qu'il fuie : scripts/verif-mission.mjs, cible cachée derrière un conteneur (spec du lot 2, §4). Faux sans PNJ.
-  window.__placer = (what, n, x, z) => {
+  // qu'il fuie : scripts/verif-mission.mjs, cible cachée derrière un conteneur (spec du lot 2, §4). etat : 'idle'
+  // (défaut, debout) ou 'react' (accroupi, la pose d'un PNJ qui se baisse après un tir proche : la cible accroupie du
+  // scénario tete). Faux sans PNJ ou pour un autre état.
+  window.__placer = (what, n, x, z, etat = STATES.IDLE) => {
     const npc = npcs.filter(p => p.alive && role(p) === what)[n]
-    if (!npc) return false
+    if (!npc || ![STATES.IDLE, STATES.REACT].includes(etat)) return false
     npc.mesh.position.set(x, npc.groundY, z)
-    npc.lockState = STATES.IDLE; npc.state = STATES.IDLE; npc.stateTimer = 0
+    npc.lockState = etat; npc.state = etat; npc.stateTimer = 0
     return true
   }
   // ?memtest=1&images=3 : mesure mémoire scriptée (spec du lot 1 §4.1), lue par scripts/memtest.mjs. Pas de
