@@ -284,20 +284,24 @@ Deux passes de suite de tous les scénarios (19) : 19 verts à chacune, refaites
 
 ### Difficulté (§6 de la spec)
 
-Scénario `difficulte` : M2, cible qui marche (0,6 m/s) ou fuit (4,8 m/s), à une trentaine de mètres en plongée, souffle relâché (apnée en moins : le tremblement entier), la mission relancée avant chaque essai. Rapport sans seuil : le scénario ne rougit que si la mesure elle-même échoue. Huit passes de 8 essais, soit 64 par mesure (15 octobre 2026) :
+Scénario `difficulte` : M2, cible qui marche (0,6 m/s) ou fuit (4,8 m/s), à une trentaine de mètres en plongée, souffle relâché (apnée en moins : le tremblement entier), la mission relancée avant chaque essai. Rapport sans seuil : le scénario ne rougit que si la mesure elle-même échoue. Une seule passe de 64 essais par mesure, avec le script commité (`0b39686`, 15 octobre 2026, 20 minutes sur la carte graphique). La commande à relancer (le hasard du jeu n'est pas à graine dans ces parcours : les chiffres varient d'une passe à l'autre, voir la dernière remarque) :
+
+```bash
+ESSAIS=64 node scripts/verif-mission.mjs difficulte
+```
 
 | Mesure | Tête | Torse | Membre | Manqué | Autre PNJ | Non concluant |
 |---|---|---|---|---|---|---|
-| Au repos (stress proche de 0), visée au crâne, cible menée | 61 | 1 | 1 | 1 | 0 | 0 |
-| Stress plein (lunette tenue 14 s), même visée | 26 | 2 | 2 | 33 | 1 | 0 |
-| En fuite, visée au torse sans la mener (avance 0), après la culasse | 0 | 0 | 0 | 63 | 0 | 1 |
-| En fuite, visée au torse en la menant | 8 | 53 | 0 | 1 | 1 | 1 |
+| Au repos (stress proche de 0), visée au crâne, cible menée | 63 | 0 | 0 | 1 | 0 | 0 |
+| Stress plein (lunette tenue 14 s), même visée | 30 | 5 | 4 | 25 | 0 | 0 |
+| En fuite, visée au torse sans la mener (avance 0), après la culasse | 0 | 0 | 0 | 62 | 0 | 2 |
+| En fuite, visée au torse en la menant | 8 | 52 | 0 | 3 | 0 | 1 |
 
-- **Au repos, la touche reste quasi certaine** : 63 tirs sur 64 abattent la cible, 61 à la tête (95 %). Les trois autres tiennent à la cible qui marche (elle a changé de pas pendant le vol de 0,45 s), pas au tremblement (0,4 mrad, un peu plus d'un centimètre à 31 m).
-- **Sous le stress, elle devient incertaine** : 26 tirs sur 64 à la tête (41 %), 30 sur 64 abattent la cible (47 %). Le §3.6 de la spec prévoyait environ 45 % à la tête pour une cible immobile à 30 m ; un écart radial de 14 cm (4,5 mrad à 31 m) donne 40 % de chances de tomber dans une sphère de 10 cm.
-- **Une cible en fuite qu'on ne mène pas est manquée à chaque fois** (0 sur 63) : à 4,8 m/s, elle parcourt 2,2 m pendant le vol. Menée, elle est abattue 61 fois sur 63 essais concluants. C'est le point de la relecture de T3, à juger par Rayan (`docs/superpowers/REPRISE.md`, « Lot 2 : réglages à juger en jouant »).
+- **Au repos, la touche reste quasi certaine** : 63 tirs sur 64 abattent la cible, tous à la tête (98 %). Le tir manqué tient à la cible qui marche (elle peut changer de pas pendant le vol de 0,45 s), pas au tremblement (0,4 mrad, un peu plus d'un centimètre à 31 m).
+- **Sous le stress, elle devient incertaine** : 30 tirs sur 64 à la tête (47 %), 39 sur 64 abattent la cible (61 %). Le §3.6 de la spec prévoyait environ 45 % à la tête pour une cible immobile à 30 m ; un écart radial de 14 cm (4,5 mrad à 31 m) donne 40 % de chances de tomber dans une sphère de 10 cm.
+- **Une cible en fuite qu'on ne mène pas est manquée à chaque fois** (0 sur 62 essais concluants) : à 4,8 m/s, elle parcourt 2,2 m pendant le vol. Menée, elle est abattue 60 fois sur 63 essais concluants. C'est le point de la relecture de T3, à juger par Rayan (`docs/superpowers/REPRISE.md`, « Lot 2 : réglages à juger en jouant »).
 - Non concluant : la cible n'a pas fui après la balle tirée au-dessus d'elle, ou une cible en fuite (souvent l'autre) est sortie du champ avant le tir suivant (échec « Une cible a fui »).
-- Les six premières passes ont été faites avec des versions antérieures du script, qui ne différaient que par la relance de la mission et l'attente d'une balle figée (corrections ci-dessus) ; les tirs mesurés sont les mêmes.
+- Relecture de T8 : la série d'avant (huit passes de 8 essais, dont six faites avec des versions antérieures du script) donnait, dans le même ordre, 61 tirs à la tête au repos, 26 au stress plein (41 %), 0 sur 63 en fuite sans avance et 61 sur 63 menée. Les écarts tiennent au hasard de 64 essais : pour une proportion proche de 45 %, l'écart type est d'environ 6 points, et les deux séries réunies donnent 56 tirs à la tête sur 128 au stress plein (44 %). Les chiffres ci-dessus remplacent cette série.
 
 ### Captures avant et après le lot 2
 
