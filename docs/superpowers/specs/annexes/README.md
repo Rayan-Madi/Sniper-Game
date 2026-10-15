@@ -34,6 +34,7 @@ node scripts/memtest.mjs                 # mesure seule : tableau à l'écran, r
 node scripts/memtest.mjs --check         # applique les seuils du §6 de la spec du lot 1, code de sortie 1 si l'un est dépassé
 node scripts/memtest.mjs --reference     # recopie le résultat dans 2026-10-07-memtest-reference.json
 node scripts/memtest.mjs --check --qualite=moyen --annexe=2026-10-07-memtest-apres-lot1.json   # seuils, puis recopie sous ce nom
+node scripts/memtest.mjs --check --qualite=moyen --comparer=2026-10-07-memtest-apres-lot1.json  # seuils, et M6 à ±3 % de cette annexe (lot 2)
 node scripts/memtest.mjs --images=5 --qualite=bas                      # images rendues par étape ; qualité transmise à la route
 node scripts/memtest.mjs --temps-reel --gpu --qualite=moyen            # durées de l'étape premiere-image (temps réel, carte graphique)
 node scripts/memtest.mjs --temps-reel --gpu --qualite=moyen --sans-precompilation   # la même, montée comme avant la tâche L7
@@ -44,6 +45,8 @@ node scripts/memtest.mjs --temps-reel --gpu --qualite=moyen --sans-precompilatio
 `--temps-reel` (tâche L7) remplace `--dump-dom` et son temps virtuel par le protocole DevTools : sous le temps virtuel, `performance.now` ne bouge pas pendant une tâche (une boucle de calcul y dure 0 ms, vérifié), et les durées de l'étape `premiere-image` y valent 0. Port choisi par Chrome (`--remote-debugging-port=0`, relu dans `DevToolsActivePort`), jamais un port fixe. Sur la carte graphique, la mesure complète prend environ 25 s. Les compteurs sont les mêmes dans les deux modes.
 
 Variables : `CHROME` (chemin de Chrome), `BASE_URL` (défaut `http://localhost:5173/`), `BUDGET_MS` (budget de temps virtuel de Chrome, défaut 1 200 000 ; la mesure prend environ 3 min 30 en temps réel). Sans `--qualite`, les seuils de triangles sont ceux du préréglage Moyen.
+
+`--comparer=<annexe>` (lot 2, tâche T8) compare M6 à la vue de départ, triangles et appels de dessin, à la même étape de cette annexe : ±3 % au plus (critère du §5 de la spec du lot 2), code de sortie 1 sinon. Serveur Vite fraîchement lancé : la première mesure pouvait s'arrêter avant toute étape, titre « memtest:modeles » (limite notée à la fin du lot 1) ; depuis le lot 2, elle est relancée une fois d'elle-même, la sortie le dit (« nouvel essai (2/2) ») et le résultat porte le nombre d'essais (`essais`).
 
 Depuis la tâche L4, `--qualite` (`auto`, `bas`, `moyen`, `haut`) est appliqué par la route le temps de la mesure, sans être enregistré ; `data-qualite` du `<pre>` porte le préréglage effectif. Sans `--qualite`, la route mesure celui d'un premier lancement, Auto : les paramètres de Moyen, la résolution dynamique ne tournant pas (la route ne passe pas par la boucle du jeu). Une seule mesure à la fois : trois lancées ensemble se partagent le processeur, épuisent le budget de temps virtuel avant la fin et écrivent leur résultat sous le même nom de fichier.
 
@@ -236,3 +239,86 @@ VISER=cible APRES=4 node scripts/capture-mission.mjs t3 tir1  # la lueur du coup
 Mesuré au commit de T3 : lunette ouverte et à mi-ouverture (`lunette1`, `mi-lunette1`, `lunette2`, `mi-lunette2`) identiques à l'octet près à celles de T2 (`shots/lot2-t2/`) : sans tir, la lunette ne change pas. Après un tir sur la cible de M1 (`VISER=cible`) : à 200 ms, recul de 0,94° encore en cours, culasse à 17 %, sillage visible dans la lunette (`12f1d191bebfe186`) ; à 67 ms, recul de 2,11°, lueur visible (`e843ffb30fbde801`).
 
 **Attente des modèles** : jusqu'à L2, le script comptait aussi les messages « [characters] chargé » de la première page, celle qui pose la sauvegarde et qui charge encore ses modèles quand on la quitte. Le clic sur COMMENCER partait alors parfois avant la fin du chargement de la page rechargée : 488 tirages de hasard en moins avant le clic (les identifiants des objets three.js en consomment), donc d'autres fenêtres allumées, d'autres tonneaux, d'autres PNJ, au même code, environ une capture sur trois. Seuls comptent désormais les messages de la page rechargée (son contexte d'exécution).
+
+## Lot 2 : vérification de fin de lot (tâche T8)
+
+Vérifications du 15 octobre 2026, toutes les tâches du lot faites (T1 à T7, code du jeu de `a817809`), avec les scripts et les tests de la tâche T8. Elles répondent aux critères du §5 de la spec du lot 2 (`docs/superpowers/specs/2026-10-09-lot2-le-tir-design.md`).
+
+### Mémoire et performance (`2026-10-09-memtest-apres-lot2.json`, `2026-10-09-memtest-apres-lot2-bas.json`)
+
+```bash
+node scripts/memtest.mjs --check --qualite=moyen --comparer=2026-10-07-memtest-apres-lot1.json --annexe=2026-10-09-memtest-apres-lot2.json
+node scripts/memtest.mjs --check --qualite=bas --comparer=2026-10-07-memtest-apres-lot1-bas.json --annexe=2026-10-09-memtest-apres-lot2-bas.json
+```
+
+SwiftShader, sur `a817809` (« modifié » dans les annexes : les scripts, les tests et les documents de T8, en cours ; aucun fichier du jeu). Les cinq seuils du lot 1 sont tenus dans les deux préréglages, et les 26 étapes sont identiques à l'unité près à celles de la fin du lot 1 (géométries, textures, programmes, appels, triangles, ressources des modèles) :
+
+| | Fin du lot 1, Moyen | Fin du lot 2, Moyen | Fin du lot 1, Bas | Fin du lot 2, Bas |
+|---|---|---|---|---|
+| M6 à la vue de départ : appels, triangles | 294, 1 422 955 | 294, 1 422 955 (écart 0 %) | 290, 1 330 361 | 290, 1 330 361 (écart 0 %) |
+| Retour de campagne (`menu-campagne`) : géométries, textures, programmes | 447, 32, 31 | 447, 32, 31 | 447, 32, 19 | 447, 32, 19 |
+| Relances de M6, arènes PvP | Δ = 0 | Δ = 0 | Δ = 0 | Δ = 0 |
+| Fin de partie (`menu-final`) | 447, 32, 34 | 447, 32, 34 | 447, 32, 22 | 447, 32, 22 |
+| Tas JS à `M6-10`, puis à `menu-final` (indicatif) | 54 Mo, 51 Mo | 56 Mo, 52 Mo | 54 Mo, 51 Mo | 56 Mo, 52 Mo |
+
+Critère « triangles et appels de dessin en M6 (Moyen) à ±3 % du lot 1 » : tenu, à l'unité près, en Moyen comme en Bas (`--comparer`). Rien de ce que le lot 2 ajoute n'est dessiné à la vue de départ : l'écho est un nœud audio, le marquage du décor ne pose que `userData.solid` et `userData.surface`, et marques, gerbes et sillages n'existent qu'après un tir. Garde : `tests/gfx/memtest.test.js`, « annexes : mesures versionnées du lot 2 » (cinq seuils en Moyen et en Bas, M6 à ±3 % du lot 1 ; témoin : la référence d'avant le lot 1 sort des ±3 %, en triangles comme en appels).
+
+La route `?memtest=1` ne tire aucune balle : la libération des marques, des gerbes et des sillages est gardée par les tests au faux renderer (`tests/gfx/effects.dispose.test.js` : 100 tirs touchés, puis 100 tirs dans le décor de chaque matière, Δ = 0 après leur fin de vie ; marque rattachée à une jeep, rien du trou libéré avec elle), celle de l'écho par `tests/audio.test.js` et `tests/shot/main.sound.test.js` (une seule `ConvolverNode` par mission, débranchée au démontage). Dans le jeu, la capture `retour3` (plus bas) le montre aussi.
+
+**Serveur Vite froid** : la mesure arrêtée avant toute étape (titre « memtest:modeles ») est relancée une fois (`measureWithRetry`, garde : `tests/gfx/memtest.test.js`, témoin vu rouge sur l'ancien comportement, une seule mesure). Essayé sur un second Vite 8.1 lancé à neuf, cache vidé (port 5177, configuration et cache hors du dépôt, arrêté ensuite) : deux mesures, lancées aussitôt le serveur prêt, finies du premier coup. L'arrêt du lot 1 ne s'est donc pas reproduit ; le nouvel essai reste un filet.
+
+### Parcours réels (`scripts/verif-mission.mjs`)
+
+Trois scénarios neufs (`tete`, `culasse`, `difficulte`), avec `occlusion` (tâche T5) et `son` (tâche T6). Chaque scénario de comportement a été vu rouge sur le comportement d'avant le lot 2, remis le temps d'une passe dans `src/main.js` (servi par le Vite du port 5173), puis retiré :
+
+| Scénario | Ce qu'il vérifie | Témoin vu rouge |
+|---|---|---|
+| `tete` | M2, cible posée à découvert sur la place (à une trentaine de mètres, en plongée), et M6, commanditaire assis : lunette ouverte, souffle retenu, visée au milieu du crâne ; la balle touche la tête (`dernierImpact.part`), la cible tombe, le fil dit HEADSHOT | la tête jugée comme avant (au-dessus de 1,45 m) : M2 reste vert (debout, la tête y est), M6 rouge, la tête du commanditaire assis compte pour le torse. Avec les boîtes d'avant en entier, M6 rouge aussi : trois essais sur trois, la balle prend un danseur voisin, dont la boîte de 0,8 m déborde sur la ligne de tir |
+| `culasse` | M1, visée dans le ciel : trois clics en 0,46 s (pendant le vol, puis balle arrivée) ne donnent qu'un tir ; la culasse revient en 1,2 s environ ; le clic suivant tire | sans la culasse dans `shoot()` : deux tirs, le second 464 ms après le premier |
+| `occlusion` | M3 : une cible posée derrière le conteneur rouge, visée à travers lui : aucune touche, balle arrêtée sur le métal | sans le décor dans la résolution : la cible touchée à travers le conteneur |
+
+Deux passes de suite de tous les scénarios (19) : 19 verts à chacune. Pour y arriver, trois corrections du script (aucune du jeu) :
+- **un PNJ posé à découvert** pour les tirs qui doivent toucher : les scénarios qui abattent un civil (`aide-briefing`, `aide-echec`, `civil-echap`) et `aide-reussite` posent leur PNJ au milieu de la rue (`__placer`), `tete` pose la cible de M2 sur la place. Depuis que le décor arrête la balle, un civil visé là où il marchait pouvait se trouver derrière un banc ou un étal (relevé sur 15 premiers tirs : 2 dans le bois ou le sol) ; le tir manqué faisait fuir la cible, et l'échec « Une cible a fui » tombait parfois pendant le vol du tir suivant (`aide-briefing` rouge sur une passe). De même, un tir à la tête mené sur une cible de M2 qui marche est passé une fois derrière la tête (au sol, à 46 m) : la cible a changé de pas pendant le vol. La limite connue d'`aide-reussite` (non concluant une fois sur trois, un civil sur la ligne de tir) disparaît du même coup ;
+- **une balle figée** : hors de la phase de jeu, une balle en vol ne se résout jamais. Le script attendait son arrivée (20 s, puis rouge) ; il attend désormais qu'elle arrive ou que la mission prenne fin (`BALLE_ARRIVEE`), et `aimAndShoot` rend `null` si la mission a pris fin avant que le tir soit prêt ;
+- **relance de la mission** (`restart`, scénario `difficulte`) : depuis la pause (RECOMMENCER LE NIVEAU) ou depuis l'écran d'échec (RÉESSAYER), une fois la balle arrivée ou la mission finie.
+
+### Difficulté (§6 de la spec)
+
+Scénario `difficulte` : M2, cible qui marche (0,6 m/s) ou fuit (4,8 m/s), à une trentaine de mètres en plongée, souffle relâché (apnée en moins : le tremblement entier), la mission relancée avant chaque essai. Rapport sans seuil : le scénario ne rougit que si la mesure elle-même échoue. Huit passes de 8 essais, soit 64 par mesure (15 octobre 2026) :
+
+| Mesure | Tête | Torse | Membre | Manqué | Autre PNJ | Non concluant |
+|---|---|---|---|---|---|---|
+| Au repos (stress proche de 0), visée au crâne, cible menée | 61 | 1 | 1 | 1 | 0 | 0 |
+| Stress plein (lunette tenue 14 s), même visée | 26 | 2 | 2 | 33 | 1 | 0 |
+| En fuite, visée au torse sans la mener (avance 0), après la culasse | 0 | 0 | 0 | 63 | 0 | 1 |
+| En fuite, visée au torse en la menant | 8 | 53 | 0 | 1 | 1 | 1 |
+
+- **Au repos, la touche reste quasi certaine** : 63 tirs sur 64 abattent la cible, 61 à la tête (95 %). Les trois autres tiennent à la cible qui marche (elle a changé de pas pendant le vol de 0,45 s), pas au tremblement (0,4 mrad, un peu plus d'un centimètre à 31 m).
+- **Sous le stress, elle devient incertaine** : 26 tirs sur 64 à la tête (41 %), 30 sur 64 abattent la cible (47 %). Le §3.6 de la spec prévoyait environ 45 % à la tête pour une cible immobile à 30 m ; un écart radial de 14 cm (4,5 mrad à 31 m) donne 40 % de chances de tomber dans une sphère de 10 cm.
+- **Une cible en fuite qu'on ne mène pas est manquée à chaque fois** (0 sur 63) : à 4,8 m/s, elle parcourt 2,2 m pendant le vol. Menée, elle est abattue 61 fois sur 63 essais concluants. C'est le point de la relecture de T3, à juger par Rayan (`docs/superpowers/REPRISE.md`, « Lot 2 : réglages à juger en jouant »).
+- Non concluant : la cible n'a pas fui après la balle tirée au-dessus d'elle, ou une cible en fuite (souvent l'autre) est sortie du champ avant le tir suivant (échec « Une cible a fui »).
+- Les six premières passes ont été faites avec des versions antérieures du script, qui ne différaient que par la relance de la mission et l'attente d'une balle figée (corrections ci-dessus) ; les tirs mesurés sont les mêmes.
+
+### Captures avant et après le lot 2
+
+Avant : `main` à `7a39416` (la fin du lot 1 et celle de l'enquête, dont aucune ne touche les missions), extrait par `git archive` hors du dépôt et servi par un second Vite (port 5178, `three` pris dans le `node_modules` du dépôt, cache à part, arrêté ensuite) ; après : la branche `lot2-tir`. Même script des deux côtés (`scripts/capture-mission.mjs`, depuis T8 tolérant à l'accroche `__aim()` d'avant le lot 2, sans `ouverture`), `QUALITE=moyen`, SwiftShader ; tirs avec `VISER=cible` en M1, M3 et M6, droit devant en M5 (le colonel est encore loin sur la route). Dossiers locaux `shots/t8-lot1/` et `shots/t8-lot2/`, non versionnés ; empreintes SHA-256 (16 premiers caractères) :
+
+| Vue | Avant le lot 2 | Après | Comparaison |
+|---|---|---|---|
+| M1, vue de départ | `1f9320a9125af481` | `1f9320a9125af481` | identiques à l'octet |
+| M3, vue de départ | `a0ad90f07a31fe99` | `a0ad90f07a31fe99` | identiques à l'octet |
+| M5, vue de départ | `e06b0935c131d70c` | `e06b0935c131d70c` | identiques à l'octet |
+| M6, vue de départ | `4a1e32d882ada935` | `4a1e32d882ada935` | identiques à l'octet |
+| M1, lunette ouverte (`lunette1`) | `36cd1ee2be2f8e6b` | `0f62458ba92a9543` | au pixel : réticule et barre de stress seulement |
+| M3, lunette ouverte | `fad007cffe560135` | `bbd334b94f3a4627` | au pixel : réticule et barre de stress seulement |
+| M5, lunette ouverte | `5bbc13115523c57a` | `a055f62ee5cad3c7` | au pixel : réticule et barre de stress seulement |
+| M6, lunette ouverte | `e336de88d1dd5df9` | `a0c107d9c13c9eea` | au pixel : réticule et barre de stress seulement |
+| M1, 200 ms après un tir (`tir1`) | `d7d44477b23b0776` | `bb4fac73e2ea2d40` | à l'œil |
+| M3, après un tir | `b38c93652fc54fd5` | `fdccdcc6658aa39b` | à l'œil |
+| M5, après un tir | `2657a1bb8adc2b5f` | `2a3e8573dde664e4` | à l'œil |
+| M6, après un tir | `d2ba802ae1643ad8` | `9258b880c74ffe45` | à l'œil |
+
+- **Vues de départ** : identiques à l'octet près avant et après le lot, et identiques à celles de la fin du lot 1 (`shots/l8-moyen/`, tableau « Avant et après le lot 1 ») : le serveur du code d'avant rend bien ce que rendait le lot 1, et le lot 2 ne change rien à la vue de départ (le hasard à graine tire les mêmes nombres : l'écho a son propre générateur, la pluie du port aussi depuis la relecture de T6).
+- **Lunette ouverte** (15 images après le clic droit) : 0,3 à 0,4 % des pixels diffèrent, tous sur le réticule et au bout de la barre de stress du HUD. La scène, la vignette et le reste du HUD sont identiques au pixel près : le réticule est déplacé par le tremblement, réglé en milliradians depuis T1, et le stress monte moins vite (0,07 par seconde au lieu de 0,48).
+- **Après un tir** : avant le lot, rien ne dit le coup à 200 ms (la cible au centre du réticule, la balle en vol invisible) ; après, la vue est relevée par le recul (0,94° encore, sur les 2,5° du coup), le sillage monte du bas de l'image vers le point visé, et la jauge de la culasse (17 %) barre le trait vertical du réticule sous son centre : c'est le point de la relecture de T3, à juger par Rayan. Personnages, textures, décor et ombres sont intacts dans les quatre missions.
+- **Retour au menu** (`retour3`, après trois tirs manqués au port, marques, gerbes et sillage encore en vie) : 16 objets hors de la carte avant le retour (les PNJ, le cadenas, les trois marques et le sillage), aucun au menu (`{"fond":"87a0b0","horsCarte":[]}`).

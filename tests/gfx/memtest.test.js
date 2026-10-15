@@ -374,3 +374,34 @@ describe('annexes : mesures versionnées du lot 1', () => {
       .toEqual(['partie complète', '10 montages de M6', 'PvP', 'triangles de M6'])
   })
 })
+
+// Mesures versionnées du lot 2 (tâche T8, README des annexes, « Lot 2 ») : les cinq seuils du lot 1 restent tenus en
+// Moyen et en Bas, et M6, à la vue de départ, garde ses triangles et ses appels de dessin à ±3 % du lot 1 (spec du lot
+// 2, §5), dans les deux préréglages. Témoin : la référence d'avant le lot 1 sort des ±3 %.
+describe('annexes : mesures versionnées du lot 2', () => {
+  const annexe = nom => JSON.parse(readFileSync(resolve(__dirname, '../../docs/superpowers/specs/annexes', nom), 'utf8'))
+  const failed = r => r.filter(c => !c.ok).map(c => c.critere)
+  const LOTS = [['2026-10-09-memtest-apres-lot2.json', '2026-10-07-memtest-apres-lot1.json', 'moyen'],
+    ['2026-10-09-memtest-apres-lot2-bas.json', '2026-10-07-memtest-apres-lot1-bas.json', 'bas']]
+
+  it('fin du lot 2 : les cinq seuils tenus en Moyen et en Bas', () => {
+    for (const [nom, , qualite] of LOTS) {
+      const r = annexe(nom)
+      expect([nom, r.etat, r.qualite]).toEqual([nom, 'memtest:fini', qualite])
+      const crit = checkMemtest(r.etapes, { qualite: r.qualite })
+      expect(crit).toHaveLength(5)
+      expect([nom, failed(crit)]).toEqual([nom, []])
+    }
+  })
+
+  it('M6 : triangles et appels à ±3 % du lot 1, dans le même préréglage', () => {
+    for (const [nom, lot1] of LOTS) {
+      expect([nom, failed(compareM6(annexe(nom).etapes, annexe(lot1).etapes))]).toEqual([nom, []])
+    }
+  })
+
+  it('témoin : la référence d\'avant le lot 1 sort des ±3 % du lot 1, en triangles comme en appels', () => {
+    const r = compareM6(annexe('2026-10-07-memtest-reference.json').etapes, annexe('2026-10-07-memtest-apres-lot1.json').etapes)
+    expect(failed(r)).toEqual(['triangles de M6', 'appels de M6'])
+  })
+})
