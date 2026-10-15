@@ -20,24 +20,30 @@ const a = analyse(MAIN_SRC)
 const texte = n => a.source.slice(n.start, n.end)
 const INDEX = readSource(join(ROOT, 'index.html'))
 
-// Sources du jeu (src/**/*.js) et index.html, avec leur chemin depuis la racine du dépôt.
+// Tout le code du dépôt, avec son chemin depuis la racine : le jeu (src, index.html), les scripts (parcours, mémoire,
+// captures), les tests (hors cette garde, qui nomme ce qu'elle cherche), les outils de dev, Electron et le serveur du
+// PvP. La spec (§3.7, précisions de T7) dit le grep fait sur les sources, les scripts, les tests et index.html : à la
+// relecture de T7, la garde ne parcourait que src et index.html.
+const DOSSIERS = ['src', 'scripts', 'tests', 'dev', 'electron', 'server']
+const CODE = /\.(js|mjs|cjs|html)$/
+const CETTE_GARDE = 'tests/code-mort.test.js'
 function sources() {
   const out = [{ path: 'index.html', text: INDEX }]
   const walk = dir => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, e.name)
-      if (e.isDirectory()) walk(p)
-      else if (e.name.endsWith('.js')) out.push({ path: relative(ROOT, p).replace(/\\/g, '/'), text: readSource(p) })
+      if (e.isDirectory()) { if (e.name !== 'node_modules') walk(p) }
+      else if (CODE.test(e.name)) out.push({ path: relative(ROOT, p).replace(/\\/g, '/'), text: readSource(p) })
     }
   }
-  walk(join(ROOT, 'src'))
-  return out
+  for (const d of DOSSIERS) walk(join(ROOT, d))
+  return out.filter(s => s.path !== CETTE_GARDE)
 }
 
 describe('code mort retiré', () => {
   const MORTS = ['spawnMuzzle', 'detectsShooter', 'guardFOV', 'movingTarget', 'getHeadPosition', 'hasModel']
   for (const nom of MORTS) {
-    it(`${nom} : plus nulle part dans le jeu`, () => {
+    it(`${nom} : plus nulle part dans le code`, () => {
       const re = new RegExp(`\\b${nom}\\b`)
       expect(sources().filter(s => re.test(s.text)).map(s => s.path)).toEqual([])
     })

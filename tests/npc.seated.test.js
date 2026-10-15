@@ -137,7 +137,27 @@ describe('commanditaire de M6 : assis tant qu\'il négocie, debout quand il fuit
     run(npc, 0.5)
     expect(npc.mesh.position.z).toBeCloseTo(z0 + dz, 6)       // puis il garde cette ligne : sa fuite est latérale
     expect(dx).toBe(0)
+    // Le pas de la carte n'est pas nul : sans lui, les lignes du dessus tiendraient avec un pas de 0 (relecture de T7).
+    expect(dz).toBeGreaterThan(0.3)
     expect(npc.mesh.position.x).toBeLessThan(x0)
+  })
+
+  // Relecture de T7 : tué pendant les 0,25 s du lever, il restait à la hauteur du moment (jusqu'à 20 cm au-dessus du
+  // parquet), update ne finissant plus le lever d'un corps. Il le finit d'un coup en tombant : au parquet, devant l'assise.
+  it('tué pendant qu\'il se lève, son corps finit au parquet et devant l\'assise', () => {
+    const npc = commanditaire()
+    const z0 = M6.hiddenTarget.spawn[1], dz = M6.hiddenTarget.standUp[1]
+    run(npc, 1)
+    npc.flee(SHOT_FROM)
+    run(npc, 0.1)                                          // 0,1 s dans le fondu : encore 12 cm au-dessus du parquet
+    expect(npc.mesh.position.y).toBeGreaterThan(0.1)
+    npc.die()
+    expect(weight(npc, 'Death')).toBeGreaterThan(0)        // le clip de mort joue, pas la bascule de secours
+    expect(npc.mesh.position.y).toBe(M6.groundY)
+    expect(npc.mesh.position.z).toBeCloseTo(z0 + dz, 6)
+    run(npc, 1)
+    expect(npc.mesh.position.y).toBe(M6.groundY)
+    expect(npc.mesh.position.z).toBeCloseTo(z0 + dz, 6)
   })
 
   it('debout, il court devant le canapé et derrière la table basse, sans traverser les meubles', () => {

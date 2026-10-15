@@ -605,6 +605,9 @@ export class NPC {
 
   die() {
     this.alive = false
+    // Tué pendant qu'il se lève (commanditaire de M6) : update ne mène plus le lever d'un corps, il l'achève d'un coup,
+    // les pieds au sol et devant l'assise ; sinon le corps restait jusqu'à 20 cm au-dessus du parquet (relecture de T7).
+    if (this._rising) this._rise(CLIP_FADE)
     // Modèle .glb : joue l'animation de mort (bien plus stylé qu'une bascule)
     const deathAct = this.character && this.character.actions['Death']
     if (deathAct) {
