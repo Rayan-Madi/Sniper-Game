@@ -52,13 +52,13 @@ describe('chargement des modèles : fin et avancement', () => {
     await flush()
     expect(ready).toBe(false)
     expect(C.charactersSettled()).toBe(false)
-    expect(C.hasModel('civilian')).toBe(false)   // le dernier modèle des civils manque encore
+    expect(C.poolUrls('civilian')).toEqual([])   // le dernier modèle des civils manque encore
     file(urls.length - 1).ok()
     await flush()
     expect(ready).toBe(true)
     expect(C.charactersSettled()).toBe(true)
     expect(C.charactersProgress()).toBe(1)
-    for (const type of Object.keys(C.MODELS)) expect(C.hasModel(type), type).toBe(true)
+    for (const type of Object.keys(C.MODELS)) expect(C.poolUrls(type).length, type).toBeGreaterThan(0)
   })
 
   it('avancement par octets reçus quand chaque réponse donne sa taille', async () => {

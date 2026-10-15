@@ -1001,10 +1001,12 @@ export function buildMapParty() {
     party: true,                      // la foule danse (ambiance fête)
     // Cible à identifier : AUCUN signe distinctif visuel — même allure que la foule.
     // Seul indice : son comportement. À toi d'observer.
-    // Assis sur le canapé de gauche (seatY cale l'assise sur la banquette).
+    // Assis sur le canapé de gauche (seatY cale l'assise sur la banquette). En fuite, il se lève devant l'assise, au-dessus
+    // de ses pieds (standUp : pas en x et z, en m) : debout entre le canapé et la table basse, il court sans les traverser.
     hiddenTarget: {
       spawn: [-8, -21.7],
       seatY: 0.2,
+      standUp: [0, 0.5],
       clue:  "Aucune photo. Aucun nom. Une seule certitude : pendant que tout le monde danse... lui reste assis à négocier au téléphone.",
     },
   }

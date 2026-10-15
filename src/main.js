@@ -542,7 +542,6 @@ function startLevel(n, prep = null) {
   stress = 0; alertActive = false; alertTimer = 0; bulletInFlight = false
   pendingTrail = null; lastImpact = null
   missionClock = 0; bolt.reset()   // culasse prête au premier coup
-  document.getElementById('game-over-reason').textContent = 'Vous avez été repéré'
   score = upgradeState.totalScore
 
   hudEl.style.display = 'block'
@@ -625,6 +624,7 @@ function mountLevel(n) {
       hideMarker: !!useHidden,
       lockState: useHidden ? STATES.PHONE : null,
       onPhone: !!useHidden,
+      standUp: useHidden ? hidden.standUp : null,   // en fuite, il se lève devant le canapé (maps.js)
       // Le commanditaire est indiscernable : même pool de modèles que la FOULE.
       // Seul son comportement (assis, au téléphone, ne danse jamais) le trahit.
       modelType: useHidden ? 'civilian' : null,
@@ -828,7 +828,7 @@ function releaseMouse() {
 function triggerGameOver(reason) {
   if (!canFail(missionPhase())) return   // une seule fin de mission : pas pendant la kill-cam, pas après la réussite
   gamePhase = 'dead'
-  if (reason) document.getElementById('game-over-reason').textContent = reason
+  document.getElementById('game-over-reason').textContent = reason
   stopMissionAmbience()
   hideScope()
   releaseMouse()

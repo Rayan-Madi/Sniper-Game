@@ -5,7 +5,6 @@ export const LEVELS = [
     targets: 1,
     guards: 1,
     targetSpeed: 0.4,
-    guardFOV: 60,
     guardSpeed: 0.3,
     unpredictable: false,
     pointsReward: 1,
@@ -16,7 +15,6 @@ export const LEVELS = [
     targets: 2,
     guards: 2,
     targetSpeed: 0.6,
-    guardFOV: 70,
     guardSpeed: 0.4,
     unpredictable: false,
     pointsReward: 2,
@@ -27,7 +25,6 @@ export const LEVELS = [
     targets: 2,
     guards: 3,
     targetSpeed: 0.7,
-    guardFOV: 80,
     guardSpeed: 0.5,
     unpredictable: true,
     pointsReward: 2,
@@ -38,7 +35,6 @@ export const LEVELS = [
     targets: 3,
     guards: 4,
     targetSpeed: 0.8,
-    guardFOV: 90,
     guardSpeed: 0.6,
     unpredictable: true,
     pointsReward: 3,
@@ -49,9 +45,7 @@ export const LEVELS = [
     targets: 1,             // le colonel, dans une voiture en mouvement
     guards: 4,              // 3 chauffeurs + 1 passager d'escorte
     civilians: 0,
-    movingTarget: true,     // la cible roule dans un véhicule
     targetSpeed: 1.0,
-    guardFOV: 100,
     guardSpeed: 0.7,
     unpredictable: true,
     pointsReward: 4,
@@ -63,7 +57,6 @@ export const LEVELS = [
     guards: 2,
     civilians: 24,          // foule TRÈS dense — un tir raté sur un innocent = échec
     targetSpeed: 0.7,
-    guardFOV: 90,
     guardSpeed: 0.5,
     unpredictable: true,
     pointsReward: 5,

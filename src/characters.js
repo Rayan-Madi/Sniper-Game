@@ -58,8 +58,6 @@ export const MODELS = {
 const loader = new GLTFLoader()
 const cache = {}   // type -> [ {scene, animations, cfg} ]
 
-export function hasModel(type) { return !!cache[type] }
-
 // URL des modèles chargés pour un type, dans l'ordre du pool (relecture, tests).
 export function poolUrls(type) { return (cache[type] || []).map(p => p.cfg.url) }
 

@@ -16,6 +16,9 @@ export function npcShadowMode() { return shadowMode }
 // Durée (s de jeu) pendant laquelle le corps d'un PNJ abattu reste à terre.
 const BODY_TIME = 8
 
+// Fondu entre deux clips (s) ; le commanditaire qui se lève pour fuir quitte le canapé pendant ce temps.
+const CLIP_FADE = 0.25
+
 // Collision XZ contre les obstacles de la map (rayon PNJ ~0.35)
 function blocked(x, z, r = 0.35) {
   for (const o of getObstacles()) {
@@ -186,14 +189,16 @@ function addMarker(group) {
 
 export class NPC {
   // groundY : hauteur du sol de la carte (dalle du port, tarmac, route du convoi), 0 par défaut (menu, PvP).
-  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, levelData, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, modelType = null, partyMode = false, onPhone = false }) {
+  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, levelData, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, modelType = null, partyMode = false, onPhone = false, standUp = null }) {
     this.groundY    = groundY
     this.isTarget   = isTarget
     this.isGuard    = isGuard
     this.isCivilian = isCivilian
     this.fleeSideways = fleeSideways
     this.lockState  = lockState   // bloque le PNJ dans un état (ex: téléphone)
-    this.onPhone    = onPhone     // commanditaire : assis, en pleine négociation au téléphone
+    this.onPhone    = onPhone     // commanditaire : assis, en pleine négociation au téléphone (jusqu'à sa fuite)
+    this.standUp    = standUp     // [dx, dz] (m) : où il se tient une fois levé, depuis l'assise (carte, hiddenTarget)
+    this._rising    = null        // { fromY, t, k } : commanditaire qui se lève, du canapé vers le sol, devant l'assise
     this.alive      = true
     this.levelData  = levelData
     this.bounds     = bounds || { minX: -12, maxX: 12, minZ: -15, maxZ: 15 }
@@ -302,7 +307,24 @@ export class NPC {
     } else {
       this._animate()
     }
+    if (this._rising) this._rise(dt)
     this._move(dt)
+  }
+
+  // Lever du canapé, au fil du fondu du clip assis vers la course (CLIP_FADE), à toute cadence : le groupe descend de
+  // l'assise au sol et avance de standUp, les hanches passant au-dessus des pieds. Le pas s'ajoute à la course, qui
+  // part dès la première image.
+  _rise(dt) {
+    const r = this._rising, pos = this.mesh.position
+    r.t += dt
+    const k = Math.min(1, r.t / CLIP_FADE)
+    pos.y = r.fromY + (this.groundY - r.fromY) * k
+    if (this.standUp) {
+      pos.x += this.standUp[0] * (k - r.k)
+      pos.z += this.standUp[1] * (k - r.k)
+    }
+    r.k = k
+    if (k === 1) this._rising = null
   }
 
   // Téléphone porté à l'oreille. On l'accroche à l'os de la main droite si on
@@ -332,8 +354,8 @@ export class NPC {
     const acts = this.character.actions
     const action = acts[name] || acts[this.character.cfg.anims?.[name]] || this.character.firstAction
     if (!action || this._clip === action) return
-    if (this._clip) this._clip.fadeOut(0.25)
-    action.reset().fadeIn(0.25).play()
+    if (this._clip) this._clip.fadeOut(CLIP_FADE)
+    action.reset().fadeIn(CLIP_FADE).play()
     this._clip = action
   }
 
@@ -368,6 +390,12 @@ export class NPC {
     if (this.onVehicle) return   // une cible en voiture ne fuit pas à pied
     this.state      = STATES.FLEE
     this.stateTimer = 0
+    // Le commanditaire raccroche et se lève : il quitte la pose assise (clip de course, update) et le canapé (_rise)
+    // (spec du lot 2, §3.7 ; avant, il glissait assis, 20 cm au-dessus du parquet).
+    if (this.onPhone) {
+      this.onPhone = false
+      this._rising = { fromY: this.mesh.position.y, t: 0, k: 0 }
+    }
 
     if (this.fleeSideways) {
       // Appartement : on court vers la sortie latérale la plus proche (±X)
@@ -531,10 +559,6 @@ export class NPC {
     }
   }
 
-  getHeadPosition() {
-    return this.mesh.position.clone().setY(this.mesh.position.y + 1.68)
-  }
-
   // Boîte grossière du corps debout : préfiltre du tir (npcHit, src/shot/hitzones.js, qui l'élargit), foule du PvP.
   getBounds() {
     const wp = new THREE.Vector3()
@@ -555,17 +579,6 @@ export class NPC {
 
   isStill() {
     return ![STATES.WALK, STATES.FLEE].includes(this.state)
-  }
-
-  detectsShooter(camPos) {
-    if (!this.isGuard || !this.alive) return false
-    const toShooter = new THREE.Vector3().subVectors(camPos, this.mesh.position)
-    const dist = toShooter.length()
-    if (dist > 55) return false
-    toShooter.normalize()
-    const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.mesh.rotation)
-    const angle = Math.acos(Math.max(-1, Math.min(1, toShooter.dot(fwd)))) * (180 / Math.PI)
-    return angle < (this.levelData?.guardFOV || 70) / 2
   }
 
   // Ombre selon le mode (npcCastsShadow) : seuls les maillages qui en projetaient une à la création (corps du modèle,

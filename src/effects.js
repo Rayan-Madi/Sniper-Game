@@ -6,12 +6,11 @@ import { SILLAGE, MARQUES } from './shot/tuning.js'
 let effects = []
 
 // Ressources communes aux effets, créées en rafale à chaque tir (spec du lot 1 §4.2) : une seule géométrie de
-// particule (sphère de rayon 1, mise à l'échelle de chaque particule) et une pour le flash de bouche, marquées
-// partagées et jamais libérées. Ce qui change d'un effet à l'autre (l'opacité qui baisse) reste à l'effet : un seul
-// matériau par éclaboussure, partagé par ses particules, libéré avec elle en fin de vie.
-let particleGeo = null, flashGeo = null
+// particule (sphère de rayon 1, mise à l'échelle de chaque particule), marquée partagée et jamais libérée. Ce qui
+// change d'un effet à l'autre (l'opacité qui baisse) reste à l'effet : un seul matériau par éclaboussure, partagé par
+// ses particules, libéré avec elle en fin de vie.
+let particleGeo = null
 const particleGeometry = () => particleGeo || (particleGeo = markShared(new THREE.SphereGeometry(1, 4, 4)))
-const flashGeometry = () => flashGeo || (flashGeo = markShared(new THREE.SphereGeometry(0.4, 6, 6)))
 
 // Sillage de la balle (spec du lot 2, §3.3) : un trait fin parcourt la trajectoire pendant le temps de vol, sa tête au
 // rythme de la balle et sa queue qui s'estompe derrière elle, puis s'efface une fois la balle arrivée. Il remplace le
@@ -122,17 +121,6 @@ export function spawnSpray(point, normal, surface) {
   }
 }
 
-// Flash de bouche (muzzle flash) à la position de la caméra
-export function spawnMuzzle(pos, dir) {
-  const flash = new THREE.Mesh(
-    flashGeometry(),
-    new THREE.MeshBasicMaterial({ color: 0xffee99, transparent: true, opacity: 0.9 })
-  )
-  flash.position.copy(pos).add(dir.clone().multiplyScalar(1.2))
-  scene.add(flash)
-  effects.push({ obj: flash, life: 0.08, maxLife: 0.08, type: 'flash' })
-}
-
 export function updateEffects(dt) {
   for (let i = effects.length - 1; i >= 0; i--) {
     const e = effects[i]
@@ -142,8 +130,6 @@ export function updateEffects(dt) {
     if (e.type === 'trail') {
       e.age += dt
       placeTrail(e)
-    } else if (e.type === 'flash') {
-      e.obj.material.opacity = t * 0.9
     } else if (e.type === 'impact') {
       e.material.opacity = t
       for (const p of e.parts) {

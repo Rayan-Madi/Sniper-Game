@@ -18,12 +18,12 @@ import { createFakeRenderer, drawnGeometries, trackDisposals } from './fakeRende
 // ressources déjà libérées, qui ne doivent pas passer d'un test à l'autre. Sinon un test ne voit pas une ressource
 // partagée libérée à tort : un test précédent l'a déjà libérée (et retenue comme telle), elle ne l'est plus une
 // seconde fois. Avec les modules gardés, « tir manqué » restait vert sous une libération du partagé.
-let scene, spawnTrail, spawnImpact, spawnSpray, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole,
+let scene, spawnTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole,
   clearBulletHoles, isShared
 beforeEach(async () => {
   vi.resetModules()
   ;({ scene } = await import('../../src/scene.js'))
-  ;({ spawnTrail, spawnImpact, spawnSpray, spawnMuzzle, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles }
+  ;({ spawnTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles }
     = await import('../../src/effects.js'))
   ;({ isShared } = await import('../../src/gfx/dispose.js'))
   scene.clear()
@@ -42,7 +42,7 @@ const expire = () => { for (let i = 0; i < 3; i++) updateEffects(1) }   // vol e
 const splashes = () => scene.children.filter(o => o.isGroup)
 
 describe('effets de tir, niveau 1 : en fin de vie, tout ce qui est possédé est libéré, rien de partagé', () => {
-  for (const [name, shot] of [['tir touché', hit], ...DECOR, ['flash de bouche', () => spawnMuzzle(FROM, new THREE.Vector3(0, 0, -1))]]) {
+  for (const [name, shot] of [['tir touché', hit], ...DECOR]) {
     it(name, () => {
       shot()
       const t = trackDisposals(scene)
