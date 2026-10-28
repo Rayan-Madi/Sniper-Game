@@ -45,10 +45,12 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 // ─── Fumée du livrable (spec du lot 5 §3.2, tâche E1) ──────────────────────────────────────────────────────────────
 // « electron . --fumee » (scripts/fumee.mjs), plus tard « Sniper.exe --fumee » (le jeu empaqueté) : le jeu construit
 // se lance hors ligne dans une fenêtre CACHÉE, sans son, sur le profil jetable que lui passe scripts/fumee.mjs
-// (--profil=<dossier>, obligatoire : jamais la sauvegarde du joueur), toute requête http, https, ws ou wss bloquée et
-// comptée. Le processus principal joue le scénario dans la page par executeJavaScript (aucun port de débogage), écrit
-// une ligne « [fumee] {json} » sur sa sortie, puis quitte : code 0 si rien n'a échoué ni été bloqué, 1 sinon. Au délai
-// de garde, la fumée se ferme seule, rouge.
+// (--profil=<dossier vide>, obligatoire : jamais la sauvegarde du joueur), toute requête http, https, ws ou wss bloquée
+// et comptée. Il écrit « [fumee] debut » dès son départ (le script y reconnaît un exécutable qui connaît ce mode), joue
+// le scénario dans la page par executeJavaScript (aucun port de débogage), écrit une ligne « [fumee] {json} » sur sa
+// sortie, puis quitte : code 0 si rien n'a échoué ni été bloqué, 1 sinon. Au délai de garde, la fumée se ferme seule,
+// rouge.
+const fs = require('fs')
 const CLE_SAUVEGARDE = 'sniper-save'           // src/upgrades.js, saveProgress
 const REPRENDRE_M3 = 'REPRENDRE : MISSION 3'   // src/main.js, refreshMenuButtons
 // M3 en cours, son briefing pas encore vu : REPRENDRE joue la cinématique m3, puis la mission
@@ -65,10 +67,12 @@ let fumeeGarde = null
 let fumeeDebut = 0
 
 // Avant que l'application soit prête : exceptions du processus principal rattrapées (sans quoi Electron ouvrirait sa
-// boîte de dialogue sur le bureau), délai de garde, puis le profil jetable. Celui-ci est créé et supprimé par
-// scripts/fumee.mjs, jamais ici : sans --profil, ou avec un chemin que refuse Electron (relatif), la fumée finit rouge
-// tout de suite, sans dossier créé ni fenêtre (createWindow), donc sans jamais lancer le jeu sur le profil du joueur.
+// boîte de dialogue sur le bureau), délai de garde, puis le profil jetable. Celui-ci est créé (vide) et supprimé par
+// scripts/fumee.mjs, jamais ici : sans --profil, avec un dossier absent ou non vide (un profil déjà servi, celui du
+// joueur par exemple), ou avec un chemin que refuse Electron (relatif), la fumée finit rouge tout de suite, sans dossier
+// créé ni fenêtre (createWindow), donc sans jamais lancer le jeu sur le profil du joueur.
 function preparerFumee() {
+  process.stdout.write('[fumee] debut\n')
   fumeeDebut = Date.now()
   fumeeResultat = {
     electron: process.versions.electron, origine: null, echecs: [], requetesBloquees: [],
@@ -80,6 +84,9 @@ function preparerFumee() {
   const arg = process.argv.find(a => a.startsWith('--profil='))
   const profil = arg ? arg.slice('--profil='.length) : ''
   if (!profil) return finirFumee('profil jetable manquant : --fumee demande --profil=<dossier> (scripts/fumee.mjs)')
+  let contenu
+  try { contenu = fs.readdirSync(profil) } catch (e) { return finirFumee(`profil jetable introuvable : ${profil} (${e && e.code})`) }
+  if (contenu.length) return finirFumee(`profil jetable non vide : ${profil}`)
   try {
     app.setPath('userData', profil)
     app.setPath('sessionData', profil)
@@ -129,7 +136,8 @@ function chargement(wc) {
 
 // Le scénario. Chaque fonction passée à page() est évaluée telle quelle dans la page (executeJavaScript), sans accès
 // aux variables d'ici, ses arguments passés en JSON ; attendre() la relance jusqu'à ce qu'elle rende une valeur,
-// DELAI_ETAPE_MS au plus. Un écart est noté dans r.echecs et le scénario continue tant qu'il le peut.
+// DELAI_ETAPE_MS au plus. Un écart est noté dans r.echecs et le scénario continue tant qu'il le peut, sauf un profil
+// déjà utilisé : arrêt avant la moindre écriture.
 async function scenarioFumee(wc, r) {
   const page = (fn, ...args) => wc.executeJavaScript(`(${fn})(...${JSON.stringify(args)})`, true)
   const attendre = async (etape, fn, ...args) => {
@@ -156,10 +164,11 @@ async function scenarioFumee(wc, r) {
     return h && h.style.display === 'block' ? document.getElementById('hud-level').textContent : null
   }
 
-  // 1. Premier lancement : profil vierge (le menu propose COMMENCER), modèles chargés avant de recharger
+  // 1. Premier lancement : profil vierge (le menu propose COMMENCER), modèles chargés avant de recharger. Sinon, le
+  //    profil a déjà servi : scénario arrêté ici, sa sauvegarde laissée intacte
   r.origine = await page(() => location.origin)
   const vierge = await attendre('menu au premier lancement', menu)
-  if (vierge !== 'COMMENCER') r.echecs.push(`profil déjà utilisé : le menu propose « ${vierge} » au premier lancement`)
+  if (vierge !== 'COMMENCER') throw new Error(`profil déjà utilisé : le menu propose « ${vierge} » au premier lancement (scénario arrêté, rien écrit)`)
   await attendre('modèles au premier lancement', modeles)
 
   // 2. Sauvegarde posée (M3 en cours, briefing pas vu), page rechargée : le menu la lit
