@@ -30,19 +30,21 @@ function lire(table, nom, quoi) {
 
 // reglages : de la forme de SOUPCON (src/bar/reglages.js).
 export function createSoupcon(reglages = SOUPCON) {
-  const { temoins: poids, montees, evenements, baisses, baisseHorsDeVue, plancherMax, paliers } = reglages
+  const { temoins: poids, montees, deboutSeulement, evenements, baisses, baisseHorsDeVue, plancherMax, paliers } = reglages
   const seuil = k => paliers[PALIERS[k]]           // { monte, redescend } du palier de rang k
   const plafond = seuil(DEMASQUE).monte
+  for (const nom of deboutSeulement) lire(montees, nom, 'source inconnue (deboutSeulement)')
   let S = 0, plancher = 0, max = 0, rang = 0
 
   // poids du témoin le plus sévère parmi ceux qui voient Viktor ; 0 : personne (Albert ne compte pas)
   const vuPar = temoins => temoins.reduce((m, qui) => Math.max(m, lire(poids, qui, 'témoin inconnu')), 0)
   // montée d'une source active, par seconde, avant le poids du témoin : un nom de SOUPCON.montees, ou { nom: 'fixation',
-  // qui } (une fixation compte aussi le poids de la personne fixée)
-  function montee(source) {
+  // qui } (une fixation compte aussi le poids de la personne fixée). Une source de deboutSeulement (« trop près », la
+  // zone privée) ne compte que debout ; lue et contrôlée avant, comme les autres.
+  function montee(source, debout) {
     const { nom, qui } = typeof source === 'string' ? { nom: source } : source
-    const m = lire(montees, nom, 'source inconnue')
-    return nom === 'fixation' ? m * lire(poids, qui, 'témoin inconnu') : m
+    const m = lire(montees, nom, 'source inconnue') * (nom === 'fixation' ? lire(poids, qui, 'témoin inconnu') : 1)
+    return debout || !deboutSeulement.includes(nom) ? m : 0
   }
   // un palier compte comme atteint dès que S a touché son seuil d'entrée, même franchi d'un coup
   const atteint = k => max >= seuil(k).monte - EPS
@@ -69,15 +71,17 @@ export function createSoupcon(reglages = SOUPCON) {
     // pour le contrat de sortie du bar (§3.11, couverture.paliers) et le rang (§5.3)
     get paliersAtteints() { return { mefiance: atteint(1), soupcon: atteint(2) } },
 
-    // dt : secondes de jeu. sources : les montées actives, déjà filtrées par la couverture (« trop près » et la zone
-    // privée ne valent que debout, et la zone privée sans verre ni prétexte, §3.6 et §3.7). temoins : la catégorie de
+    // dt : secondes de jeu. sources : les montées actives ; assis ou posé, la jauge écarte elle-même « trop près » et la
+    // zone privée, qui ne valent que debout (deboutSeulement, §3.6 et §3.7). Reste à l'appelant de choisir, debout, entre
+    // zonePrivee, zonePriveePretexte et rien, selon la couverture (verre, prétexte, §3.6). temoins : la catégorie de
     // chaque personne qui voit Viktor. pose : 'debout', 'assis' (sans verre) ou 'pose' (posé, un verre à la main, §3.7).
     update(dt, { sources = [], temoins = [], pose = 'debout' } = {}) {
       const pas = secondes(dt)
       if (pas === 0 || rang === DEMASQUE) return []
       const vu = vuPar(temoins)
-      const hausse = sources.reduce((somme, source) => somme + montee(source), 0) * vu
       const baisse = lire(baisses, pose, 'pose inconnue')
+      const debout = pose === 'debout'
+      const hausse = sources.reduce((somme, source) => somme + montee(source, debout), 0) * vu
       if (hausse > 0) S = Math.min(plafond, S + hausse * pas)
       else S = Math.max(plancher, S - (vu > 0 ? baisse : Math.max(baisse, baisseHorsDeVue)) * pas)
       return suivre()

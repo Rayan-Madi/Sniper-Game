@@ -24,6 +24,7 @@ describe('les réglages du bar', () => {
     expect(REGARD.tolerance).toEqual({ escorte: 1.2, civil: 2, fernand: 3, albert: Infinity })
     expect(SOUPCON.temoins).toEqual({ escorte: 1, fernand: 0.8, civil: 0.5, albert: 0 })
     expect(SOUPCON.montees).toEqual({ fixation: 10, tropPres: 6, zonePrivee: 2.5, zonePriveePretexte: 0.5, zoneInterdite: 12 })
+    expect(SOUPCON.deboutSeulement).toEqual(['tropPres', 'zonePrivee', 'zonePriveePretexte'])
     expect(SOUPCON).toMatchObject({ tropPresM: 1.3, presenceTablesS: 90, presenceTablesM: 3, baisseHorsDeVue: 5, plancherMax: 55 })
     expect(SOUPCON.baisses).toEqual({ debout: 3, assis: 3, pose: 5 })
     expect(SOUPCON.paliers).toEqual({ mefiance: { monte: 30, redescend: 22 }, soupcon: { monte: 60, redescend: 52 },
@@ -59,6 +60,34 @@ describe('ce qui fait monter la jauge', () => {
       const s = createSoupcon()
       avance(s, 1, { sources, temoins })
       expect(s.S, JSON.stringify({ sources, temoins })).toBeCloseTo(hausse, 9)
+    }
+  })
+
+  it('« trop près » et la zone privée ne valent que debout : assis ou posé, ils ne montent rien', () => {
+    const vu = { temoins: ['escorte'] }
+    for (const pose of ['assis', 'pose']) {
+      const sansSource = createSoupcon()                    // la même seconde sans aucune source : la baisse seule
+      sansSource.evenement('choix', 40)
+      avance(sansSource, 1, { ...vu, pose })
+      for (const source of ['tropPres', 'zonePrivee', 'zonePriveePretexte']) {
+        const s = createSoupcon()
+        s.evenement('choix', 40)
+        avance(s, 1, { ...vu, pose, sources: [source] })
+        expect(s.S, `${source}, ${pose}`).toBe(sansSource.S)   // témoin : comptées quelle que soit la pose, 46 (« trop près »)
+      }
+    }
+  })
+
+  it('assis ou posé, la fixation monte toujours, même avec « trop près » ou la zone privée dans la même image', () => {
+    const cas = [                                           // [pose, sources actives, hausse en 1 s sous le regard de l'escorte]
+      ['pose', [FIXE_ESCORTE, 'tropPres', 'zonePrivee'], 10],   // témoin : sources comptées quelle que soit la pose, 18,5
+      ['assis', [FIXE_ESCORTE, 'zonePriveePretexte'], 10],       // témoin : la même, 10,5
+      ['debout', [FIXE_ESCORTE, 'tropPres', 'zonePrivee'], 18.5],   // debout, tout compte
+    ]
+    for (const [pose, sources, hausse] of cas) {
+      const s = createSoupcon()
+      avance(s, 1, { sources, temoins: ['escorte'], pose })
+      expect(s.S, JSON.stringify({ pose, sources })).toBeCloseTo(hausse, 9)   // témoin : toute source écartée hors debout, 0
     }
   })
 })
@@ -224,6 +253,10 @@ describe('les événements', () => {
     const s = createSoupcon()
     const vu = { temoins: ['escorte'] }
     expect(() => s.update(DT, { ...vu, sources: ['tropLoin'] })).toThrow(/tropLoin/)   // témoin : source ignorée
+    expect(() => s.update(DT, { ...vu, pose: 'pose', sources: ['tropLoin'] }))   // témoin : écartée avant d'être lue
+      .toThrow(/tropLoin/)
+    expect(() => createSoupcon({ ...SOUPCON, deboutSeulement: ['tropPrès'] }))   // témoin : liste lue sans contrôle
+      .toThrow(/tropPrès/)
     expect(() => s.update(DT, { ...vu, sources: [{ nom: 'fixation' }] })).toThrow(/témoin/)
     expect(() => s.update(DT, { temoins: ['barman'] })).toThrow(/barman/)
     expect(() => s.update(DT, { ...vu, pose: 'couche' })).toThrow(/couche/)
@@ -255,6 +288,7 @@ describe('les réglages passés', () => {
     r.baisses.debout = 1
     r.evenements.silence = { s: 31, plancher: 7 }
     r.paliers.mefiance = { monte: 31, redescend: 30 }
+    r.deboutSeulement = ['zoneInterdite']
     const s = createSoupcon(r)
     s.evenement('silence')
     expect([s.S, s.plancher, s.palier]).toEqual([31, 5, 'mefiance'])   // témoin : valeurs de reglages.js en dur, 8, 0, CALME
@@ -265,5 +299,8 @@ describe('les réglages passés', () => {
     expect(s.palier).toBe('calme')
     avance(s, 1, { temoins: [] })                                      // 7 par seconde hors de vue
     expect(s.S).toBeCloseTo(22.5, 9)
+    // assis : cette liste écarte la zone interdite, et « trop près » compte, 2 × 1
+    avance(s, 1, { sources: ['zoneInterdite', 'tropPres'], temoins: ['civil'], pose: 'assis' })
+    expect(s.S).toBeCloseTo(24.5, 9)                                   // témoin : liste écrite en dur dans la jauge, 34,5
   })
 })

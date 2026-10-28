@@ -44,6 +44,7 @@ export const SOUPCON = {
     zonePriveePretexte: 0.5,   // la même avec un prétexte (fléchettes, attente des toilettes)
     zoneInterdite: 12,  // derrière le zinc ou dans l'arrière-cuisine (Fernand voit toujours le zinc)
   },
+  deboutSeulement: ['tropPres', 'zonePrivee', 'zonePriveePretexte'],   // assis ou posé, ces montées ne comptent pas
   tropPresM: 1.3,       // en deçà de cette distance d'un homme de l'escorte, Viktor debout est trop près
   evenements: {         // montée immédiate de S et du plancher, en points
     remarque: {         // une tolérance de fixation dépassée, une fois par épisode (§3.5), selon qui remarque
@@ -62,11 +63,12 @@ export const SOUPCON = {
   presenceTablesM: 3,   // distance au centre d'une table de l'escorte (A, B) en deçà de laquelle ce temps compte
   baisses: {            // par seconde, quand rien ne monte, sous le regard de quelqu'un, selon la pose de Viktor
     debout: 3,          // debout, ou accoudé sans verre
-    assis: 3,           // assis sans verre : comme debout (la spec ne donne 5/s qu'avec un verre)
+    assis: 3,           // assis sans verre : comme debout, la lecture la plus dure (décision 10 de la spec, ouverte)
     pose: 5,            // posé (§3.7) : assis, ou accoudé au mange-debout, un verre à la main
   },
   baisseHorsDeVue: 5,   // par seconde quand personne ne voit Viktor (Albert ne compte pas), quelle que soit sa pose
-  plancherMax: 55,      // le plancher ne monte jamais plus haut ; au-dessus de 52, il garde en SOUPÇON qui l'a atteint
+  plancherMax: 55,      // le plancher ne monte jamais plus haut ; à 52 ou plus, il garde en SOUPÇON qui l'a atteint
+                        // (le §3.6 se contredit là-dessus : décision 9 de la spec, ouverte ; 55 en attendant)
   paliers: {            // entrée à « monte », sortie seulement sous « redescend » : l'écart évite le clignotement
     mefiance: { monte: 30, redescend: 22 },   // MÉFIANCE : l'escorte baisse la voix, des regards vers Viktor
     soupcon: { monte: 60, redescend: 52 },    // SOUPÇON : renseignements reportés, Sorel ou Dussart s'approche
@@ -82,8 +84,8 @@ export const SOUPCON = {
 
 // ─── La couverture (§3.7) ──────────────────────────────────────────
 // Le verre (servi par Fernand ou Lise) et les prétextes coupent ou adoucissent la montée de la zone privée ; posé (assis,
-// ou accoudé au mange-debout, un verre à la main), Viktor redescend plus vite (SOUPCON.baisses.pose) et n'est jamais
-// « trop près ».
+// ou accoudé au mange-debout, un verre à la main), Viktor redescend plus vite (SOUPCON.baisses.pose). Assis ou posé, ni
+// « trop près » ni la zone privée ne montent (SOUPCON.deboutSeulement, appliqué par la jauge).
 export const COUVERTURE = {
   sansCommandeS: 60,    // sans verre au bout de ce temps : événement sansCommande de la jauge, et la réplique de Lise
   toilettesS: [240, 300],   // le routier occupe le WC de 240 à 300 s : attendre devant la porte est un prétexte
@@ -91,7 +93,7 @@ export const COUVERTURE = {
 }
 
 // ─── Les dialogues à choix (§3.8) ──────────────────────────────────
-// Décision 7 de la spec (G4 de la feuille de route) : recommandation appliquée tant que Rayan n'a pas tranché.
+// Décision 7 de la spec (G4), tranchée le 28 octobre 2026 : 10 s, 6 s face à Sorel.
 export const DIALOGUE = {
   minuterieS: 10,       // temps pour choisir une réponse en conversation ; à l'échéance, le silence
   minuterieSorelS: 6,   // le même face à Sorel, qui n'attend pas

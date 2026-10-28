@@ -223,7 +223,7 @@ si hausse = 0 : S ← max(plancher, S − baisse·dt)          jamais de montée
 | Choix de dialogue | de −15 à +30 selon les données ; certains démasquent |
 | Trois fléchettes dans le mille (bonus) | +15 ; Mattei : « Trois dans le mille. Tu as fait l'armée, toi ? » |
 
-- **Baisses** : 3/s debout ; 5/s assis avec un verre, ou hors de la vue de tous. **Plancher plafonné à 55** : après beaucoup de fautes, on revient en MÉFIANCE, jamais en CALME.
+- **Baisses** : 3/s debout ; 5/s assis avec un verre, ou hors de la vue de tous ; assis sans verre, 3/s comme debout (la lecture la plus dure, retenue en B1 : décision 10 du §13). **Plancher plafonné à 55** : après beaucoup de fautes, on revient en MÉFIANCE, jamais en CALME (vrai seulement si SOUPÇON n'a jamais été atteint, puisqu'on n'en sort que sous 52 : décision 9 du §13).
 
 | Palier | Monte à | Redescend sous | Conséquences |
 |---|---|---|---|
@@ -237,7 +237,7 @@ si hausse = 0 : S ← max(plancher, S − baisse·dt)          jamais de montée
 
 ### 3.7 Couverture
 - **Le verre** : servi par Fernand (D1) ou Lise (L1), tenu en vue à la première personne (verre et liquide, 2 appels) toute la soirée. Sans verre au bout de 60 s : événement du tableau ci-dessus.
-- **Posé** : assis (chaise, tabouret) ou accoudé au mange-debout avec un verre : la montée « zone privée » est coupée et la baisse passe à 5/s. « Trop près » ne vaut que debout.
+- **Posé** : assis (chaise, tabouret) ou accoudé au mange-debout avec un verre : la montée « zone privée » est coupée et la baisse passe à 5/s. « Trop près » ne vaut que debout. Assis ou posé, la jauge ne compte ni « trop près » ni la zone privée, quoi que l'appelant lui passe (`SOUPCON.deboutSeulement`, relecture de B1).
 - **S'asseoir** : E sur un siège libre (capsule invisible) ; la souris tourne la vue, les touches ne déplacent pas (`setMoveLocked`) ; E ou une touche de déplacement relève Viktor.
 - **Prétextes** : la file des toilettes (le routier occupe le WC de 240 à 300 s, porte « OCCUPÉ ») ; les fléchettes (bonus) ; le juke-box (une pièce, 1 s de maintien).
 
@@ -632,6 +632,8 @@ state.m5 = { etape: 'bar' | 'convoi',
 8. **Spec du lot 3** : la décision 11 est désormais définitive à 430 m (commit `85973ab` de `lot3-socle`, spec3:177, 266 ; note de l'intégrateur) : la réplique B3 « À plus de quatre cents mètres » et la une du journal tiennent. Le signe de M5 (casquette sur Kessler, spec3:248, décision 5) change avec le leurre : à reporter dans la spec du lot 3 selon la décision 1 du §13 (`feuille-de-route.md` §2.5). La décision 3 du lot 3 (maquette de M5 passée à « ≈ 1,5 m ») est absorbée par le briefing II (B15) : 3d ne touche aucune maquette.
 
 ## 13. Décisions à faire trancher par Rayan
+Décisions 1 à 8 tranchées le 28 octobre 2026 : toutes les recommandations sont retenues (`decisions-rayan.md`, où elles portent les numéros H1, G1, H3, H2, G2, G3, G4 et G5 de `feuille-de-route.md` §5). Les décisions 9 et 10, nées de la relecture de B1, restent ouvertes : l'option « en place » s'applique tant que Rayan n'a pas tranché.
+
 1. **Le leurre**
    - A (reco, « fais le dur ») : Haas porte la casquette d'officier dans la jeep 3, Kessler est tête nue.
    - B : les deux portent une casquette.
@@ -659,3 +661,11 @@ state.m5 = { etape: 'bar' | 'convoi',
 8. **Verrou refusé (PARTIR SANS ENTRER)**
    - A (reco) : 0 renseignement.
    - B : les 2 faciles (HEURE et TRAJET).
+9. **Plancher de la jauge et sortie en SOUPÇON** (ouverte, relecture de B1 : le §3.6 se contredit ; à trancher avant B11)
+   - Constat : le plancher plafonné à 55 doit ramener en MÉFIANCE, mais on ne sort du SOUPÇON que sous 52. Qui a atteint SOUPÇON avec un plancher de 52 ou plus y reste toute la soirée (échanges porteurs reportés, puis perdus) ; qui ne l'a jamais atteint revient bien en MÉFIANCE, mais à 5 points du SOUPÇON.
+   - A (en place, la lettre du §3.6, « fais le dur ») : plancher plafonné à 55.
+   - B : plancher plafonné sous 52 (50 par exemple ; à 52 pile, on resterait en SOUPÇON) : on revient toujours en MÉFIANCE, comme le promet le §3.6. Changement : `SOUPCON.plancherMax` dans `src/bar/reglages.js`, et le test du plafond.
+   - Dans les deux cas, lire « Sortir du bar en SOUPÇON (S ≥ 60) » sur S, comme l'écrit le §3.6, ou sur le palier. Avec A et une lecture sur le palier, qui reste en SOUPÇON ne peut plus sortir sans être démasqué.
+10. **Assis sans verre** (ouverte, relecture de B1 : le §3.6 et le §3.7 se lisent de deux façons)
+   - A (en place, la plus dure) : la baisse ne passe à 5/s que posé, un verre à la main (§3.6 : « 5/s assis avec un verre ») ; assis sans verre, 3/s comme debout.
+   - B : assis suffit, avec ou sans verre (lecture possible du §3.7 : « assis (chaise, tabouret) ou accoudé au mange-debout avec un verre »). Changement : `SOUPCON.baisses.assis` à 5 dans `src/bar/reglages.js`, et le tableau du test des baisses.
