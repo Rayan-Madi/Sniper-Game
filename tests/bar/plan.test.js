@@ -76,6 +76,18 @@ describe('les boîtes du plan', () => {
     }
   })
 
+  it('chacun se tient hors des boîtes, emprise comprise : Viktor au départ, Fernand, Lise et Sorel à leurs points', () => {
+    // le carré de demi-côté r centré en p chevauche la boîte b (un contact bord à bord ne compte pas, comme moveCircle)
+    const chevauche = (p, b, r) => p.x + r > b.minX + 1e-6 && p.x - r < b.maxX - 1e-6 && p.z + r > b.minZ + 1e-6 && p.z - r < b.maxZ - 1e-6
+    for (const b of BOITES) expect(chevauche(ANCRES.depart, b, R), b.id).toBe(false)
+    const debout = [['fernand', ANCRES.fernand], ...Object.entries(ANCRES.lise).map(([k, p]) => [`lise ${k}`, p]),
+      ...Object.entries(ANCRES.sorel).map(([k, p]) => [`sorel ${k}`, p])]
+    expect(debout.length).toBe(10)
+    for (const [nom, p] of debout) {
+      for (const b of BOITES) expect(chevauche(p, b, 0.25), `${nom} dans ${b.id}`).toBe(false)   // témoin : Lise servant A dans Lenoir
+    }
+  })
+
   it('un patron attablé est une boîte : on ne le traverse pas, son siège n\'est pas libre', () => {
     const occupes = SIEGES.filter(s => s.occupant)
     expect(occupes.map(s => s.occupant).sort()).toEqual(['albert', 'dussart', 'haas', 'lenoir', 'mattei'])
