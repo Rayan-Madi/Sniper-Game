@@ -9,7 +9,8 @@
 //
 // Une réplique : { texte, motsCles?, renseignement? } ; motsCles, les expressions du texte qu'il faut lire pour
 // apprendre le renseignement (« vieille route », « sept heures et quart »), reconnues sans égard à la casse ni à la
-// ponctuation, à chacune de leurs occurrences. Les mots sont les morceaux du texte entre deux blancs.
+// ponctuation, à chacune de leurs occurrences ; une réplique qui porte un renseignement en a au moins une (sinon,
+// erreur). Les mots sont les morceaux du texte entre deux blancs.
 //
 // Côté frappe (src/ui/frappe.js, tâche B4) : quand la première lettre du mot i est frappée, on retient l'I du moment ;
 // affichage(Is, f) dit ce qui s'est affiché, masquer(mots frappés, Is, f) donne le sous-titre, et à la fin de la
@@ -88,12 +89,17 @@ export function intelligibilite(oreille, regard, source, boites, jukebox) {
 const forme = mot => mot.normalize('NFC').toLowerCase().replace(/’/g, '\'').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
 
 // Les mots de la réplique, dans l'ordre : [{ mot, cle }] ; cle : il fait partie d'un mot-clé. Un mot-clé absent du texte,
-// ou sans lettre ni chiffre, est une erreur (les données de src/bar/textes.js sont fausses).
+// ou sans lettre ni chiffre, est une erreur (les données de src/bar/textes.js sont fausses), comme un renseignement
+// sans mot-clé, qui ne s'apprendrait jamais sans que rien ne le dise.
 export function decouper(replique) {
   const texte = replique.texte.trim()
+  const motsCles = replique.motsCles || []
+  if (replique.renseignement && !motsCles.length) {
+    throw new Error(`écoute : « ${replique.texte} » porte le renseignement « ${replique.renseignement} » sans mot-clé`)
+  }
   const mots = texte ? texte.split(/\s+/).map(mot => ({ mot, cle: false })) : []
   const formes = mots.map(m => forme(m.mot))
-  for (const expression of replique.motsCles || []) {
+  for (const expression of motsCles) {
     const cherche = expression.trim().split(/\s+/).map(forme)
     if (!cherche.every(Boolean)) throw new Error(`écoute : mot-clé vide ou sans lettre « ${expression} » dans « ${replique.texte} »`)
     let trouve = false
@@ -150,9 +156,9 @@ export function masquer(mots, I, fragilites) {
 
 // Le renseignement de la réplique est-il appris ? Oui si elle en porte un et que chacun de ses mots-clés s'est affiché
 // au moment où il a été frappé (affiches : affichage(Is, fragilites), un booléen par mot). Être à portée au début de la
-// réplique ne suffit pas.
+// réplique ne suffit pas. Un renseignement a toujours au moins un mot-clé : decouper refuse le contraire.
 export function acquis(replique, affiches) {
   if (!replique.renseignement) return false
   const cles = decouper(replique).flatMap((m, i) => (m.cle ? [i] : []))
-  return cles.length > 0 && cles.every(i => affiches[i] === true)
+  return cles.every(i => affiches[i] === true)
 }

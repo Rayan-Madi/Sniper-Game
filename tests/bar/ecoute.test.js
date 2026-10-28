@@ -200,9 +200,16 @@ describe('les mots masqués', () => {
     expect(decouper({ texte: '  Belote.  ' })).toEqual([{ mot: 'Belote.', cle: false }])
   })
 
-  it('un mot-clé absent de sa réplique, ou vide, est une erreur', () => {
+  it('un mot-clé absent de sa réplique ou vide, ou un renseignement sans mot-clé, est une erreur', () => {
     expect(() => decouper({ texte: 'Le col, c\'est fini.', motsCles: ['vieille route'] })).toThrow(/vieille route/)
     expect(() => decouper({ texte: 'Bivouac. … Oui, mon colonel.', motsCles: [' '] })).toThrow(/vide/)   // témoin : trouvé sur « … »
+    // un renseignement sans mot-clé ne s'apprendrait jamais, sans que rien ne le dise : l'erreur tombe dès que la
+    // réplique est découpée, à sa première image (fragilites), et non à la fin de sa frappe
+    for (const motsCles of [undefined, []]) {
+      const B1 = { texte: 'Lui, il est dans la deuxième. Rebelote.', renseignement: 'vehicule', motsCles }
+      expect(() => decouper(B1), String(motsCles)).toThrow(/« vehicule » sans mot-clé/)   // témoin : découpée sans rien dire
+      expect(() => fragilites(B1), String(motsCles)).toThrow(/« vehicule » sans mot-clé/)
+    }
   })
 
   it('fragilité : 0,8 pour les mots-clés, de 0 à 0,7 pour les autres, tirée d\'une graine propre à la réplique', () => {
@@ -291,12 +298,13 @@ describe('un renseignement s\'apprend à la fin de sa réplique, si ses mots-cl�
     expect(acquis(A1, arrive.vus)).toBe(true)                               // témoin : acquis par proximité au début, faux
   })
 
-  it('un seul mot-clé masqué suffit à le perdre ; une réplique sans renseignement n\'apprend rien', () => {
+  it('un seul mot-clé masqué suffit à le perdre ; sans renseignement, rien ; un renseignement sans mot-clé est une erreur', () => {
     const tous = decouper(A1).map(() => true)
     expect(acquis(A1, tous)).toBe(true)
     expect(acquis(A1, tous.map((v, i) => i !== 8))).toBe(false)              // « route, » masqué
     expect(acquis(A1, [])).toBe(false)
     expect(acquis({ texte: A1.texte, motsCles: ['vieille route'] }, tous)).toBe(false)   // sans renseignement
-    expect(acquis({ texte: 'Belote.', renseignement: 'vehicule' }, [true])).toBe(false)  // sans mot-clé
+    // sans mot-clé : un oubli dans src/bar/textes.js, jamais un « non » silencieux (témoin : faux, en silence)
+    expect(() => acquis({ texte: 'Belote.', renseignement: 'vehicule' }, [true])).toThrow(/« vehicule » sans mot-clé/)
   })
 })

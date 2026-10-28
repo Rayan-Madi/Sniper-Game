@@ -71,7 +71,10 @@ export const SIEGES = Object.freeze([
   chaise('C', 'nord'), chaise('C', 'sud'), chaise('C', 'ouest'),
   chaise('D', 'ouest'),                                  // la place d'écoute de la table A, tournée vers la télé
   chaise('D', 'nord', 'albert', TELE),                   // Albert regarde la course
-  chaise('A', 'ouest', 'dussart', PORTE),                // Dussart, face à la porte
+  // Dussart, face à la porte, mais adossé à rien : « dos au mur, face à la porte » (spec §3.2) n'est tenu par aucune
+  // chaise de A, la porte étant dans le mur de la vitrine. Place provisoire, à reprendre avec B9 et B10 (A-sud contre
+  // la vitrine, ou une banquette), puis relancer le tableau des places (spec §3.1, « Réglé en B2 »).
+  chaise('A', 'ouest', 'dussart', PORTE),
   chaise('A', 'nord', 'lenoir'),                         // Lenoir, dos à la salle
   chaise('B', 'nord', 'haas'),                           // Haas, face à la salle
   chaise('B', 'sud', 'mattei'),                          // Mattei, dos à la salle
@@ -176,8 +179,12 @@ export const BOITES = Object.freeze([...murs, ...meubles, ...personnes])
 
 // ─── Les zones ─────────────────────────────────────────────────────
 // interdite : derrière le zinc et l'arrière-cuisine (la jauge monte, Fernand voit toujours le zinc) ; privee : 2,5 m
-// autour des tables A et B ; discrete : le couloir des toilettes et le WC (hors de vue de tous, sauf de qui y passe) ;
-// comptoir : devant le zinc (le premier passage au zinc, les 20 s au zinc). Un rectangle (bornes exclues) ou un cercle.
+// autour des tables A et B ; discrete : le couloir des toilettes, son sas et le WC, à l'écart de la salle ; comptoir :
+// devant le zinc (le premier passage au zinc, les 20 s au zinc). Un rectangle (bornes exclues) ou un cercle.
+// La zone discrète est un lieu, jamais un verdict de vue : qui y voit Viktor se décide toujours par vueLibre et le cône
+// de chacun (tâches B3 et B11), y compris pour la baisse « hors de la vue de tous », jamais par dansZone('discrete').
+// Son couloir s'ouvre au sud sur la salle : on voit son sas de presque partout, et le couloir lui-même de loin dans
+// son axe (du centre de la table A, jusqu'à 1,6 m au-delà du mur nord ; de la place de Fernand, 0,75 m).
 
 export const TYPES_ZONE = Object.freeze(['interdite', 'privee', 'discrete', 'comptoir'])
 const rect = (zone, minX, maxX, minZ, maxZ) => Object.freeze({ zone, minX, maxX, minZ, maxZ })
