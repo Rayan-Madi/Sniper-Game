@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { playCinematic, registerScene } from '../../src/briefing/index.js'
 import { estimate } from '../../src/briefing/kit.js'
+import { SCENES } from '../../scripts/port-maquette.mjs'
 
 // Gardes du montage des cinématiques (spec cinématiques v2, §0 et §3.1, G1 à G3), écrites sur la v1 avant tout
 // enrichissement : même durée, même texte, même montage. Une seule lecture complète par cas, sous faux minuteurs,
@@ -14,9 +15,11 @@ import { estimate } from '../../src/briefing/kit.js'
 // - G3 : chaque événement [t, id, ±classe] de la v1 (references/chronologie-v1.json) arrive au même instant ; la v2
 //   peut en ajouter. Habillage du kit ignoré : ids k-*, classes k-* (préchargement), gl et shake (les glitchs
 //   d'ambiance tombent au hasard). Sous faux minuteurs, un minuteur de 0 ms créé pendant l'avance part 1 ms plus
-//   tard : un repère à 0 ms d'un temps est relevé 1 ms après son début, dans la v1 comme dans la v2.
-// m5 est mis de côté tant que le chantier du bar n'est pas fusionné : il réécrit briefing-m5.html, ses références
-// s'écriront en C16 depuis sa version (comme l'exception m5 de G6).
+//   tard : un repère à 0 ms d'un temps est relevé 1 ms après son début, dans la v1 comme dans la v2. Si une montée
+//   de vitest change ce décalage, G3 rougit sans que le montage ait bougé : lire d'abord les « vu à … ms » de l'échec.
+// Scènes hors des gardes, nommées avec leur raison dans HORS_GARDE : m5 tant que le chantier du bar n'est pas
+// fusionné (il réécrit briefing-m5.html, ses références s'écriront en C16 depuis sa version, comme l'exception m5
+// de G6), ainsi que m5b et killcam, que leurs chantiers créeront. Une scène de SCENES sans cas ni raison rougit.
 // Références : ECRIRE_REFERENCES=1 npx vitest run tests/briefing/montage.test.js ajoute les cas absents et ne
 // réécrit jamais un cas déjà écrit. Changer une référence existante demande une décision écrite dans la spec, puis
 // une retouche à la main de la seule entrée concernée.
@@ -24,8 +27,9 @@ import { estimate } from '../../src/briefing/kit.js'
 const FAKE = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] }
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
 
-// Vitest se lance à la racine du dépôt (import.meta.url n'est pas une URL file: sous jsdom).
-const REFERENCES = join(process.cwd(), 'tests', 'briefing', 'references')
+// Chemin pris depuis ce fichier (__dirname, comme tests/briefing/kit.test.js), pas depuis le dossier courant : lancée
+// d'ailleurs (vitest --root), la garde lit et écrit toujours ces références-ci.
+const REFERENCES = join(__dirname, 'references')
 const FICHIERS = { repliques: join(REFERENCES, 'repliques-v1.json'), chronologie: join(REFERENCES, 'chronologie-v1.json') }
 const ECRIRE = process.env.ECRIRE_REFERENCES === '1'
 const refs = Object.fromEntries(Object.entries(FICHIERS).map(([nom, f]) => [nom, existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : {}]))
@@ -36,6 +40,14 @@ const CAS = [
   ['epilogue', { port: 'libres' }, 48534], ['epilogue', { port: 'enfermes' }, 48906],
   ['prologue-a', {}, 21272], ['prologue-b', {}, 65840],
 ]
+// Scènes du convertisseur (SCENES de scripts/port-maquette.mjs) que G1 à G3 ne gardent pas, chacune avec sa raison
+// (spec §3.1, « Portée ») ; toute autre scène de SCENES a son cas dans CAS. m5b et killcam n'existent pas encore :
+// le bar (B15) et le lot 4 (K8) les ajouteront à SCENES sans toucher à ce fichier. C16 fait passer m5 et m5b dans CAS.
+const HORS_GARDE = {
+  m5: 'C16 : le chantier du bar réécrit briefing-m5.html, références écrites depuis sa version',
+  m5b: 'C16 : briefing II du chantier du bar (B15), références écrites depuis sa version',
+  killcam: 'kill-cam du lot 4 (K8) : scène pilotée par data, sans version v1',
+}
 const cleDe = (id, params) => id + (Object.keys(params).length ? '?' + new URLSearchParams(params) : '')
 
 // Durée d'un temps selon le séquenceur : un temps parlé dure pre + estimation + max(post ?? 350, min - pre -
@@ -196,4 +208,12 @@ it('les références couvrent exactement les cas gardés (ni cas oublié, ni ré
   const cles = CAS.map(([id, params]) => cleDe(id, params)).sort()
   expect(Object.keys(refs.repliques).sort()).toEqual(cles)
   expect(Object.keys(refs.chronologie).sort()).toEqual(cles)
+})
+
+it('chaque scène du convertisseur a son cas ici ou sa raison dans HORS_GARDE (aucune scène hors des gardes en silence)', () => {
+  const gardees = new Set(CAS.map(([id]) => id))
+  const oubliees = Object.keys(SCENES).filter(id => !gardees.has(id) && !Object.hasOwn(HORS_GARDE, id))
+  expect(oubliees, 'scènes de SCENES sans cas dans CAS ni raison dans HORS_GARDE').toEqual([])
+  const lesDeux = Object.keys(HORS_GARDE).filter(id => gardees.has(id))
+  expect(lesDeux, 'scènes à la fois dans CAS et dans HORS_GARDE : retirer leur exception').toEqual([])
 })

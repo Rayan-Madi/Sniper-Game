@@ -88,7 +88,7 @@ Rayan, le 28 octobre 2026 : « pour les cinématiques que tu as faites, si tu po
 
 Toutes vertes sur la v1, chacune avec son témoin rouge.
 
-**Portée (intégrateur)** : G1 à G3 couvrent les **neuf cas hors m5** tant que le bar n'est pas fusionné (le bar réécrit `briefing-m5.html`, ses références v1 seraient fausses dès sa fusion) ; les références de `m5` et `m5b` s'écrivent en C16 depuis la version du bar. G4 à G6 s'appliquent à **toute scène de `SCENES`**, donc aussi à `m5b` (bar, B15) et à `killcam` (lot 4, K8) dès qu'elles existent ; une scène sans version v1 a 0 `Math.random` permis (G5) et passe par `K.graine`.
+**Portée (intégrateur)** : G1 à G3 couvrent les **neuf cas hors m5** tant que le bar n'est pas fusionné (le bar réécrit `briefing-m5.html`, ses références v1 seraient fausses dès sa fusion) ; les références de `m5` et `m5b` s'écrivent en C16 depuis la version du bar. Chaque scène de `SCENES` a son cas dans G1 à G3 ou sa raison, nommée, dans `HORS_GARDE` (`tests/briefing/montage.test.js`) : `m5` et `m5b` jusqu'à C16, `killcam` (pilotée par `data`, sans version v1 : G1 à G3 ne s'y appliquent pas, tâche K8 de `kill-cams-plan.md`) ; une scène ajoutée sans l'un ni l'autre rougit. G4 à G6 s'appliquent à **toute scène de `SCENES`**, donc aussi à `m5b` (bar, B15) et à `killcam` (lot 4, K8) dès qu'elles existent ; une scène sans version v1 a 0 `Math.random` permis (G5) et passe par `K.graine`.
 
 | | Garde | Comment | Témoin rouge |
 |---|---|---|---|
