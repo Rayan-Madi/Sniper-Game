@@ -73,8 +73,9 @@ export function solSous(x, z, solides, { depuis, sol = 0 }) {
 }
 
 // Œil au poste, regard vers le point visé, champ de la lunette (60 / zoom), puis le profil de la mission : plans
-// proche et lointain, brume (de la couleur de celle de la carte, ou de son fond), position du soleil. Un champ nul
-// garde ce que la carte a posé.
+// proche et lointain, brume (de la couleur de celle en place, ou du fond), position du soleil. Un champ nul garde ce
+// qui est en place : la carte avec le profil de sa mission (main.js le pose après elle ; la carte ne pose plus de
+// brume depuis la tâche A3 du lot 3a), ou le sol nu.
 export function appliquerProfil({ camera, scene, sun }, { poste, regard, zoom, near, far, brume, soleil }) {
   camera.position.set(...poste)
   camera.lookAt(...regard)

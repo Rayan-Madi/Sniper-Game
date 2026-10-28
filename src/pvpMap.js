@@ -1,7 +1,8 @@
 import * as THREE from 'three'
-import { scene, setLighting } from './scene.js'
+import { scene, camera, sun, setLighting } from './scene.js'
 import { clearMap } from './maps/index.js'
 import { disposeObject } from './gfx/dispose.js'
+import { PROFIL_HORS_MISSION, applyCameraProfile } from './gfx/cameraProfile.js'
 
 // ─── Arène PvP dédiée : grande fête d'appartement nocturne ───────────
 // Auto-contenue (ne partage pas le tableau d'objets de src/maps/) pour ne
@@ -54,12 +55,17 @@ export function getPvpColliders() { return objects }
 const ROOM = { minX: -24, maxX: 24, frontZ: -12, backZ: -36, ceilY: 11 }
 const ROOM_CZ = (ROOM.frontZ + ROOM.backZ) / 2   // centre en Z (-24)
 
+// Profil de caméra de l'arène (spec du lot 3, §2 b ; src/gfx/cameraProfile.js) : le profil hors mission, avec la brume
+// de la nuit de la fête. Reposé à chaque manche : une mission au plan lointain, à la brume ou au soleil à elle ne
+// déborde pas sur le PvP.
+const PROFIL_ARENE = { ...PROFIL_HORS_MISSION, brume: { type: 'lin', couleur: 0x0a0a14, debut: 70, fin: 160 } }
+
 export function buildPvpArena() {
   clearPvpMap()
   clearMap()   // retire le décor du mode histoire (ex: la rue affichée derrière le menu)
   setLighting({ ambientI: 1.25, sunI: 0.55, fillI: 0.65, sunColor: 0x9fb0dc, ambColor: 0xa6b2d6 })
   scene.background = new THREE.Color(0x0a0a14)
-  scene.fog = new THREE.Fog(0x0a0a14, 70, 160)
+  applyCameraProfile(camera, scene, sun, PROFIL_ARENE)
 
   // Sol extérieur (rue entre les immeubles)
   plane(120, 120, 0x1a1a1a)

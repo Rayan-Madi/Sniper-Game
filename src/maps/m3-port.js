@@ -10,8 +10,7 @@ import { clear, add, box, plane, cylinder, solide, setMapAmbient } from './prims
 export function buildMapDocks() {
   clear()
   setLighting({ ambientI: 0.9, sunI: 0.7, fillI: 0.45, sunColor: 0x9fb0dd, ambColor: 0x8fa0c4 })
-  scene.background = new THREE.Color(0x0a1520)
-  scene.fog = new THREE.Fog(0x0a1520, 35, 95)
+  scene.background = new THREE.Color(0x0a1520)   // la brume : profil de la mission (missions/m3.js), posé au montage
 
   // ── SOL ──────────────────────────────────────────────────────────────
   plane(200, 200, 0x252520)

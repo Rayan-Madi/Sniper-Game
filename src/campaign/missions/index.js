@@ -29,8 +29,8 @@
 //                est celui de base, que l'amélioration Lunette relève (getStats, src/upgrades.js : +2 par niveau)
 //   profil       profil de caméra (spec §2 b) : near et far (m) ; brume { type: 'lin', couleur, debut, fin } ou
 //                { type: 'exp2', couleur, densite } ; soleil { pos, cible } ; cadreOmbre, le demi-côté du cadre d'ombre
-//                du soleil (m). Aujourd'hui, la carte pose sa brume et src/scene.js le reste (tâche A3 : appliqué au
-//                montage, remis à zéro hors mission).
+//                du soleil (m). mountLevel l'applique après la carte (applyCameraProfile, src/gfx/cameraProfile.js),
+//                qui ne pose plus de brume ; hors mission (menu, PvP, fin de l'enquête), le profil hors mission revient.
 //   casting      { cibles, gardes, civils }. cibles : une entrée par cible ; {} : un modèle tiré dans le pool des cibles,
 //                posé au hasard dans la zone. Facultatifs : place (une ancre de places, où la cible est posée au lieu du
 //                hasard), pool (le pool de src/characters.js où son modèle est tiré : 'target', 'guard' ou 'civilian'),

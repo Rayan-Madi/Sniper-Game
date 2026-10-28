@@ -14,7 +14,11 @@ import * as THREE from 'three'
 // Les cartes (src/maps/) posent leurs objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
 vi.mock('../src/scene.js', async () => {
   const THREE = await import('three')
-  return { scene: new THREE.Scene(), setLighting: () => {} }
+  // Caméra et soleil : le décor du menu y pose son profil de caméra (src/gfx/cameraProfile.js)
+  return {
+    scene: new THREE.Scene(), setLighting: () => {},
+    camera: new THREE.PerspectiveCamera(), sun: new THREE.DirectionalLight(),
+  }
 })
 
 import { scene } from '../src/scene.js'

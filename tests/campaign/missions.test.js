@@ -30,12 +30,17 @@ const { MISSIONS, missionFor, ancresCitees, resoudreAncres, nombreDeCivils } = a
 const ROOT = resolve(__dirname, '../..')
 const DOSSIER = join(ROOT, 'src', 'campaign', 'missions')
 
-// La carte de chaque mission, construite une fois (hasard à graine), et la brume qu'elle pose.
+// La carte de chaque mission, construite une fois (hasard à graine) sur une brume témoin, avec la brume et le ciel
+// (fond) qu'elle laisse : depuis la tâche A3, la brume est celle du profil de sa mission, posée au montage (mountLevel),
+// et la carte n'y touche plus.
+const BRUME_TEMOIN = { temoin: 'la brume d\'avant la carte' }
 const cartes = MAP_BUILDERS.map((build, i) => {
+  scene.fog = BRUME_TEMOIN
   const info = withSeed(1000 + i, build)
-  return { info, brume: scene.fog }
+  return { info, brume: scene.fog, fond: scene.background }
 })
 clearMap()
+scene.fog = null
 
 // Forme de chaque sorte d'ancre (voir l'en-tête de src/campaign/missions/index.js), relue ici sans le module. La garde
 // « la copie des formes connaît chaque sorte que cite le module », plus bas, vérifie qu'elle n'en oublie aucune.
@@ -342,25 +347,35 @@ describe('nombreDeCivils', () => {
   })
 })
 
-// Valeurs du jeu d'aujourd'hui pour les champs que les tâches suivantes brancheront (A3 : le profil de caméra, A5 : le
-// zoom) : elles partent de ce que le jeu fait déjà, pris là où il le fait.
+// Valeurs du jeu d'aujourd'hui pour les champs que les tâches du socle branchent (A3 : le profil de caméra, A5 : le
+// zoom) : elles partent de ce que le jeu faisait déjà, pris là où il le faisait. Les sous-lots 3b à 3d y mettent les
+// vraies, mission par mission : ils changent alors ces relevés, sciemment.
+//
+// Brume que posait chaque carte avant la tâche A3 (src/maps/, commit 69ab74a, scene.fog = new THREE.Fog(couleur, début,
+// fin)), de M1 à M6 : la tâche l'a passée dans le profil de sa mission, et la carte garde un ciel (son fond) de la même
+// couleur. Plans de la caméra (0,1 et 200 m), soleil (20, 40, 10) et cadre d'ombre (±60 m) : ceux d'initScene avant la
+// tâche (src/scene.js), communs à toutes les cartes ; la cible du soleil, celle de three par défaut (l'origine).
+const BRUMES_D_AVANT_A3 = [
+  [0x87a0b0, 50, 140], [0x0a0a18, 40, 100], [0x0a1520, 35, 95], [0x9ab0c0, 70, 160], [0xb0a088, 80, 180], [0x0a0a14, 60, 130],
+]
 describe('valeurs du jeu d\'aujourd\'hui', () => {
-  it('profil : la brume que pose la carte ; plans de la caméra, soleil et cadre d\'ombre de src/scene.js', () => {
-    const src = readFileSync(join(ROOT, 'src', 'scene.js'), 'utf8')
-    const plans = /new THREE\.PerspectiveCamera\(60, innerWidth \/ innerHeight, ([\d.]+), ([\d.]+)\)/.exec(src)
-    const soleil = /sun\.position\.set\(([-\d., ]+)\)/.exec(src)
-    const cadre = /sun\.shadow\.camera\.right = ([\d.]+)/.exec(src)
-    expect(plans && soleil && cadre, 'src/scene.js : caméra, soleil ou cadre d\'ombre introuvable').toBeTruthy()
+  it('profil : la brume que posait sa carte ; plans de la caméra, soleil et cadre d\'ombre d\'avant la tâche A3', () => {
     MISSIONS.forEach((m, i) => {
-      const f = cartes[i].brume
-      expect(f.isFog && !f.isFogExp2, `M${m.numero} : brume linéaire`).toBe(true)
+      const [couleur, debut, fin] = BRUMES_D_AVANT_A3[i]
       expect(m.profil, `M${m.numero}`).toEqual({
-        near: +plans[1], far: +plans[2],
-        brume: { type: 'lin', couleur: f.color.getHex(), debut: f.near, fin: f.far },
-        soleil: { pos: soleil[1].split(',').map(Number), cible: [0, 0, 0] },   // la cible par défaut de three
-        cadreOmbre: +cadre[1],
+        near: 0.1, far: 200,
+        brume: { type: 'lin', couleur, debut, fin },
+        soleil: { pos: [20, 40, 10], cible: [0, 0, 0] },
+        cadreOmbre: 60,
       })
     })
+  })
+
+  // Témoin : avant la tâche A3 (commit 69ab74a), chaque carte posait sa brume (vu rouge pour les six).
+  it('la carte ne pose plus de brume (celle du profil de sa mission la remplace au montage), et garde son ciel', () => {
+    const posent = cartes.flatMap((c, i) => (c.brume === BRUME_TEMOIN ? [] : [`M${i + 1}`]))
+    expect(posent, 'cartes qui posent encore leur brume').toEqual([])
+    expect(cartes.map(c => c.fond && c.fond.getHex())).toEqual(BRUMES_D_AVANT_A3.map(([couleur]) => couleur))
   })
 
   it('zoom : ×4 au départ et ×3 au moins (main.js), ×6 au plus sans la Lunette (getStats, src/upgrades.js)', () => {

@@ -4,15 +4,20 @@
 // qu'elle était au découpage de src/maps.js : le sous-lot 3b réécrit M1 (m1-rue.js) sans toucher au menu, qui garde
 // ses références du memtest du lot 1 et les immeubles autour desquels tourne sa caméra. Pas de zone d'apparition,
 // de poste ni d'écho : le menu n'est pas une mission.
+// Son profil de caméra est le profil hors mission (src/gfx/cameraProfile.js : plans de 0,1 à 200 m, sa brume de 50 à
+// 140 m, soleil en (20, 40, 10) visé vers l'origine, cadre d'ombre de ±60 m), reposé à chaque montage : une mission
+// quittée (showMenu) ou une manche PvP (QUITTER) n'y laisse ni son plan lointain, ni sa brume, ni son soleil (spec du
+// lot 3, §2 b).
 import * as THREE from 'three'
-import { scene, setLighting } from '../scene.js'
+import { scene, camera, sun, setLighting } from '../scene.js'
+import { resetCameraProfile } from '../gfx/cameraProfile.js'
 import { clear, add, box, plane, cylinder, tree, car, building, solide } from './prims.js'
 
 export function buildMenuDecor() {
   clear()
   setLighting({ ambientI: 0.65, sunI: 1.2, fillI: 0.4, sunColor: 0xfff0cc })
   scene.background = new THREE.Color(0x87a0b0)
-  scene.fog = new THREE.Fog(0x87a0b0, 50, 140)
+  resetCameraProfile(camera, scene, sun)
 
   plane(200, 200, 0x7a8a6a)
   plane(8, 80, 0x444444, 0.01)  // route

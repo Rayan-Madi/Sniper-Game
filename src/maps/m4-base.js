@@ -10,8 +10,7 @@ import { clear, add, box, plane, cylinder, solide } from './prims.js'
 export function buildMapMilitary() {
   clear()
   setLighting({ ambientI: 0.75, sunI: 1.4, fillI: 0.5, sunColor: 0xffffe0 })
-  scene.background = new THREE.Color(0x9ab0c0)
-  scene.fog = new THREE.Fog(0x9ab0c0, 70, 160)
+  scene.background = new THREE.Color(0x9ab0c0)   // la brume : profil de la mission (missions/m4.js), posé au montage
 
   // Sol béton clair (cour de manœuvre)
   plane(200, 200, 0x8a8a7a)

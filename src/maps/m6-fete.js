@@ -11,8 +11,7 @@ export function buildMapParty() {
   clear()
   // Assez de lumière pour distinguer les PNJ, tout en gardant l'ambiance nuit
   setLighting({ ambientI: 0.85, sunI: 0.55, fillI: 0.4, sunColor: 0x8fa0cc, ambColor: 0x93a2c6 })
-  scene.background = new THREE.Color(0x0a0a14)
-  scene.fog = new THREE.Fog(0x0a0a14, 60, 130)
+  scene.background = new THREE.Color(0x0a0a14)   // la brume : profil de la mission (missions/m6.js), posé au montage
 
   // Sol rue entre les deux immeubles (légèrement sous 0 pour éviter le z-fight
   // avec le parquet de la salle, qui est calé pile au niveau des pieds y=0)

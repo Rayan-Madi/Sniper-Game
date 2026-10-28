@@ -29,6 +29,7 @@ import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController, npcCastsShadow } from './gfx/quality.js'
 import { onPixelRatioChange } from './gfx/pixelRatio.js'
+import { applyCameraProfile, resetCameraProfile } from './gfx/cameraProfile.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
 import { prepareDuringBriefing, afterPaint } from './campaign/prepare.js'
 import { bindFullscreenButton } from './comfort.js'
@@ -392,7 +393,7 @@ function investigate(onNext, options = {}) {
     if (run.ended) return
     run.ended = true
     if (enquete === run) enquete = null
-    if (run.handle) { try { run.handle.stop() } catch (e) { console.error('[enquête]', e) } }
+    stopInvestigation(run)
     releaseMouse()
     gamePhase = 'briefing'          // la suite est une cinématique : plus de rendu WebGL
     clock.getDelta()
@@ -419,7 +420,14 @@ function abortInvestigation() {
   const run = enquete
   if (!run) return
   enquete = null; run.ended = true
+  stopInvestigation(run)
+}
+// Fin de l'enquête, achevée (run.next) ou abandonnée (abortInvestigation) : elle se démonte et rend la caméra telle
+// qu'elle l'a trouvée, puis le profil de caméra repart du profil hors mission (spec du lot 3, §2 b ;
+// src/gfx/cameraProfile.js), quel qu'il fût à son départ.
+function stopInvestigation(run) {
   if (run.handle) { try { run.handle.stop() } catch (e) { console.error('[enquête]', e) } }
+  resetCameraProfile(camera, scene, sun)
 }
 
 // Briefing de la mission au premier essai seulement (ou sur demande), puis le niveau.
@@ -588,6 +596,11 @@ function mountLevel(n) {
   // La carte de la mission (cyclique au-delà de 6), puis les lieux qu'elle cite parmi ses ancres
   const mapIdx = (n - 1) % MAP_BUILDERS.length
   currentMapInfo = MAP_BUILDERS[mapIdx]()
+  // Profil de caméra de la mission (spec du lot 3, §2 b ; src/gfx/cameraProfile.js) : plans proche et lointain, brume,
+  // position et cible du soleil, cadre d'ombre. Après la carte, qui règle ses lumières (setLighting remet le soleil à sa
+  // place par défaut) et ne pose plus de brume ; avant la compilation des shaders (prepareLevel), qui dépendent de la
+  // brume. Hors mission, le décor du menu, l'arène du PvP et la fin de l'enquête reposent le profil hors mission.
+  applyCameraProfile(camera, scene, sun, m.profil)
   // Écho de la carte (spec du lot 2, §3.5) : sa réponse impulsionnelle est générée ici, pendant le briefing, pas au
   // premier tir ; aucun son n'est joué
   mountEcho(currentMapInfo.acoustics)
@@ -1769,7 +1782,12 @@ if (import.meta.env.DEV) {
       const n = config.carte ?? upgradeState.currentLevel
       let carte = null
       if (n === 'nu') { clearMap(); setLighting() }
-      else carte = MAP_BUILDERS[(n - 1) % MAP_BUILDERS.length]()
+      else {
+        // La carte, avec le profil de sa mission, comme au montage : sa brume (la carte n'en pose plus), dont la sonde
+        // garde la couleur ; puis la sonde pose le sien
+        carte = MAP_BUILDERS[(n - 1) % MAP_BUILDERS.length]()
+        applyCameraProfile(camera, scene, sun, missionFor(n).profil)
+      }
       etat = monterSonde({ renderer, scene, camera, sun }, config, {
         carte, solides: solidMeshes(), modele: loadedModel, ombre: npcCastsShadow(quality.npcShadows, 'civil'),
         fenetre: [innerWidth, innerHeight],

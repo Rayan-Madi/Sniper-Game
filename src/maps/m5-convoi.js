@@ -11,8 +11,7 @@ import { clear, add, box, plane, cylinder, solide } from './prims.js'
 export function buildMapConvoy() {
   clear()
   setLighting({ ambientI: 0.8, sunI: 1.5, fillI: 0.5, sunColor: 0xffe8c0, ambColor: 0xfff0e0 })
-  scene.background = new THREE.Color(0xb0a088)
-  scene.fog = new THREE.Fog(0xb0a088, 80, 180)
+  scene.background = new THREE.Color(0xb0a088)   // la brume : profil de la mission (missions/m5.js), posé au montage
 
   // Désert
   plane(300, 300, 0xa89878)

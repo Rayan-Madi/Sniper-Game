@@ -5,7 +5,11 @@ import { describe, it, expect, vi } from 'vitest'
 // lumières. Depuis la tâche A1 du lot 3a, le menu a son décor à lui (src/maps/menu.js) : il est libéré comme une carte.
 vi.mock('../../src/scene.js', async () => {
   const THREE = await import('three')
-  return { scene: new THREE.Scene(), setLighting: () => {} }
+  // Caméra et soleil : le décor du menu y pose son profil de caméra (src/gfx/cameraProfile.js)
+  return {
+    scene: new THREE.Scene(), setLighting: () => {},
+    camera: new THREE.PerspectiveCamera(), sun: new THREE.DirectionalLight(),
+  }
 })
 
 import { scene } from '../../src/scene.js'

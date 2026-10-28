@@ -9,8 +9,7 @@ import { clear, add, box, plane, cylinder, tree, car, building, solide } from '.
 export function buildMapStreet() {
   clear()
   setLighting({ ambientI: 0.65, sunI: 1.2, fillI: 0.4, sunColor: 0xfff0cc })
-  scene.background = new THREE.Color(0x87a0b0)
-  scene.fog = new THREE.Fog(0x87a0b0, 50, 140)
+  scene.background = new THREE.Color(0x87a0b0)   // la brume : profil de la mission (missions/m1.js), posé au montage
 
   plane(200, 200, 0x7a8a6a)
   plane(8, 80, 0x444444, 0.01)  // route

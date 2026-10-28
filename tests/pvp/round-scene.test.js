@@ -12,6 +12,7 @@ vi.mock('../../src/scene.js', async () => {
   return {
     scene: new THREE.Scene(),
     camera: new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 500),
+    sun: new THREE.DirectionalLight(),   // l'arène du PvP et le décor du menu y posent leur profil de caméra
     renderer: { render() {}, domElement: document.createElement('canvas') },
     setLighting() {},
   }

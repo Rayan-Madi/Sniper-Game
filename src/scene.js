@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { PROFIL_HORS_MISSION, resetCameraProfile } from './gfx/cameraProfile.js'
 
 export let scene, camera, renderer
 export let ambient, sun, fill
@@ -6,9 +7,9 @@ export let ambient, sun, fill
 export function initScene() {
   scene = new THREE.Scene()
   scene.background = new THREE.Color(0x87a0b0)
-  scene.fog = new THREE.Fog(0x87a0b0, 40, 120)
 
-  camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200)
+  // Plans proche et lointain : ceux du profil hors mission, posés en fin d'initScene (resetCameraProfile)
+  camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight)
   camera.position.set(0, 8, 30)
   camera.lookAt(0, 0, 0)
 
@@ -29,21 +30,21 @@ export function initScene() {
   ambient = new THREE.AmbientLight(0xfff0e0, 0.6)
   scene.add(ambient)
 
+  // Position et cible du soleil, cadre de son ombre : ceux du profil hors mission (resetCameraProfile, plus bas)
   sun = new THREE.DirectionalLight(0xfff0cc, 1.2)
-  sun.position.set(20, 40, 10)
   sun.castShadow = true
   sun.shadow.mapSize.set(2048, 2048)
   sun.shadow.camera.near = 0.5
   sun.shadow.camera.far = 200
-  sun.shadow.camera.left = -60
-  sun.shadow.camera.right = 60
-  sun.shadow.camera.top = 60
-  sun.shadow.camera.bottom = -60
   scene.add(sun)
 
   fill = new THREE.DirectionalLight(0xc0d8ff, 0.4)
   fill.position.set(-10, 10, -10)
   scene.add(fill)
+
+  // Profil de caméra hors mission (spec du lot 3, §2 b ; src/gfx/cameraProfile.js) : plans de 0,1 à 200 m, brume du
+  // menu, soleil en (20, 40, 10) visé vers l'origine, cadre d'ombre de ±60 m. Une mission pose le sien au montage.
+  resetCameraProfile(camera, scene, sun)
 
   // NOTE : pas de buildEnvironment() ici — chaque map construit son propre décor
   // (sinon les bâtiments de la rue se superposeraient sur toutes les maps)
@@ -75,13 +76,18 @@ export function applyRenderQuality({ pixelRatio, shadowSize }, scale = 1, target
   }
 }
 
-// Règle l'éclairage selon l'ambiance de la map (jour / nuit / intérieur)
-export function setLighting({ ambientI = 0.6, sunI = 1.2, fillI = 0.4, sunColor = 0xfff0cc, ambColor = 0xfff0e0 } = {}) {
+// Règle l'éclairage selon l'ambiance de la map (jour / nuit / intérieur). sunPos : la position du soleil, celle du
+// profil hors mission par défaut, (20, 40, 10) : chaque décor qui règle ses lumières (cartes, menu, arène du PvP, sol nu
+// de la sonde) remet le soleil à sa place, et le soleil d'une mission (son profil, appliqué après sa carte) ne déborde
+// pas sur le décor suivant (spec du lot 3, §2 b).
+export function setLighting({ ambientI = 0.6, sunI = 1.2, fillI = 0.4, sunColor = 0xfff0cc, ambColor = 0xfff0e0,
+  sunPos = PROFIL_HORS_MISSION.soleil.pos } = {}) {
   if (!ambient) return
   ambient.intensity = ambientI
   ambient.color.setHex(ambColor)
   sun.intensity = sunI
   sun.color.setHex(sunColor)
+  sun.position.set(...sunPos)
   fill.intensity = fillI
 }
 

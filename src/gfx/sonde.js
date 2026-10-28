@@ -42,7 +42,7 @@ export function lireBrume(v) {
 export const nomDeModele = v => v.split(/[?#]/)[0].split('/').pop().replace(/\.glb$/i, '')
 
 // Paramètres de la route (location.search), ou null sans sonde=1. Une valeur illisible vaut null (la scène garde
-// alors ce que la carte a posé, voir sondeScene.js) :
+// alors ce qui est en place, la carte et le profil de sa mission, voir sondeScene.js) :
 //   poste=x,y,z (œil), regard=x,y,z (point visé, sous lequel se posent les personnages), near=… far=… (m ; far plus
 //   loin que near), brume=lin:debut:fin | exp2:densite, soleil=x,y,z (position du soleil, qui vise l'origine),
 //   zoom=… (grossissement de la lunette, au moins 1 : champ vertical de 60 / zoom), qualite=auto|bas|moyen|haut,

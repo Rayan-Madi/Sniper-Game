@@ -10,8 +10,7 @@ import { clear, add, box, plane, cylinder, car, building, solide } from './prims
 export function buildMapWarehouse() {
   clear()
   setLighting({ ambientI: 0.85, sunI: 0.6, fillI: 0.4, sunColor: 0x9fb0dd, ambColor: 0x8fa0c8 })
-  scene.background = new THREE.Color(0x0a0a18)
-  scene.fog = new THREE.Fog(0x0a0a18, 40, 100)
+  scene.background = new THREE.Color(0x0a0a18)   // la brume : profil de la mission (missions/m2.js), posé au montage
 
   // Grande place dallée au sol
   plane(60, 60, 0x3a3a3a)
