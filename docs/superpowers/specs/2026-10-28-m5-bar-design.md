@@ -208,6 +208,11 @@ f_p ← fixe ? f_p + dt : max(0, f_p − 2·dt)
 | Lise | Autre chose ? | Je ne suis pas au menu. | |
 | Fernand | Encore un ? | | |
 - La première fois, Viktor pense : « Ne les fixe pas. » Lise le dit aussi (D3, L2).
+- **Réglé en B3** [V, 28 octobre 2026] : `src/bar/regard.js` (`seuilFixation`, `voitViktor`, `createRegards`), tenu par `tests/bar/regard.test.js`. Ce que le tableau ci-dessus laissait ouvert, et que B11 et B12 gardent :
+  - les répliques tombent quand `f_p` atteint la tolérance, puis la tolérance plus 1,5 s, puis plus 3 s, une fois chacune par épisode : regard détourné, `f_p` redescend et la suite attend que la fixation reprenne et dure ;
+  - la remarque tombe à la fin de l'image où `f_p` atteint la tolérance, la montée « fixation » part de l'image suivante. Une image du bar fait, dans cet ordre : `regards.update`, la jauge (`update` avec `regards.sources` et `regards.temoins`), puis `evenement('remarque', categorie)` pour chaque remarque émise : l'exemple du §3.6 donne alors 30 et plancher 10 tout juste (test) ;
+  - les témoins de la jauge (§3.6), baisse « hors de la vue de tous » comprise, sont `regards.temoins` : la catégorie de chaque personne qui voit Viktor (cône de 70°, ou 110° pendant ses 10 s d'alerte, et `vueLibre`). L'interlocuteur en est un, même s'il n'est jamais fixé ; Albert aussi, sans poids. Reste à B11 « Fernand voit toujours le zinc » : en zone interdite, il est témoin quoi que dise son cône ;
+  - chaque personne donne à chaque image sa tête (os Head, en x, y, z) et le lacet de sa face ; `voitViktor` mesure le cône depuis ce lacet (au repos, celui du siège dans `plan.js`).
 
 ### 3.6 La jauge de soupçon (`src/bar/soupcon.js`, pur ; valeurs dans `src/bar/reglages.js`)
 ```

@@ -41,9 +41,10 @@ export const ECOUTE = {
 }
 
 // ─── Le regard qui fixe (§3.5) ─────────────────────────────────────
-// Viktor fixe une personne quand le centre de l'écran est à moins de atan(rayonTeteM / d) + margeDeg de sa tête (d : la
-// distance), qu'elle le voit et qu'elle n'est pas son interlocuteur. Son temps de fixation monte tant que cela dure et
-// redescend sinon ; au-delà de la tolérance, elle remarque Viktor (événement « remarque » de la jauge de soupçon).
+// Viktor fixe une personne (src/bar/regard.js) quand le centre de l'écran est à moins de atan(rayonTeteM / d) + margeDeg
+// de sa tête (d : la distance), qu'elle le voit et qu'elle n'est pas son interlocuteur. Son temps de fixation monte tant
+// que cela dure et redescend sinon ; au-delà de la tolérance, elle remarque Viktor (événement « remarque » de la jauge de
+// soupçon).
 export const REGARD = {
   rayonTeteM: 0.1,      // demi-largeur de la tête visée (m) : seuil de 6,8° à 1,5 m, 5,9° à 2 m, 4,9° à 3 m, 4,1° à 5 m
   margeDeg: 3,          // ajoutée à l'angle de la tête : le centre de l'écran n'a pas besoin d'être pile sur elle
