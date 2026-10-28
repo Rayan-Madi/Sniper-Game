@@ -27,7 +27,7 @@
 | G2, après la fusion du bar de M5 dans `main` | C16 (M5 : briefing I et briefing II) | `cine-v2` rebasée sur `main` | quand `m5-bar` est fusionnée ; c'est elle qui possède `briefing-m5.html` et `briefing-m5b.html` |
 | G3, vérification contre le lot 3 | dans C17 : libellés « ZÉRO n m » contre le télémètre (tâche A4 du lot 3), poste de M1 (3b), portiques et coupe de M3, frise et cercles de M4 (3c) | `cine-v2` rebasée sur `main` | après la fusion de A4 pour les libellés ; après 3b et 3c pour les dessins. Si C17 arrive avant, ces points restent notés dans `REPRISE.md` et se vérifient à la fusion de 3b et 3c |
 | G4 | relecture finale, fusion | `cine-v2` | après C17 |
-| **Fusion intermédiaire (intégrateur)** | C0 à C5 | `cine-v2`, relue puis fusionnée en avance rapide dans `main` | dès C5 relue : la kill-cam (K7, K8) et le bar (B14, B15) écrivent ensuite leurs maquettes sous G4 à G6 et avec `K.anim`, `K.graine`, `.k-encre` ; E0 du lot 5 étend `poids.mjs`. `REPRISE.md` n'est pas touché à cette fusion (seulement en C17) |
+| **Fusion intermédiaire (intégrateur)** | C0 à C5 | `cine-v2`, relue puis fusionnée en avance rapide dans `main` | dès C5 relue et `node scripts/poids.mjs --check --avec-enquete` vert (D1 = A, spec §3.9 critère 5) : la kill-cam (K7, K8) et le bar (B14, B15) écrivent ensuite leurs maquettes sous G4 à G6 et avec `K.anim`, `K.graine`, `.k-encre` ; E0 du lot 5 étend `poids.mjs`. `REPRISE.md` n'est pas touché à cette fusion (seulement en C17) |
 
 - **Ordre dans G1** : C0, C1 et C2 d'abord (C0 indépendante ; C1 avant toute retouche de maquette) ; C3 avant C5 (mesure v1 avant hygiène) ; C4 avant les scènes. Puis C6 à C15 dans l'ordre de la décision D5 (reco : prologue A, prologue B, épilogue, M1, M4, M3, M2, M6 : d'abord la campagne de bout en bout que Rayan revoit en premier).
 - **Pistes parallèles possibles** une fois C0 à C5 faits (sous-agents distincts, maquettes disjointes, une seule régénération à la fois : le port réécrit les 9 scènes) : piste 1, prologues et épilogue ; piste 2, M1 à M3 ; piste 3, M4 et M6. Les captures et mesures restent en série (un seul Chrome).
@@ -94,7 +94,7 @@
 **Fichiers :** `src/briefing/kit.css`, `MQ/kit.css` (`.track`), `MQ/prologue-a.html`, `MQ/prologue-b.html`, `MQ/briefing-m3.html` (pluie, `m3-roll`, `m3-sb`), `MQ/epilogue.html` (respiration des rayons, `EP:271`) ; scènes régénérées ; liste figée de G5 raccourcie d'autant.
 - [ ] Pluie : même motif sur un calque surdimensionné, déplacé d'une tuile en `transform` au lieu de `background-position` ; `.track` en `translateY` au lieu de `top` (`kit.css:18-20`) ; `m3-roll` et `m3-sb` de même ; respiration des rayons sur l'opacité d'un conteneur, plus sur le `g` filtré.
 - [ ] Tests : G5 voit ces `@keyframes` sortir de la liste figée (témoin : la liste de la v1 les contient) ; G1 à G4 verts.
-- [ ] Vérification réelle : captures gelées v1 contre v2 aux mêmes instants (prologue A 6 000, prologue B 4 000, M3 2 000 et 23 000, épilogue 40 000) : identiques à l'octet, ou écart regardé et décrit ; `cine-perf` des quatre scènes, avant contre après, à `--ralenti=4`, ajouté à l'annexe.
+- [ ] Vérification réelle : captures gelées v1 contre v2 aux mêmes instants (prologue A 6 000, prologue B 4 000, M3 2 000 et 23 000, épilogue 40 000) : identiques à l'octet, ou écart regardé et décrit (constat de C0 : sur la v1, deux captures de m2 ou de m3 au même instant diffèrent déjà, spec §1, « Gel des captures » ; mesurer ce bruit avant de lire un écart v1 contre v2) ; `cine-perf` des quatre scènes, avant contre après, à `--ralenti=4`, ajouté à l'annexe.
 - [ ] Commit : `perf(cinematiques): pluie, balayage et rayons animés sans repeindre l'image`
 
 ### Tâche C6 : prologue A
@@ -189,9 +189,9 @@
 ### Tâche C17 : vérification finale
 
 **Fichiers :** `docs/superpowers/REPRISE.md`, `docs/superpowers/specs/annexes/README.md`, l'annexe `2026-10-28-cine-v2.json` ; la spec du chantier rangée dans `docs/superpowers/specs/2026-10-28-cinematiques-v2-design.md` et ce plan dans `docs/superpowers/plans/`.
-- [ ] `npx vitest run --maxWorkers=2` vert ; `npx vite build` ; `node scripts/poids.mjs --check` vert (selon D1).
+- [ ] `npx vitest run --maxWorkers=2` vert ; `npx vite build` ; `node scripts/poids.mjs --check --avec-enquete` vert (D1 = A, spec §3.9 critère 5 ; `--check` seul si D1 = B).
 - [ ] `cine-perf` des 10 cas à `--ralenti=4`, deux passes : chaque scène sous les plafonds de la spec §3.6 (p95 ≤ 22 ms et ≤ 1,15 × la v1, ≤ 40 animations) ; tableau v1 contre v2 dans le README des annexes.
-- [ ] Captures de déterminisme : deux captures du même instant de chaque scène identiques à l'octet.
+- [ ] Captures de déterminisme : deux captures du même instant de chaque scène identiques à l'octet (constat de C0 : sur la v1, m2 et m3 ne l'étaient pas, spec §1, « Gel des captures »).
 - [ ] Vérifications contre le lot 3 (groupe G3 des dépendances), selon ce qui est fusionné : « ZÉRO n m » égal au texte du télémètre ; poste de M1 contre la carte de 3b ; portiques et coupe de M3, frise et cercles de M4 contre 3c. Ce qui n'est pas encore fusionné est noté dans `REPRISE.md` (« à revérifier à la fusion de 3b et 3c »).
 - [ ] Planche de toutes les captures v1 contre v2 envoyée à Rayan (SendUserFile), avec les points qu'il doit juger.
 - [ ] `REPRISE.md` : cinématiques v2 décrites (outils communs, gardes, mesure, nombre de tests attendu) ; le reste connu des tirets cadratins mis à jour.

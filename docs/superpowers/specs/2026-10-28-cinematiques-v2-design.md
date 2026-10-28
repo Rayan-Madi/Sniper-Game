@@ -43,6 +43,7 @@ Rayan, le 28 octobre 2026 : « pour les cinématiques que tu as faites, si tu po
 
 **Gel des captures [V]**
 - Au gel, `.k-frozen` ramène à 0 la durée des transitions et des animations (`kit.css:149`) : tout effet saute à son état final. Seuls les compteurs affichent leur valeur exacte (`kit.js:118-136, 194`). Un tracé à moitié dessiné apparaît donc entier sur une capture gelée.
+- Constat de C0 (relecture, 28 octobre 2026, mesuré au pixel) : sur la v1, deux captures gelées du même code au même instant (`scripts/shots.mjs`, dans le jeu) ne sont pas toujours identiques à l'octet. m2 à 5 200 ms : 2 379 px différents, écart max 29 sur 255, presque tous sur le trait rouge central (13 px épars dans la bande des sous-titres) ; m3 à 6 500 ms : 111 275 px, écart max 49, sur toute l'image ; m4 à 13 500 ms : identiques. Le critère 6 du §3.9 ne tient donc pas encore en m2 et m3 : C5 et C17 mesurent ce bruit sur deux captures de la même version avant toute comparaison à l'octet.
 
 **Effets atténués [V]**
 - Le kit du jeu pose `k-reduced` sur `#st` avant que le script de la scène tourne (`kit.js:67`, puis `src/briefing/index.js:101`) ; glitchs au tiers (`kit.js:91`), aucun glitch d'ambiance (`:108`), aucune secousse (`:113`), SIGNAL PERDU figé (`kit.css:42`).
@@ -221,7 +222,7 @@ Le libellé « ZÉRO n m » reprend celui du télémètre du lot 3 (décision 1 
 **Poids**
 - 0 image neuve ; 0 son neuf.
 - Source des maquettes : au plus +15 ko non minifiés par scène en moyenne, +130 ko pour les neuf (estimations des lecteurs : prologues et épilogue ≈ 30 ko, M1 à M3 ≈ 60 ko, M4 et M6 ≈ 20 ko, M5 ≈ 10 ko).
-- Total du budget de la spec des cinématiques (§8) : images + chunks des scènes ≤ 1 500 000 octets après `vite build`, mesuré par `scripts/poids.mjs --check` (tâche C0). La question de compter l'enquête est la décision D1 ; avec la conversion WebP des six portraits (≈ 0,8 Mo libérés [D-L4]), la v2 tient le budget même enquête comprise.
+- Total du budget de la spec des cinématiques (§8) : images + chunks des scènes ≤ 1 500 000 octets après `vite build`, mesuré par `scripts/poids.mjs --check` (tâche C0), avec `--avec-enquete` quand l'enquête compte. La question de compter l'enquête est la décision D1 ; avec la conversion WebP des six portraits (≈ 0,8 Mo libérés [D-L4]), la v2 tient le budget même enquête comprise.
 - **Propriétaire unique (intégrateur)** : C0 est la seule tâche, tous chantiers confondus, qui convertit les portraits en WebP (la tâche K9 du lot 4 est retirée) ; objectif repris du lot 4 : ≤ 350 ko pour les six. C0 **crée** `scripts/poids.mjs` et `tests/scripts/poids.test.js` ; la tâche E0 du lot 5 les étendra (build en mémoire, JS de démarrage, `scripts/budgets.js`) sans changer les options publiées ici (`--check`, `--avec-enquete`) ni le seuil de 1 500 000 octets.
 
 **Rendu** (mesuré par `scripts/cine-perf.mjs`, tâche C3 ; aucune cible n'est mesurée aujourd'hui [V-L1])
@@ -273,8 +274,8 @@ Les vérifications réelles (captures, mesure de rendu, poids) sont au plan, tâ
 2. G4 : 0 animation infinie sans jumelle hors liste blanche ; G6 : 0 tiret cadratin visible dans les 9 scènes (M5 compris après le bar).
 3. Chaque scène a son ★ et au moins 5 ajouts du §3.4 ; aucune image neuve.
 4. Rendu, par scène : ≤ 40 animations simultanées ; p95 ≤ 22 ms et ≤ 1,15 × la v1 à processeur ralenti ×4 ; mesures avant et après dans l'annexe `docs/superpowers/specs/annexes/` (README, « Cinématiques v2 »).
-5. Poids : `scripts/poids.mjs --check` vert (≤ 1 500 000 octets selon D1).
-6. Captures gelées, maquette et jeu, aux instants du plan, en normal et en atténué, regardées par l'agent et envoyées à Rayan ; deux captures du même instant identiques à l'octet.
+5. Poids : `node scripts/poids.mjs --check --avec-enquete` vert (≤ 1 500 000 octets enquête comprise) tant que D1 = A, recommandation appliquée ; `--check` seul ne compte que les images et les scènes : il ne vaut que si Rayan tranche D1 = B.
+6. Captures gelées, maquette et jeu, aux instants du plan, en normal et en atténué, regardées par l'agent et envoyées à Rayan ; deux captures du même instant identiques à l'octet (pas encore le cas de m2 et m3 sur la v1 : §1, « Gel des captures »).
 7. `npx vitest run --maxWorkers=2` vert ; `npx vite build` sans erreur ; aucun tiret cadratin neuf (maquettes, specs, commits).
 
 ### 3.10 Risques
