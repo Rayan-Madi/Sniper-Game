@@ -5,6 +5,8 @@
 # Les vignettes pixelisees (*-lo.png) sont copiees telles quelles.
 # Le choix PNG / JPEG est automatique : l'alpha est detecte pixel par pixel sur la source.
 # Usage (racine du depot) : powershell -ExecutionPolicy Bypass -File scripts/compress-briefing-img.ps1
+# Ensuite : node scripts/webp.mjs passe en WebP les portraits PNG a transparence (360 x 450) et supprime ces PNG,
+# puis node scripts/port-maquette.mjs regenere les scenes (tests/scripts/webp.test.js rougit tant qu'un tel PNG reste).
 param(
   [string]$Src = "docs/superpowers/maquettes/cinematiques/img",
   [string]$Dst = "public/briefing/img",
