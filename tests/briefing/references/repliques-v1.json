@@ -1,0 +1,85 @@
+{
+  "m1": [
+    ["PHONE","« Livraison ce soir. Jeune. Propre. Pas de traces. »"],
+    ["ANTON","Ça m'a coûté cher, cette écoute. Markov, il y a une heure."],
+    ["ANTON","Il vend des êtres humains. La « livraison », c'est une jeune femme."],
+    ["ANTON","Trois corps en un mois. Mes contacts à la morgue sont formels : c'est lui."],
+    ["ANTON","J'ai loué un toit au-dessus du marché. Le proprio ne posera pas de questions."],
+    ["ANTON","Trente et un mètres. Costume bleu nuit, il téléphone avant de livrer."],
+    ["ANTON","Aucun civil, Viktor. Une balle, et tu quittes ce toit."],
+    ["ANTON","… Cette fois, c'est moi qui offre. Bonne chance."]
+  ],
+  "m2": [
+    ["ANTON","Les frères Sanctechair. Des bouchers. Au sens propre."],
+    ["ANTON","Luc, l'aîné. Marc, le cadet. Un seul cerveau pour deux."],
+    ["ANTON","Ils découpent les vivants et vendent la chair au poids. Voilà leurs étiquettes."],
+    ["ANTON","Ce soir, ils encaissent sur la place, devant la boucherie. Je t'ai mis sur le toit d'en face."],
+    ["ANTON","Polo blanc, polo beige. Ils ne se quittent jamais."],
+    ["ANTON","Tu en touches un, l'autre court. Enchaîne, Viktor."],
+    ["ANTON","… Je te paie un verre après. Tu en auras besoin."]
+  ],
+  "m3": [
+    ["ANTON","Le port. Ici, des êtres humains deviennent du fret."],
+    ["ANTON","Vosko. Le passeur. Il fait traverser ceux qui paient… et revend les autres."],
+    ["ANTON","Costume sombre, cheveux plaqués. Il ne quitte jamais le quai avant minuit."],
+    ["ANTON","Mira, sa seconde. C'est elle qui compte les têtes. Elle ne se trompe jamais."],
+    ["ANTON","Toujours à deux pas l'un de l'autre. Tu en touches un, l'autre donne l'alerte."],
+    ["ANTON","Sur le papier : pièces détachées. En vrai, quatorze personnes dans le conteneur rouge."],
+    ["ANTON","J'ai payé le grutier. Sa cabine est à toi pour la nuit."],
+    ["ANTON","Eux deux d'abord. Le cadenas… ça, personne ne me le paie. C'est toi qui vois."]
+  ],
+  "m4": [
+    ["ANTON","Des militaires. Ça, ça se paie double."],
+    ["ANTON","Trois officiers. Ils vendent les armes de l'armée au réseau, contre du cash."],
+    ["ANTON","Commandant Verne. Capitaine Halder, jamais sans son casque. Lieutenant Rossi."],
+    ["ANTON","Ils se retrouvent au dépôt de munitions, à midi. Plein soleil."],
+    ["ANTON","Le château d'eau domine toute la base. C'est ton poste."],
+    ["ANTON","Pas d'ombre où te cacher. Trois tirs, vite, avant qu'ils comprennent."],
+    ["ANTON","… Et si tu te fais prendre, je ne te connais pas."]
+  ],
+  "m6": [
+    ["PHONE","« Ils sont tous morts ? \u2014 Oui. Il ne reste que vous. »"],
+    ["PHONE","« Alors trouvez-moi ce sniper. CE SOIR. »"],
+    ["ANTON","C'est lui. Celui qui paie tous les autres. Et pour la première fois… je n'ai rien."],
+    ["ANTON","Pas de nom. Pas de visage. Même mes meilleures sources se taisent."],
+    ["ANTON","Juste ça : une invitation. Une fête, ce soir. Vingt-quatre invités."],
+    ["ANTON","Il ne danse pas. Il téléphone. C'est tout ce que je sais."],
+    ["ANTON","Je t'ai trouvé la verrière d'en face. Vue sur toute la salle."],
+    ["ANTON","Ils sont remontés jusqu'à moi, Viktor. Je quitte la ville cette nuit."],
+    ["ANTON","… Termine ça. Pour ta femme. Pour ta fille."]
+  ],
+  "epilogue?port=libres": [
+    ["VIKTOR","C'est fini. Le dernier est tombé."],
+    ["ANTON","J'ai vu les infos. Le réseau est mort, Viktor."],
+    ["ANTON","Les flics ramassent les miettes. Ils se donnent même le beau rôle."],
+    ["ANTON","Et les quatorze du port… ils s'en sont sortis. Grâce à toi."],
+    ["ANTON","Moi, je disparais. Ce numéro n'existera plus demain."],
+    ["ANTON","Dors, mon vieux. Tu l'as mérité."],
+    ["VIKTOR","Pour ma femme. Ma fille. Et tous les autres."]
+  ],
+  "epilogue?port=enfermes": [
+    ["VIKTOR","C'est fini. Le dernier est tombé."],
+    ["ANTON","J'ai vu les infos. Le réseau est mort, Viktor."],
+    ["ANTON","Les flics ramassent les miettes. Ils se donnent même le beau rôle."],
+    ["ANTON","Les quatorze du port… on ne saura jamais. Le conteneur est parti."],
+    ["ANTON","Moi, je disparais. Ce numéro n'existera plus demain."],
+    ["ANTON","Dors, mon vieux. Tu l'as mérité."],
+    ["VIKTOR","Pour ma femme. Ma fille. Et tous les autres."]
+  ],
+  "prologue-a": [
+    ["PHONE","On sait ce que vous valez, Viktor. Un tir, cent mille. Personne ne saura."],
+    ["VIKTOR","J'ai raccroché. Je ne tue plus pour de l'argent."],
+    ["VIKTOR","Trois semaines plus tard, je suis rentré plus tôt que prévu."]
+  ],
+  "prologue-b": [
+    ["PHONE","Viktor, c'est moi… Il y a des gens à la porte."],
+    ["PHONE","Ils frappent. Ils ne s'en vont pas."],
+    ["PHONE","Rappelle-moi. Vite."],
+    ["INCONNU","Viktor. Je sais ce qu'ils ont fait ce soir."],
+    ["INCONNU","Je peux t'aider."],
+    ["INCONNU","Ils ont dépassé les bornes."],
+    ["VIKTOR","Qui êtes-vous ?"],
+    ["INCONNU","Tu vas savoir qui."],
+    ["VIKTOR","Ils voulaient mon silence. Ils auront ma vengeance."]
+  ]
+}
