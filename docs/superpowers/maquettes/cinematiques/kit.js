@@ -2,11 +2,14 @@
    Moteur : une suite de TEMPS (beats). Chaque temps peut faire parler quelqu'un (voix du
    navigateur, ou « bip » synthétique) et déclencher des effets visuels à des instants relatifs.
    Le temps dure aussi longtemps que la réplique : l'image avance au rythme de la voix.
-   ?freeze=MS  → sans voix ni glitch, durées estimées, tout se fige à MS (captures automatiques). */
+   ?freeze=MS  → sans voix ni glitch, durées estimées, tout se fige à MS (captures automatiques).
+   ?attenue=1  → effets atténués, comme le réglage du jeu (spec du lot 1 §4.5) : k-reduced sur #st, glitchs au tiers,
+                 aucun glitch d'ambiance, aucune secousse. */
 (() => {
   const K = window.K = {}
   const params = new URLSearchParams(location.search)
   const FREEZE = params.has('freeze') ? Math.max(0, +params.get('freeze')) : null
+  const ATTENUE = params.get('attenue') === '1'
   K.errors = []
   const fail = msg => { K.errors.push(String(msg)); document.title = 'ERR: ' + msg; console.error('[kit]', msg) }
   window.addEventListener('error', e => fail(e.message))
@@ -18,6 +21,7 @@
   let timers = []
   const at = (ms, fn) => { const h = setTimeout(() => { try { fn() } catch (e) { fail(e && e.stack || e) } }, ms); timers.push(h); return h }
   const wait = ms => new Promise(r => at(ms, r))
+  const raf = cb => at(16, cb)   // ~60 i/s, minuteur suivi : arrêté par « rejouer » et au gel (K.anim, comme dans le jeu)
   K.at = at
   K.on = (x, c = 'on') => { const e = el(x); if (e) e.classList.add(c); else fail('élément introuvable : ' + x) }
   K.off = (x, c = 'on') => { const e = el(x); if (e) e.classList.remove(c) }
@@ -32,6 +36,8 @@
   // ── injection : habillage « signal », filtre de glitch, barre de contrôle ──
   const st = $('st'), scene = $('scene')
   if (!st || !scene) { fail('la page doit contenir #st et #scene'); return }
+  // effets atténués : posés avant le script de la scène, qui peut les lire (K.$('st').classList.contains('k-reduced'))
+  if (ATTENUE) st.classList.add('k-reduced')
   st.classList.add('k-preload')
   requestAnimationFrame(() => requestAnimationFrame(() => st.classList.remove('k-preload')))
   st.insertAdjacentHTML('afterbegin', '<div class="crt" id="k-crt"></div>')
@@ -167,6 +173,7 @@
   K.glitch = (ms, pow) => {
     if (FREEZE !== null || !$('k-gl').checked) return
     S.glitch(ms, pow)
+    if (ATTENUE) pow /= 3   // effet visuel au tiers, son gardé (jamais d'image noire, réservée aux glitchs de plus de 0,7)
     glitchUntil = Math.max(glitchUntil, performance.now() + ms); glitchPow = Math.max(glitchPow, pow)
     if (glitchIv) return
     scene.style.filter = 'url(#k-glf)'; st.classList.add('gl')
@@ -185,10 +192,10 @@
       bf.classList.toggle('on', p > .7 && Math.random() < .12)
     }, 45)
   }
-  if (FREEZE === null) (function idle() { setTimeout(() => { K.glitch(70 + Math.random() * 110, .22 + Math.random() * .3); idle() }, 1100 + Math.random() * 2600) })()
+  if (FREEZE === null && !ATTENUE) (function idle() { setTimeout(() => { K.glitch(70 + Math.random() * 110, .22 + Math.random() * .3); idle() }, 1100 + Math.random() * 2600) })()
 
   // ── petits outils de mise en scène ──
-  K.shake = () => { st.classList.remove('shake'); void st.offsetWidth; st.classList.add('shake') }
+  K.shake = () => { if (ATTENUE) return; st.classList.remove('shake'); void st.offsetWidth; st.classList.add('shake') }
   K.crt = () => { K.on('k-crt'); S.crt() }
   K.lost = (ms = 400) => { S.lost(); K.glitch(ms + 250, 1); K.on('k-lost'); at(ms, () => K.off('k-lost')) }
   K.title = () => { K.on('title'); S.boom(); K.glitch(200, .7) }
@@ -222,6 +229,34 @@
     }
     tick()
   }
+
+  // ── commun : anim ──
+  // Outils communs aux deux kits (src/briefing/kit.js et docs/superpowers/maquettes/cinematiques/kit.js), identiques au
+  // caractère près entre ces deux marques (garde G7, tests/briefing/kit-commun.test.js) : les retoucher des deux côtés.
+  // K.anim(dessin, duree, { attenue }) : dessin(k, o) reçoit l'avancement k de 0 à 1 en duree ms, au pas des images,
+  // et l'opacité o = 1 ; au gel, l'avancement exact de l'instant du gel, puis plus rien (inscrit parmi les compteurs).
+  // Effets atténués (k-reduced sur #st) : attenue: 'fin', dessin(1, 1) d'emblée ; attenue: 'fondu', k = 1 d'emblée et
+  // o de 0 à 1 en 300 ms (fondu vers l'état final, au dessin d'appliquer o) ; sans attenue, il joue pareil.
+  K.anim = (dessin, duree, { attenue = null } = {}) => {
+    const reduit = st.classList.contains('k-reduced')
+    if (reduit && attenue === 'fin') { dessin(1, 1); return }
+    const fondu = reduit && attenue === 'fondu', d = fondu ? 300 : duree, s = performance.now()
+    const show = () => {
+      const k = d > 0 ? Math.min(1, (performance.now() - s) / d) : 1
+      if (fondu) dessin(1, k); else dessin(k, 1)
+      return k
+    }
+    const f = () => {
+      if (K.frozen) return
+      if (show() < 1) raf(f); else counters.delete(show)
+    }
+    counters.add(show)
+    f()
+  }
+  // K.graine(n) : tirage reproductible de 0 à 1 (Park-Miller, le générateur de la ville du prologue A) ; une graine par
+  // élément, pour qu'un ajout ne déplace pas les tirages des autres.
+  K.graine = n => { let s = n; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646 } }
+  // ── fin du commun : anim ──
 
   // ── voix : synthèse vocale du navigateur (voix françaises installées), sinon « bip » synthétique ──
   const SS = window.speechSynthesis || null
@@ -329,5 +364,23 @@
     if (!soundOn) { await S.init(); soundOn = true; b.textContent = '🔇 Couper le son'; b.classList.remove('hot'); start() }
     else { soundOn = false; b.textContent = '🔊 Activer le son'; b.classList.add('hot'); if (SS) SS.cancel(); S.stopVoice(); S.music(null) }
   }
-  ;(function lbl() { const e = $('k-lbl'); if (e) e.textContent = `${label || '…'} · ${((performance.now() - t0) / 1000).toFixed(1)} s`; requestAnimationFrame(lbl) })()
+  // Étiquette sous la scène : temps en cours, durée écoulée, sonde d'images (p95 des durées des 120 dernières images, au
+  // rang le plus proche comme frameStats de src/gfx/stats.js ; plafond des cinématiques : 22 ms, spec cinématiques v2
+  // §3.6 ; pas au gel : les captures se font en temps virtuel, presque sans image calculée) et effets atténués s'ils
+  // sont demandés.
+  const images = []
+  let derniere = null
+  const p95 = () => {
+    if (!images.length) return '…'
+    const tri = [...images].sort((a, b) => a - b)
+    return tri[Math.min(tri.length - 1, Math.ceil(0.95 * tri.length) - 1)].toFixed(1) + ' ms'
+  }
+  ;(function lbl() {
+    const now = performance.now()
+    if (derniere !== null) { images.push(now - derniere); if (images.length > 120) images.shift() }
+    derniere = now
+    const e = $('k-lbl')
+    if (e) e.textContent = `${label || '…'} · ${((now - t0) / 1000).toFixed(1)} s${FREEZE === null ? ` · p95 ${p95()}` : ''}${ATTENUE ? ' · atténué' : ''}`
+    requestAnimationFrame(lbl)
+  })()
 })()

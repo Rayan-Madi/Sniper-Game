@@ -18,6 +18,11 @@ Le prologue du jeu est en deux pièces : `prologue-a.html` (l'offre, le refus, l
 deux. `prologue.html` est l'ancienne version longue validée, gardée comme référence : elle n'est pas convertie.
 
 Paramètres utiles : `?freeze=12000` fige la scène à 12 s ; `?port=libres` choisit la variante de
-l'épilogue. « Activer le son » sous l'image : bips synthétiques et musique (son 100 % procédural).
+l'épilogue ; `?attenue=1` joue la version en effets atténués, comme le réglage du jeu (l'étiquette sous l'image
+le dit, et donne la p95 des durées d'image hors gel). « Activer le son » sous l'image : bips synthétiques et
+musique (son 100 % procédural).
+
+`controle-outils.html` n'est pas une scène (jamais convertie) : page de contrôle des outils communs des
+cinématiques v2 (gel exact de `K.anim`, encre et papier), à ouvrir avec `?freeze=1000`.
 
 Spec : `docs/superpowers/specs/2026-10-02-cinematiques-design.md`.

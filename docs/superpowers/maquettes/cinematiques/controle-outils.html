@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Contrôle des outils communs</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  /* Page de contrôle des outils communs des cinématiques v2 (spec §3.2) ; ce n'est pas une scène : absente de SCENES
+     (scripts/port-maquette.mjs), jamais portée dans le jeu. Ouverte avec ?freeze=1000 et capturée comme les scènes
+     (Chrome sans interface, temps virtuel, mêmes options que scripts/shots.mjs), elle fige à 1 000 ms trois barres qui
+     vont de 0 à 100 % en 2 000 ms à partir du début du temps :
+     - animation CSS de la v1 : au gel, elle saute à sa fin (100 %), comme toute animation et transition du kit ;
+     - animation CSS mise en pause au gel (essai .k-vrai du §3.2, point 6, reproduit ici par une règle de la page) :
+       en capture, elle reste à son début (0 %), Chrome ne calculant presque aucune image avant le gel en temps virtuel ;
+       l'essai est donc écarté du kit ;
+     - K.anim : avancement exact à l'instant du gel (50 %).
+     Chaque barre affiche l'avancement lu dans son style calculé, 500 ms après le gel. À droite, les matières : un
+     tampon et une fiche, sans puis avec .k-encre et .k-papier. */
+  .ctl .scan, .ctl .grain, .ctl .vig, .ctl .flick, .ctl .track { display: none; }   /* image propre pour la mesure */
+  .ctl .t { position: absolute; left: 4cqw; top: 3cqw; font-size: 1.9cqw; letter-spacing: .3em; color: #f1f4ea; }
+  .ctl .t small { display: block; margin-top: .7cqw; font-size: 1.1cqw; letter-spacing: .12em; color: rgba(215,220,207,.7); }
+  .ctl .ligne { position: absolute; left: 4cqw; width: 54cqw; }
+  .ctl .ligne b { display: block; font-size: 1.15cqw; letter-spacing: .14em; font-weight: normal; color: #d7dccf; }
+  .ctl .ligne b em { font-style: normal; color: rgba(215,220,207,.6); }
+  .ctl .barre { position: relative; margin-top: .8cqw; width: 40cqw; height: 1.8cqw; border: 1px solid rgba(215,220,207,.4); }
+  .ctl .barre i { position: absolute; inset: 0; background: #f0c040; transform: scaleX(0); transform-origin: 0 50%; }
+  .ctl .barre.css.on i { animation: ctl-barre 2s linear forwards; }
+  @keyframes ctl-barre { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+  /* l'essai écarté, reproduit pour la seule page : au gel, durée gardée et animation mise en pause */
+  .ctl.k-frozen .barre.pause i { animation-duration: 2s !important; animation-play-state: paused !important; }
+  .ctl .graduation { position: relative; width: 40cqw; height: 1.4cqw; font-size: .9cqw; color: rgba(215,220,207,.65); }
+  .ctl .graduation span { position: absolute; top: .2cqw; transform: translateX(-50%); }
+  .ctl .graduation span::before { content: ''; position: absolute; left: 50%; top: -.5cqw; height: .4cqw; border-left: 1px solid rgba(215,220,207,.6); }
+  .ctl .mesure { position: absolute; left: 42cqw; top: 2.1cqw; font-size: 1.3cqw; color: #f1f4ea; }
+  .ctl .bloc { position: absolute; left: 63cqw; width: 33cqw; font-size: 1.15cqw; letter-spacing: .14em; color: #d7dccf; }
+  .ctl .tampons { position: relative; height: 7cqw; margin-top: .6cqw; }
+  .ctl .tampons .stamp { top: 1.6cqw; font-size: 2.4cqw; }
+  .ctl .tampons .stamp:nth-child(1) { left: .5cqw; }
+  .ctl .tampons .stamp:nth-child(2) { left: 16.5cqw; }
+  .ctl .fiches { display: flex; gap: 1.5cqw; margin-top: .6cqw; }
+  .ctl .fiche { width: 15.5cqw; height: 13cqw; padding: 1cqw; background-color: #e6dfcd; color: #22201c; font-size: 1.1cqw; line-height: 1.6;
+      letter-spacing: .05em; text-shadow: none; box-shadow: 0 .5cqw 1.2cqw rgba(0,0,0,.6); }
+  .ctl .fiche p { margin: 0 0 .6cqw; }
+  .ctl .fiche .rouge { color: #b8322a; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="st ctl" id="st">
+    <div class="bg"></div>
+    <div class="scene" id="scene">
+      <div class="t">CONTRÔLE DES OUTILS COMMUNS<small>?freeze=1000 : gel à 1 000 ms d'un mouvement de 2 000 ms</small></div>
+
+      <div class="ligne" style="top: 10.5cqw">
+        <b>ANIMATION CSS DE LA V1 <em>· au gel : saute à sa fin (100 %)</em></b>
+        <div class="barre css" id="b-v1"><i></i></div>
+        <div class="graduation"><span style="left: 0">0</span><span style="left: 25%">25</span><span style="left: 50%">50</span><span style="left: 75%">75</span><span style="left: 100%">100 %</span></div>
+        <div class="mesure" id="m-v1">…</div>
+      </div>
+      <div class="ligne" style="top: 20cqw">
+        <b>CSS MISE EN PAUSE AU GEL <em>· essai écarté : 0 % en capture</em></b>
+        <div class="barre css pause" id="b-pause"><i></i></div>
+        <div class="graduation"><span style="left: 0">0</span><span style="left: 25%">25</span><span style="left: 50%">50</span><span style="left: 75%">75</span><span style="left: 100%">100 %</span></div>
+        <div class="mesure" id="m-pause">…</div>
+      </div>
+      <div class="ligne" style="top: 29.5cqw">
+        <b>K.ANIM <em>· attendu : 50 %</em></b>
+        <div class="barre" id="b-anim"><i></i></div>
+        <div class="graduation"><span style="left: 0">0</span><span style="left: 25%">25</span><span style="left: 50%">50</span><span style="left: 75%">75</span><span style="left: 100%">100 %</span></div>
+        <div class="mesure" id="m-anim">…</div>
+      </div>
+
+      <div class="bloc" style="top: 10.5cqw">ENCRE · SANS, PUIS .K-ENCRE
+        <div class="tampons"><div class="stamp" id="s1">CONTRÔLE</div><div class="stamp k-encre" id="s2">CONTRÔLE</div></div>
+      </div>
+      <div class="bloc" style="top: 21.5cqw">PAPIER · SANS, PUIS .K-PAPIER (ET .K-ENCRE)
+        <div class="fiches">
+          <div class="fiche"><p>FICHE 02-A</p><p>POLO BLANC</p><p class="rouge">COPIE À A.</p></div>
+          <div class="fiche k-papier"><p>FICHE 02-A</p><p>POLO BLANC</p><p class="rouge k-encre">COPIE À A.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="kit.js"></script>
+<script>
+  const $ = id => document.getElementById(id)
+  K.run({
+    loop: false,
+    beats: [{ label: 'contrôle', min: 3000, cues: [[0, K => {
+      ['b-v1', 'b-pause', 's1', 's2'].forEach(id => K.on(id))
+      K.anim(k => { $('b-anim').firstElementChild.style.transform = `scaleX(${k})` }, 2000)
+    }]] }],
+  })
+  // Mesure 500 ms après le gel, par un minuteur natif (ceux du kit s'arrêtent au gel) : avancement de chaque barre lu
+  // dans son style calculé, affiché et gardé dans data-mesures (lu par --dump-dom).
+  const gel = new URLSearchParams(location.search).get('freeze')
+  if (gel !== null) setTimeout(() => {
+    const mesures = {}
+    for (const id of ['v1', 'pause', 'anim']) {
+      const avance = new DOMMatrix(getComputedStyle($('b-' + id).firstElementChild).transform).a
+      $('m-' + id).textContent = (avance * 100).toFixed(1) + ' %'
+      mesures[id] = avance
+    }
+    document.body.dataset.mesures = JSON.stringify(mesures)
+  }, +gel + 500)
+</script>
+</body>
+</html>

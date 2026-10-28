@@ -376,6 +376,205 @@ describe('kit des cinématiques', () => {
     })
   })
 
+  // Outil commun des deux kits (spec cinématiques v2 §3.2, point 2) : K.anim(dessin, duree, { attenue }) appelle
+  // dessin(k, o) au pas des images, k l'avancement de 0 à 1 ; au gel, l'avancement exact de l'instant du gel, comme
+  // les compteurs, puis plus rien. Une capture gelée ne ment donc pas sur un tracé ou un mouvement long, alors qu'une
+  // transition saute à sa fin au gel (.k-frozen de la feuille du kit).
+  describe('K.anim, dessin au temps exact', () => {
+    let css
+    beforeEach(() => {
+      css = document.createElement('style')
+      css.textContent = readFileSync(resolve(__dirname, '../../src/briefing/kit.css'), 'utf8')
+      document.head.appendChild(css)
+    })
+    afterEach(() => css.remove())
+
+    // Un trait SVG de 400 unités tracé en 1 000 ms à partir du début du temps, scène gelée à 500 ms ; part dessinée lue
+    // dans le style calculé, au gel puis 2 s plus tard. « transition » : la façon de la v1 (classe draw de la feuille du
+    // kit) ; « anim » : K.anim écrit le décalage du trait.
+    const traceAuGel = async facon => {
+      const root = mountScene('<svg><path id="p" class="draw" d="M0 0H400"/></svg>')
+      const p = root.querySelector('#p')
+      const K = createKit({ root, freeze: 500 })
+      let gele = false, appelsApres = 0
+      const dessin = k => { if (gele) appelsApres++; p.style.strokeDashoffset = String(400 * (1 - k)) }
+      const trace = facon === 'transition' ? K => K.on('p') : K => K.anim(dessin, 1000)
+      K.run({ beats: [{ min: 3000, cues: [[0, trace]] }] })
+      await vi.advanceTimersByTimeAsync(500); await flush()
+      const part = () => 1 - parseFloat(getComputedStyle(p).strokeDashoffset) / 400
+      const auGel = part()
+      gele = true
+      await vi.advanceTimersByTimeAsync(2000); await flush()
+      return { auGel, apres: part(), appelsApres }
+    }
+
+    it('gelé à mi-course, un tracé par K.anim est à moitié dessiné, puis plus rien (une transition, elle, est entière au gel : garde-fou)', async () => {
+      expect((await traceAuGel('transition')).auGel).toBe(1)
+      const { auGel, apres, appelsApres } = await traceAuGel('anim')
+      expect(Math.abs(auGel - 0.5)).toBeLessThanOrEqual(0.02)
+      expect(apres).toBe(auGel)
+      expect(appelsApres).toBe(0)
+    })
+
+    it('gelé entre deux images, dessin reçoit l\'avancement de l\'instant du gel, pas celui de la dernière image', async () => {
+      const K = createKit({ root: mountScene(), freeze: 505 })
+      const recus = []
+      K.run({ beats: [{ min: 3000 }] })
+      K.anim(k => recus.push(k), 1000)   // lancé à t = 0 : images à 16, 32… 496 ms, puis gel à 505 ms
+      await vi.advanceTimersByTimeAsync(600); await flush()
+      expect(K.frozen).toBe(true)
+      expect(recus.at(-1)).toBeCloseTo(0.505, 3)
+    })
+
+    it('« rejouer » arrête le dessin du passage précédent ; le nouveau passage repart de 0', async () => {
+      const root = mountScene()
+      const K = createKit({ root })
+      let passage = 0
+      const appels = []   // [passage, instant, k]
+      K.run({ beats: [{ min: 3000, cues: [[0, K => { const n = ++passage; K.anim(k => appels.push([n, performance.now(), k]), 1000) }]] }] })
+      await vi.advanceTimersByTimeAsync(300); await flush()
+      const rejoue = performance.now()
+      root.querySelector('#k-replay').click()
+      await vi.advanceTimersByTimeAsync(2000); await flush()
+      expect(appels.filter(([n]) => n === 1).length).toBeGreaterThan(0)
+      expect(appels.filter(([n, t]) => n === 1 && t > rejoue)).toEqual([])
+      expect(appels.find(([n]) => n === 2)[2]).toBe(0)
+      expect(appels.at(-1)).toEqual([2, expect.any(Number), 1])
+    })
+
+    it('après destroy(), dessin n\'est plus appelé et aucun minuteur ne reste', async () => {
+      const K = createKit({ root: mountScene() })
+      const recus = []
+      K.run({ beats: [{ min: 5000 }] })
+      K.anim(k => recus.push(k), 1000)
+      await vi.advanceTimersByTimeAsync(300); await flush()
+      K.destroy()
+      const avant = recus.length
+      await vi.advanceTimersByTimeAsync(2000); await flush()
+      expect(recus.length).toBe(avant)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    // Sans parasites au repos (effets atténués) ni gel, une séquence finie ne laisse aucun minuteur : on les compte.
+    it('fini, il ne laisse aucun minuteur derrière lui', async () => {
+      const K = createKit({ root: mountScene(), reducedMotion: true })
+      let fin = false
+      const recus = []
+      K.run({ beats: [{ min: 1500, cues: [[0, K => K.anim(k => recus.push(k), 1000)]] }] }).then(() => { fin = true })
+      await vi.advanceTimersByTimeAsync(1500); await flush()
+      expect(fin).toBe(true)
+      expect(recus.at(-1)).toBe(1)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    // Effets atténués (spec cinématiques v2 §3.7) : un mouvement ponctuel finit d'emblée (attenue: 'fin') ou arrive par
+    // un fondu de 300 ms vers son état final (attenue: 'fondu', l'opacité o passée à dessin) ; un tracé informe et joue
+    // pareil (sans attenue).
+    const recusDe = async ({ reducedMotion, attenue, freeze = null, ms = 1500 }) => {
+      const K = createKit({ root: mountScene(), reducedMotion, freeze })
+      const recus = [], t0 = performance.now()   // [instant depuis le lancement, k, o]
+      K.run({ beats: [{ min: 3000 }] })
+      K.anim((k, o) => recus.push([performance.now() - t0, k, o]), 1000, attenue ? { attenue } : undefined)
+      await vi.advanceTimersByTimeAsync(ms); await flush()
+      return recus
+    }
+
+    it('effets atténués, attenue: \'fin\' : dessin(1, 1) d\'emblée et une seule fois', async () => {
+      expect(await recusDe({ reducedMotion: true, attenue: 'fin' })).toEqual([[0, 1, 1]])
+    })
+
+    it('effets atténués, attenue: \'fondu\' : k = 1 d\'emblée, opacité de 0 à 1 en 300 ms, exacte au gel', async () => {
+      const recus = await recusDe({ reducedMotion: true, attenue: 'fondu' })
+      expect(recus[0]).toEqual([0, 1, 0])
+      expect(recus.every(([, k]) => k === 1)).toBe(true)
+      expect(recus.at(-1)).toEqual([expect.any(Number), 1, 1])
+      expect(recus.at(-1)[0]).toBeLessThanOrEqual(300 + 16)   // fini à 300 ms, à une image près
+      const gele = await recusDe({ reducedMotion: true, attenue: 'fondu', freeze: 150 })
+      expect(gele.at(-1)[2]).toBeCloseTo(0.5, 3)
+    })
+
+    it('sans attenue, il joue pareil en effets atténués ; hors effets atténués, attenue ne change rien', async () => {
+      const normal = await recusDe({ reducedMotion: false })
+      expect(normal[0]).toEqual([0, 0, 1])
+      expect(normal.at(-1)).toEqual([expect.any(Number), 1, 1])
+      expect(normal.length).toBeGreaterThan(50)   // une image toutes les 16 ms pendant 1 000 ms
+      expect(await recusDe({ reducedMotion: true })).toEqual(normal)
+      expect(await recusDe({ reducedMotion: false, attenue: 'fin' })).toEqual(normal)
+      expect(await recusDe({ reducedMotion: false, attenue: 'fondu' })).toEqual(normal)
+    })
+  })
+
+  // Matières communes aux deux kits (spec cinématiques v2 §3.2, point 4) : --k-encre (masque de bruit) et --k-papier
+  // (fibres), posées sur .st ; .k-encre (impression inégale, double frappe décalée de 0,15 cqw) et .k-papier. Statiques :
+  // un tampon existant qui les reçoit garde son animation.
+  describe('matières : encre et papier', () => {
+    let css
+    beforeEach(() => {
+      css = document.createElement('style')
+      css.textContent = readFileSync(resolve(__dirname, '../../src/briefing/kit.css'), 'utf8') +
+        '\n.st .fiche { background-color: #e9e3d3; }'   // la couleur du papier vient de la scène
+      document.head.appendChild(css)
+    })
+    afterEach(() => css.remove())
+
+    it('--k-encre et --k-papier : bruit feTurbulence en data-URI, moins de 700 caractères chacun', () => {
+      const root = mountScene()
+      createKit({ root })
+      const s = getComputedStyle(root.querySelector('#st'))
+      for (const nom of ['--k-encre', '--k-papier']) {
+        const v = s.getPropertyValue(nom).trim()
+        expect(v, nom).toMatch(/^url\("?data:image\/svg\+xml/)
+        expect(v, nom).toContain('feTurbulence')
+        expect(v.length, nom).toBeLessThan(700)
+      }
+    })
+
+    it('.k-encre : masque --k-encre et double frappe décalée de 0,15 cqw ; un tampon garde son animation, sa pose et son opacité', () => {
+      const root = mountScene('<div class="stamp on k-encre" id="t">PAYÉ</div><div class="stamp on" id="u">PAYÉ</div>')
+      createKit({ root })
+      const t = getComputedStyle(root.querySelector('#t')), u = getComputedStyle(root.querySelector('#u'))
+      expect(t.maskImage).toBe('var(--k-encre)')
+      expect(t.getPropertyValue('-webkit-mask-image')).toBe('var(--k-encre)')
+      expect(t.filter).toMatch(/drop-shadow\(0?\.15cqw /)
+      expect(u.maskImage).toBe('none')   // sans la classe, rien
+      expect(u.filter).toBe('none')
+      expect(t.animation).toMatch(/k-stamp/)
+      for (const p of ['animation', 'transform', 'opacity']) expect(t[p], p).toBe(u[p])
+    })
+
+    it('.k-papier : fibres --k-papier en image de fond, la couleur du papier reste celle de la scène', () => {
+      const root = mountScene('<div class="fiche k-papier" id="f"></div><div class="fiche" id="g"></div>')
+      createKit({ root })
+      const f = getComputedStyle(root.querySelector('#f')), g = getComputedStyle(root.querySelector('#g'))
+      expect(f.backgroundImage).toBe('var(--k-papier)')
+      expect(g.backgroundImage).toBe('none')
+      expect(f.backgroundColor).toBe(g.backgroundColor)
+    })
+  })
+
+  // Tirage reproductible des scènes (spec cinématiques v2 §3.2, point 3) : tout tirage neuf passe par K.graine(n), une
+  // graine par élément. Générateur de Park-Miller, celui de la ville du prologue A.
+  describe('K.graine', () => {
+    // Recopie du générateur de docs/superpowers/maquettes/cinematiques/prologue-a.html (fabrication de la ville) :
+    // let seed = 7 ; const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646 }
+    const commeLaVille = seed => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646 }
+    const tirages = (g, n) => Array.from({ length: n }, () => g())
+
+    it('K.graine(7) rend la suite de la ville du prologue A, tirage après tirage, entre 0 et 1', () => {
+      const K = createKit({ root: mountScene() })
+      const suite = tirages(K.graine(7), 1000)
+      expect(suite).toEqual(tirages(commeLaVille(7), 1000))
+      expect(suite.every(v => v >= 0 && v < 1)).toBe(true)
+    })
+
+    it('chaque générateur garde sa graine : deux suites tirées en alternance restent chacune la sienne', () => {
+      const K = createKit({ root: mountScene() })
+      const a = K.graine(7), b = K.graine(42), ra = commeLaVille(7), rb = commeLaVille(42)
+      const melees = Array.from({ length: 50 }, () => [a(), b()])
+      expect(melees).toEqual(Array.from({ length: 50 }, () => [ra(), rb()]))
+    })
+  })
+
   it('reste muet et sans erreur quand aucun contexte audio n\'est fourni', () => {
     const K = createKit({ root: mountScene() })
     expect(() => { K.snd.boom(); K.snd.stamp(); K.music('tense'); K.music(null) }).not.toThrow()
