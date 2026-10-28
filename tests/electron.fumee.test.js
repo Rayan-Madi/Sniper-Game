@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { resolve, join } from 'node:path'
+import { resolve, join, win32 } from 'node:path'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -22,8 +22,10 @@ const nodeRequire = createRequire(import.meta.url)
 // ─── Faux module 'electron' ───────────────────────────────────────────
 // Ce que la fumée utilise en plus du harnais de tests/electron.test.js : session.webRequest, executeJavaScript,
 // reload, événements de webContents, app.setPath et app.exit, process.on et process.stdout. app.whenReady rend une
-// vraie promesse, comme Electron : la fenêtre se crée après l'exécution de tout le fichier.
-function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = false } = {}) {
+// vraie promesse, comme Electron : la fenêtre se crée après l'exécution de tout le fichier. app.setPath lève une erreur
+// sur un chemin qui n'est pas absolu, comme Electron (« Path must be absolute »). modules : modules de Node remplacés
+// pour electron/main.js (os.tmpdir, par exemple).
+function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = false, modules = {} } = {}) {
   const vu = { fenetres: [], gardes: [], chemins: {}, codes: [], lignes: [], vidages: [], muet: null, ralenti: null, gestionnaires: {} }
   class WebContents extends EventEmitter {
     constructor() {
@@ -52,7 +54,10 @@ function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = fa
       on() {},
       quit() {},
       exit: code => { vu.codes.push(code) },
-      setPath: (nom, chemin) => { vu.chemins[nom] = chemin },
+      setPath: (nom, chemin) => {
+        if (!win32.isAbsolute(chemin)) throw new Error('Path must be absolute')
+        vu.chemins[nom] = chemin
+      },
     },
   }
   const processus = {
@@ -60,7 +65,7 @@ function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = fa
     on: (evenement, f) => { vu.gestionnaires[evenement] = f },
     stdout: { write: (texte, vide) => { vu.lignes.push(texte); if (!vide) return; if (sortieDifferee) vu.vidages.push(vide); else vide() } },
   }
-  const fakeRequire = name => (name === 'electron' ? electron : nodeRequire(name))
+  const fakeRequire = name => (name === 'electron' ? electron : modules[name] || nodeRequire(name))
   const src = readFileSync(join(ELECTRON_DIR, 'main.js'), 'utf8')
   new Function('require', 'process', '__dirname', src)(fakeRequire, processus, ELECTRON_DIR)
   return vu
@@ -178,6 +183,35 @@ describe('electron/main.js --fumee : fenêtre cachée, profil jetable, réseau b
     const vu = lancerMain({ argv: FUMEE })
     await fenetre(vu)
     expect(vu.chemins).toEqual({ userData: 'C:/temp/sniper-fumee-test', sessionData: 'C:/temp/sniper-fumee-test' })
+  })
+
+  // Le profil jetable est créé et supprimé par scripts/fumee.mjs : electron/main.js n'en crée jamais (un « electron .
+  // --fumee » lancé à la main y laissait un dossier sniper-fumee-* jamais supprimé), et sans profil il ne lance pas le
+  // jeu (il tournerait sur le profil du joueur, sa sauvegarde comprise).
+  it('--fumee sans --profil : la fumée ne part pas (rouge), sans fenêtre, sans dossier créé, sans chemin changé', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'fumee-sans-profil-'))   // dossier temporaire vu par electron/main.js
+    try {
+      const vu = lancerMain({ argv: ['electron', '.', '--fumee'], modules: { os: { ...nodeRequire('os'), tmpdir: () => tmp } } })
+      await new Promise(r => setTimeout(r, 20))   // whenReady passé : la fenêtre serait déjà créée
+      expect(readdirSync(tmp)).toEqual([])
+      expect(vu.chemins).toEqual({})
+      expect(vu.fenetres).toEqual([])
+      await finie(vu)
+      expect(vu.codes).toEqual([1])
+      expect(sortie(vu).echecs.join('\n')).toMatch(/--profil/)
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  it('--fumee avec un --profil refusé par Electron (chemin relatif) : rouge, sans fenêtre, et l\'erreur ne remonte pas (jamais la boîte de dialogue d\'Electron)', async () => {
+    let vu = null
+    expect(() => { vu = lancerMain({ argv: ['electron', '.', '--fumee', '--profil=profil-relatif'] }) }).not.toThrow()
+    await new Promise(r => setTimeout(r, 20))
+    expect(vu.fenetres).toEqual([])
+    await finie(vu)
+    expect(vu.codes).toEqual([1])
+    expect(sortie(vu).echecs.join('\n')).toMatch(/profil-relatif/)
   })
 
   it('--fumee : toute requête http, https, ws ou wss est bloquée ; les fichiers du jeu passent', async () => {

@@ -10,6 +10,7 @@ const isDev = process.argv.includes('--dev')
 const fumee = process.argv.includes('--fumee')
 
 function createWindow() {
+  if (fumee && fumeeFinie) return   // fumée finie avant la fenêtre (profil jetable manquant ou refusé) : aucune fenêtre
   // Pas de propriété icon : Electron garde son icône par défaut tant que le
   // jeu n'en a pas. Pas de fullscreen: false non plus : c'est déjà la valeur
   // par défaut, et passé explicitement il interdit le plein écran sous macOS
@@ -43,11 +44,11 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 
 // ─── Fumée du livrable (spec du lot 5 §3.2, tâche E1) ──────────────────────────────────────────────────────────────
 // « electron . --fumee » (scripts/fumee.mjs), plus tard « Sniper.exe --fumee » (le jeu empaqueté) : le jeu construit
-// se lance hors ligne dans une fenêtre CACHÉE, sans son, sur un profil jetable (--profil=<dossier>, sinon un dossier
-// temporaire neuf : jamais la sauvegarde du joueur), toute requête http, https, ws ou wss bloquée et comptée. Le
-// processus principal joue le scénario dans la page par executeJavaScript (aucun port de débogage), écrit une ligne
-// « [fumee] {json} » sur sa sortie, puis quitte : code 0 si rien n'a échoué ni été bloqué, 1 sinon. Au délai de garde,
-// la fumée se ferme seule, rouge.
+// se lance hors ligne dans une fenêtre CACHÉE, sans son, sur le profil jetable que lui passe scripts/fumee.mjs
+// (--profil=<dossier>, obligatoire : jamais la sauvegarde du joueur), toute requête http, https, ws ou wss bloquée et
+// comptée. Le processus principal joue le scénario dans la page par executeJavaScript (aucun port de débogage), écrit
+// une ligne « [fumee] {json} » sur sa sortie, puis quitte : code 0 si rien n'a échoué ni été bloqué, 1 sinon. Au délai
+// de garde, la fumée se ferme seule, rouge.
 const CLE_SAUVEGARDE = 'sniper-save'           // src/upgrades.js, saveProgress
 const REPRENDRE_M3 = 'REPRENDRE : MISSION 3'   // src/main.js, refreshMenuButtons
 // M3 en cours, son briefing pas encore vu : REPRENDRE joue la cinématique m3, puis la mission
@@ -63,14 +64,11 @@ let fumeeFinie = false
 let fumeeGarde = null
 let fumeeDebut = 0
 
-// Avant que l'application soit prête : profil jetable, exceptions du processus principal rattrapées (sans quoi
-// Electron ouvrirait sa boîte de dialogue sur le bureau), délai de garde.
+// Avant que l'application soit prête : exceptions du processus principal rattrapées (sans quoi Electron ouvrirait sa
+// boîte de dialogue sur le bureau), délai de garde, puis le profil jetable. Celui-ci est créé et supprimé par
+// scripts/fumee.mjs, jamais ici : sans --profil, ou avec un chemin que refuse Electron (relatif), la fumée finit rouge
+// tout de suite, sans dossier créé ni fenêtre (createWindow), donc sans jamais lancer le jeu sur le profil du joueur.
 function preparerFumee() {
-  const arg = process.argv.find(a => a.startsWith('--profil='))
-  const profil = arg ? arg.slice('--profil='.length)
-    : require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'sniper-fumee-'))
-  app.setPath('userData', profil)
-  app.setPath('sessionData', profil)
   fumeeDebut = Date.now()
   fumeeResultat = {
     electron: process.versions.electron, origine: null, echecs: [], requetesBloquees: [],
@@ -79,6 +77,15 @@ function preparerFumee() {
   process.on('uncaughtException', e => finirFumee(`exception du processus principal : ${e && e.message}`))
   process.on('unhandledRejection', e => finirFumee(`promesse rejetée dans le processus principal : ${e && e.message}`))
   fumeeGarde = setTimeout(() => finirFumee(`délai de garde dépassé (${DELAI_FUMEE_MS / 1000} s)`), DELAI_FUMEE_MS)
+  const arg = process.argv.find(a => a.startsWith('--profil='))
+  const profil = arg ? arg.slice('--profil='.length) : ''
+  if (!profil) return finirFumee('profil jetable manquant : --fumee demande --profil=<dossier> (scripts/fumee.mjs)')
+  try {
+    app.setPath('userData', profil)
+    app.setPath('sessionData', profil)
+  } catch (e) {
+    finirFumee(`profil jetable refusé par Electron : ${profil} (${e && e.message})`)
+  }
 }
 
 // La fenêtre créée, avant son premier chargement : jamais montrée (recachée aussitôt si un code la montre, par exemple
@@ -88,6 +95,8 @@ function lancerFumee(win) {
   const wc = win.webContents
   const r = fumeeResultat
   win.on('show', () => { win.hide(); r.echecs.push('fenêtre montrée pendant la fumée (recachée aussitôt)') })
+  // Même effet que backgroundThrottling: false dans webPreferences (spec §3.2), posé ici pour laisser intact le bloc
+  // webPreferences de createWindow, que la tâche R5 du lot 6 modifie (préchargement, bac à sable)
   wc.setBackgroundThrottling(false)
   wc.setAudioMuted(true)
   wc.session.webRequest.onBeforeRequest((details, callback) => {
