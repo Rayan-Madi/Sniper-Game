@@ -326,3 +326,106 @@ Avant : `main` à `7a39416` (la fin du lot 1 et celle de l'enquête, dont aucune
 - **Lunette ouverte** (15 images après le clic droit) : 0,3 à 0,4 % des pixels diffèrent, tous sur le réticule et au bout de la barre de stress du HUD. La scène, la vignette et le reste du HUD sont identiques au pixel près : le réticule est déplacé par le tremblement, réglé en milliradians depuis T1, et le stress monte moins vite (0,07 par seconde au lieu de 0,48).
 - **Après un tir** : avant le lot, rien ne dit le coup à 200 ms (la cible au centre du réticule, la balle en vol invisible) ; après, la vue est relevée par le recul (0,94° encore, sur les 2,5° du coup), le sillage monte du bas de l'image vers le point visé, et la jauge de la culasse (17 %) barre le trait vertical du réticule sous son centre : c'est le point de la relecture de T3, à juger par Rayan. Personnages, textures, décor et ombres sont intacts dans les quatre missions.
 - **Retour au menu** (`retour3`, après trois tirs manqués au port, marques, gerbes et sillage encore en vie) : 16 objets hors de la carte avant le retour (les PNJ, le cadenas, les trois marques et le sillage), aucun au menu (`{"fond":"87a0b0","horsCarte":[]}`).
+
+## Lot 3 : sonde de lisibilité (porte de décision 3.0, tâche S0)
+
+Mesure du 28 octobre 2026, avant tout changement des cartes (spec du lot 3, §1 « 3.0 » et §4 ; plan du lot 3a, tâche S0). Fichiers : `2026-10-28-sonde-lisibilite.json` (le relevé écrit par le script, critère appliqué) et les 26 captures du dossier `2026-10-28-sonde-lisibilite/` (JPEG de 10 à 35 ko).
+
+### Ce que c'est
+
+La route de développement `?sonde=1` (`src/main.js` ; `src/gfx/sonde.js`, `src/gfx/sondeScene.js`) monte la carte actuelle d'une mission, sans PNJ, place l'œil au poste prévu par la spec, lui donne le profil de la mission (plans proche et lointain, brume, soleil) et le zoom de la lunette. Elle pose les modèles imposés de la spec §3 côte à côte sous le point regardé, tournés vers le poste : sans teinte, à leur hauteur d'ajustement exacte (`fitHeight` de leur pool, sans la variation `heightVar` du jeu : 1,85 m pour les pools des cibles et des gardes, 1,8 m pour celui des civils, où sont Mira et Verne), dans leur pose Idle, sans ombre en Moyen ni en Bas (le rôle d'ombre « civil » des cibles de M2 à M6, spec §2 e). Les cibles restent sur la zone d'apparition actuelle (spec §1 : « les modèles imposés posés sur la zone actuelle ») : seul l'œil recule.
+
+Chaque personnage est mesuré par un rendu d'identification : lui seul, en blanc uni sur noir, sans brume, dans une cible de rendu de la taille du tampon de dessin. Ce sont donc des pixels réellement rendus : en Bas, le tampon fait 1 440 × 810 pour un écran de 1 920 × 1 080, et c'est sur eux que porte le critère de la spec §4. Silhouette : hauteur du masque. Tête : ce qui dépasse au-dessus du bas de ses zones de tir (crâne et bas du visage, `src/shot/hitzones.js`), cheveux et casque compris. Buste : largeur du masque entre les hanches et le bas de la tête, bras compris (le « torse (largeur) » du rapport M3). Les cheveux et les cils des GLB, transparents à opacité nulle et invisibles en jeu, n'entrent pas dans le masque.
+
+`scripts/capture-mission.mjs` (cible `sonde`) ouvre un Chrome neuf par capture (SwiftShader, hasard à graine, écran émulé de 1 920 × 1 080 : sans interface, `--window-size=1920,1080` ne laisse à la page que 1 904 × 985), garde le carré de 838 px qui contient le cercle de la lunette, en JPEG de qualité 85, relève les mesures de la page et applique le critère (`scripts/sonde.mjs`). Le même code redonne les mêmes octets : trois passes pour les postes de 155, 138 et 430 m, deux pour celui de 250 m.
+
+```bash
+ANNEXE_SONDE=2026-10-28-sonde-lisibilite node scripts/capture-mission.mjs sonde-lisibilite sonde   # 26 captures, une dizaine de minutes
+node scripts/capture-mission.mjs essai sonde-430m                                                   # un seul poste
+MISSION=4 PARAMS='poste=0,37.5,428.5&regard=0,1.2,0&zoom=16&far=1700&brume=lin:150:1600&modele=mafia_henchman' node scripts/capture-mission.mjs essai sonde-libre
+```
+
+### Postes
+
+| Poste | Mission, carte actuelle | Œil | Point visé (le groupe dessous) | Plongée | Profil | Personnages, de gauche à droite | Signe compté | Zoom maximum de base |
+|---|---|---|---|---|---|---|---|---|
+| 155 m | M3, le port, de nuit | cabine de la grue G3 (-28 ; 41 ; 146) | centre de la zone (0 ; 1,345 ; -0,5), à 154,3 m | 14,9° | plans à 0,5 et 600 m, brume exponentielle 0,0035, soleil de la carte | Vosko (`gangster_man_01`), Mira (`mafia_woman_03`), à 1,4 m | buste | ×10 |
+| 138 m | M5, le convoi | crête, 20 m au-dessus de la route (30 ; 20,2 ; 129,36) | la route (0 ; 1,2 ; -4) | 7,9° | plans à 0,5 et 1 000 m, brume exponentielle 0,0016, couchant derrière à gauche, 13° au-dessus de l'horizon | Kessler (`mafia_boss`) | tête | ×12 |
+| 430 m | M4, la base, à midi | château d'eau (0 ; 37,5 ; 428,5) | centre du dépôt (0 ; 1,2 ; 0) | 4,8° | plans à 1 et 1 700 m, brume linéaire de 150 à 1 600 m, soleil vers (4, 60, 2) | Verne (`mafia_woman_02`), Halder (`mafia_henchman`), Rossi (`mafia_woman_01`), à 5 m | tête | ×20 |
+| 250 m | M4, haut du repli de 120 à 250 m | château d'eau (0 ; 37,5 ; 247,35) | centre du dépôt | 8,4° | celui de 430 m | les mêmes, à 2,5 m | tête | ×20 |
+
+Le signe compté est celui des critères de la spec (§2, 3c et 3d) : le buste en M3 (costume sombre contre t-shirt clair ; le chignon de Mira n'y fait que 8 px à ×10), la tête en M4 (casque de Halder, chignon de Verne) et en M5 (la casquette d'officier de Kessler, encore à poser). Zooms : ×8, ×12 et ×20, plus le zoom maximum de base de la mission (×10 en M3) ; Moyen et Bas.
+
+### Mesures
+
+Pixels rendus, dans l'ordre silhouette, tête (hauteur), buste (largeur) :
+
+155 m (M3)
+
+| Zoom | Qualité | Vosko : silhouette, tête, buste | Mira : silhouette, tête, buste |
+|---|---|---|---|
+| ×8 | Moyen | 96, 15, 30 | 92, 13, 25 |
+| ×8 | Bas | 72, 11, 22 | 70, 11, 18 |
+| ×10 | Moyen | 120, 18, 37 | 116, 17, 31 |
+| ×10 | Bas | 90, 14, 28 | 87, 13, 23 |
+| ×12 | Moyen | 145, 22, 46 | 140, 21, 37 |
+| ×12 | Bas | 108, 17, 34 | 104, 15, 28 |
+| ×20 | Moyen | 240, 36, 76 | 232, 34, 62 |
+| ×20 | Bas | 180, 27, 57 | 174, 26, 47 |
+
+138 m (M5)
+
+| Zoom | Qualité | Kessler : silhouette, tête, buste |
+|---|---|---|
+| ×8 | Moyen | 111, 20, 39 |
+| ×8 | Bas | 83, 14, 29 |
+| ×12 | Moyen | 166, 29, 59 |
+| ×12 | Bas | 125, 22, 45 |
+| ×20 | Moyen | 277, 49, 98 |
+| ×20 | Bas | 207, 36, 74 |
+
+430 m (M4)
+
+| Zoom | Qualité | Verne : silhouette, tête, buste | Halder : silhouette, tête, buste | Rossi : silhouette, tête, buste |
+|---|---|---|---|---|
+| ×8 | Moyen | 33, 4, 10 | 35, 6, 12 | 34, 5, 10 |
+| ×8 | Bas | 26, 4, 8 | 27, 5, 10 | 26, 3, 7 |
+| ×12 | Moyen | 51, 7, 15 | 53, 9, 19 | 52, 8, 14 |
+| ×12 | Bas | 38, 5, 11 | 40, 7, 14 | 39, 6, 11 |
+| ×20 | Moyen | 84, 11, 25 | 88, 15, 31 | 87, 13, 24 |
+| ×20 | Bas | 63, 9, 18 | 66, 11, 23 | 65, 10, 18 |
+
+250 m (repli de M4)
+
+| Zoom | Qualité | Verne : silhouette, tête, buste | Halder : silhouette, tête, buste | Rossi : silhouette, tête, buste |
+|---|---|---|---|---|
+| ×8 | Moyen | 58, 8, 17 | 60, 10, 21 | 60, 9, 17 |
+| ×8 | Bas | 43, 6, 13 | 45, 7, 16 | 44, 6, 12 |
+| ×12 | Moyen | 87, 12, 25 | 91, 16, 33 | 89, 13, 25 |
+| ×12 | Bas | 66, 9, 19 | 68, 11, 25 | 67, 10, 18 |
+| ×20 | Moyen | 146, 21, 42 | 152, 26, 54 | 149, 22, 42 |
+| ×20 | Bas | 109, 15, 31 | 114, 19, 41 | 112, 17, 32 |
+
+Mesure contre calcul : les silhouettes mesurées valent de 0,96 à 1,02 fois le calcul (`pixelsAttendus`, `src/gfx/sonde.js` : hauteur d'ajustement, plongée, champ vertical de 60 / zoom), sur les 26 captures. L'écart tient à la pose Idle et à l'arrondi au pixel : les calculs de la spec (86 px et 12,5 px à 430 m, 123 px à 155 m, 166 px à 138 m, en 1080p) se vérifient sur le vrai rendu.
+
+### Critère par défaut et décision (spec §4)
+
+Silhouette d'au moins 80 px et signe d'au moins 10 px, en Bas, au zoom maximum de base de la mission ; le plus petit des personnages décide :
+
+| Mission | Distance | Zoom maximum de base | Silhouette, en Bas | Signe, en Bas | Critère |
+|---|---|---|---|---|---|
+| M3 | 155 m | ×10 | 87 px (Mira) | buste : 23 px (Mira) | tient |
+| M5 | 138 m | ×12 | 125 px (Kessler) | tête : 22 px (Kessler) | tient |
+| M4 | 430 m | ×20 | 63 px (Verne) | tête : 9 px (Verne) | ne tient pas |
+| M4 | 250 m | ×20 | 109 px (Verne) | tête : 15 px (Verne) | tient |
+
+- **M4 passe au repli** (décision 11 de la spec, §4) : à 430 m, Verne (1,8 m, la plus petite des trois) ne fait que 63 px en Bas à ×20, et sa tête 9 px ; Halder et Rossi 65 et 66 px. Au haut de la fourchette, 250 m, le critère tient avec de la marge (109 px, tête 15 px).
+- Distance où le critère tiendrait encore au même zoom (la taille suit 1 / distance) : environ 340 m pour M4 à ×20, 169 m pour M3 à ×10, 216 m pour M5 à ×12. C'est la silhouette qui lâche la première en M4.
+- M3 et M5 tiennent à leur distance.
+
+### Ce que montrent les captures
+
+- **430 m** : à ×20, les trois officiers se distinguent à leur tenue, en Moyen comme en Bas : tailleur bleu nuit (Verne), armure noire et casque (Halder), chemise blanche (Rossi). Leurs têtes ne sont plus que des taches de 9 à 15 px : le chignon de Verne ne se lit pas. À ×8 et ×12, ce sont trois silhouettes de 26 à 53 px. Le critère de la spec (silhouette et tête) est plus sévère que ce que l'œil reconnaît à la tenue : `sonde-430m-x20-bas.jpg` et `sonde-250m-x20-bas.jpg` sont les deux images à comparer pour revenir, ou non, sur la décision.
+- **155 m**, de nuit : la taille suffit, mais le costume sombre de Vosko se perd sur le quai sombre, quand le t-shirt clair de Mira se voit. C'est le risque 3 de la spec (nuit illisible sans marqueur) : 3c devra éclairer la zone.
+- **138 m** : Kessler se lit à tous les zooms. Il est ici debout sur la route ; assis dans la jeep (3d), seule sa partie haute dépassera.
+- **Les cartes d'aujourd'hui** : leur sol s'arrête à 100 m du centre en M3 et M4, à 150 m en M5 ; au-delà, la couleur du fond (bandes unies en haut et en bas des captures de M4 à ×8 et ×12). Sur la ligne de visée de M4, les piliers et la plateforme de l'ancienne tour de garde restent dans le champ, d'où l'écart entre les officiers (5 m, puis 2,5 m à 250 m, où le carré de la lunette ne couvre que 5 m de part et d'autre du point visé à ×20). En M5, l'ancien promontoire du tireur, 30 m devant la route, cacherait Kessler depuis un œil dans l'axe : l'œil est décalé de 30 m le long de la route (visée à 78° de la route). 3c et 3d refont ces cartes.

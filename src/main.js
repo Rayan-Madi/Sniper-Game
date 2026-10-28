@@ -1,14 +1,14 @@
 import * as THREE from 'three'
-import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQuality } from './scene.js'
+import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQuality, setLighting } from './scene.js'
 import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope, getScopeFov, getScopeOpenness, setZoom, getZoom, getEffectiveZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope, resizeScope, shotGlow, setBoltProgress } from './scope.js'
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
-import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject, solidMeshes, setSolidTint } from './maps.js'
+import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject, solidMeshes, setSolidTint, clearMap } from './maps.js'
 import { playShot, playSilencedShot, playShotSounds, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, mountEcho, unmountEcho, audioState, audioContext, masterNode } from './audio.js'
 import { spawnTrail, retargetTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
-import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources } from './characters.js'
+import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources, loadedModel } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
 import { aimAngles, stepStress, clampPitch } from './aim.js'
@@ -27,7 +27,7 @@ import { stepConvoy, releaseConvoy } from './campaign/convoy.js'
 import { buildMoralLock, releaseMoralLock } from './campaign/lock.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
-import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
+import { PRESETS, presetFor, createResolutionController, npcCastsShadow } from './gfx/quality.js'
 import { onPixelRatioChange } from './gfx/pixelRatio.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
 import { prepareDuringBriefing, afterPaint } from './campaign/prepare.js'
@@ -1738,6 +1738,35 @@ if (import.meta.env.DEV) {
       const report = (entries, state) => { pre.textContent = JSON.stringify(entries, null, 1); document.title = 'memtest:' + state }
       await runMemtest({ steps: memtestSteps(), act, render, snapshot, report })
     }).catch(err => { console.error('[memtest]', err); document.title = 'memtest:erreur' })
+  }
+  // ?sonde=1&poste=x,y,z&regard=x,y,z&near=…&far=…&brume=lin:debut:fin|exp2:densite&soleil=x,y,z&zoom=…&qualite=…
+  // &modele=nom[,nom…]&ecart=…&carte=1…6|nu : sonde de lisibilité à longue distance (spec du lot 3, §1 « 3.0 » et §4,
+  // porte de décision ; src/gfx/sonde.js et sondeScene.js), lue par scripts/capture-mission.mjs (cible sonde). La carte
+  // de la mission en cours (ou celle de carte=n, ou un sol nu), sans PNJ ; l'œil au poste, avec le profil demandé et le
+  // zoom de la lunette ; les modèles demandés côte à côte sous le point regardé, tournés vers le poste, sans teinte, à
+  // leur hauteur d'ajustement, avec l'ombre des cibles de M2 à M6 (rôle « civil »). Chacun est mesuré par un rendu
+  // d'identification : silhouette, tête et buste, en pixels rendus. La boucle du jeu s'arrête : l'image de la sonde,
+  // rendue une fois, reste à l'écran. __sonde() rend l'état (pret, erreur, mesures). &qualite= : le préréglage de la
+  // mesure, pas enregistré (sinon celui du profil).
+  if (q.has('sonde')) {
+    let etat = { pret: false, erreur: null }
+    window.__sonde = () => etat
+    Promise.all([import('./gfx/sonde.js'), import('./gfx/sondeScene.js')]).then(async ([{ lireSonde }, { monterSonde }]) => {
+      setCampaignPaused(true)   // plus aucun rendu du jeu : la caméra du menu ne dérive plus après la mesure
+      menuEl.style.display = 'none'
+      const config = lireSonde(location.search)
+      if (config.qualite) settings.graphics = config.qualite
+      applyQuality()
+      await charactersLoading   // les modèles imposés viennent du jeu (loadedModel)
+      const n = config.carte ?? upgradeState.currentLevel
+      let carte = null
+      if (n === 'nu') { clearMap(); setLighting() }
+      else carte = MAP_BUILDERS[(n - 1) % MAP_BUILDERS.length]()
+      etat = monterSonde({ renderer, scene, camera, sun }, config, {
+        carte, solides: solidMeshes(), modele: loadedModel, ombre: npcCastsShadow(quality.npcShadows, 'civil'),
+        fenetre: [innerWidth, innerHeight],
+      })
+    }).catch(err => { console.error('[sonde]', err); etat = { pret: false, erreur: String((err && err.message) || err) } })
   }
   if (q.has('cine')) {
     menuEl.style.display = 'none'

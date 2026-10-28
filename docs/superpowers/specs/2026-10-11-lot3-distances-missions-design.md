@@ -174,6 +174,8 @@ Je propose donc **un socle transverse, puis des sous-lots par groupe de cartes**
 
 ### 3c Port et base : M3, M4
 
+> Depuis la décision 11 (§4, sonde de lisibilité du 28 octobre 2026), M4 est à 250 m, et non plus à 430 m. Les chiffres de M4 de cette section, calculés à 430 m, sont à reprendre au plan de 3c : son de l'impact à 0,73 s au lieu de 1,25 s, distances de 232 à 268 m sur la zone, lisibilité mesurée par la sonde (109 px et tête de 15 px en Bas à ×20).
+
 **Choix**
 
 | Sujet | A | B | C | Reco |
@@ -202,7 +204,7 @@ Je propose donc **un socle transverse, puis des sous-lots par groupe de cartes**
 **Critères de fin 3c**
 - **Lisibilité** en 1080p, validée sur captures par Rayan en Moyen et en Bas :
   - M3 à ×10 (maximum de base) : corps 123 px, torse 30 px ;
-  - M4 à ×20 : corps 86 px, tête 12,5 px.
+  - M4 à ×20 : corps 86 px, tête 12,5 px (calcul à 430 m ; à 250 m, après la décision 11, la sonde mesure 109 px et une tête de 15 px en Bas).
 - **Budgets en Moyen** à la vue de départ [proposition] :
   - décor seul ≤ 200 appels et ≤ 300 k triangles ;
   - vue complète ≤ 450 appels et ≤ 1,2 M triangles ;
@@ -242,7 +244,7 @@ Je propose donc **un socle transverse, puis des sous-lots par groupe de cartes**
 | **M1** | Toit d'un immeuble de 13 m, au muret côté rue | 31, puis 31,1 m au point d'appel (zone de 24,6 à 38) | Œil à (10 ; 14,2 ; 26,1), 24,5° | 22 h 47, nuit (recette de M2), lampe au point d'appel | Costume bleu nuit, téléphone, garde du corps à 3 m ou moins ; **marqueur gardé** | `gangster_man_01`, sans teinte ; civils sans `mafia_woman_02` | « Une balle » : mention UNE BALLE au rapport ; « Il décroche » dans le fil | Rue en travers, 8 étals en 2 rangées, camionnette, arbres fixes, brume de 40 à 110 m ; décor du menu séparé |
 | **M2** | Toit de 18 m, muret de 1 m | 42, puis 41,7 m à l'horizontale (45,4 m en oblique) | Œil à (0 ; 19,35 ; 22,15), 23,5° | 23 h, lumière chaude devant la vitrine | Polo blanc (Luc), polo beige (Marc), toujours ensemble, sacoche (à trancher) | `gangster_man_02` ×2, teinte sur Ch01_Shirt seulement ; modèle exclu des civils | « Enchaîne, < 2 s » : survivant stupéfait 0,4 s puis course vers la ruelle (2,8 s), échec à l'embouchure ; bonus ENCHAÎNÉ si moins de 2 s | Boucherie (enseigne, auvent rayé, vitrine), ruelle, étal, lampadaires aux coins, sol de 200 m, fenêtres retournées, nom « La place » |
 | **M3** | Cabine de la grue G3 | 155, puis 142,5 à 167 m (centre 154,3) | Œil à (-28 ; 41 ; 146), 14,9° | 23 h 41 à 23 h 54, pluie autour du joueur, projecteurs au sodium | Vosko : costume sombre, va-et-vient vers le conteneur. Mira : t-shirt clair, chignon, registre, à 1,2 à 1,5 m de lui | `gangster_man_01` (Vosko), `mafia_woman_03` (Mira, [R-M3] à confirmer par un rendu) ; dockers en `gangster_man_02` casqués | « Deux tirs sans temps mort » : le survivant réagit au son (0,45 s), téléphone puis abri, échec « Mira a donné l'alerte ». Ordre Vosko puis Mira récompensé. Cadenas : fin différée de 12 s | 3 portiques, Kalina, quai de 420 m, eau visible, parc de conteneurs instancié, entrepôt en fond, brume exponentielle 0,0035, near 0,5, far 600, zoom de ×6 à ×10, réglage de la lunette à 155 m |
-| **M4** | Passerelle du château d'eau | 430, puis 412 à 448 m | Œil à (0 ; 37,5 ; 428,5), 4,9° | Midi, soleil vers (4, 60, 2), ciel dégagé | Verne : tailleur bleu nuit, chignon, planchette. Halder : casque noir. Rossi : cheveux courts, chemise blanche | `mafia_woman_02`, `mafia_henchman`, `mafia_woman_01` ; gardes en `mafia_boss` (à trancher) ; 0 civil | « 3 tirs en 6 s » : chrono dès le 1er tir, son à 1,25 s, course vers les igloos, échec à l'arrivée ; ordre V, H, R en bonus, TRIPLÉ | Château d'eau, 6 igloos et aire, hangars, piste, sol de 4 km texturé, collines, brume linéaire de 150 à 1 600 m, near 1,0, far 1 700, zoom de ×8 à ×20 |
+| **M4** | Passerelle du château d'eau | 430, puis 412 à 448 m ; **repli à 250 m** (décision 11) | Œil à (0 ; 37,5 ; 428,5), 4,9° ; au repli (0 ; 37,5 ; 247,35), 8,4° | Midi, soleil vers (4, 60, 2), ciel dégagé | Verne : tailleur bleu nuit, chignon, planchette. Halder : casque noir. Rossi : cheveux courts, chemise blanche | `mafia_woman_02`, `mafia_henchman`, `mafia_woman_01` ; gardes en `mafia_boss` (à trancher) ; 0 civil | « 3 tirs en 6 s » : chrono dès le 1er tir, son à 1,25 s, course vers les igloos, échec à l'arrivée ; ordre V, H, R en bonus, TRIPLÉ | Château d'eau, 6 igloos et aire, hangars, piste, sol de 4 km texturé, collines, brume linéaire de 150 à 1 600 m, near 1,0, far 1 700, zoom de ×8 à ×20 |
 | **M5** | Crête de colline, à 18 à 22 m au-dessus de la route | 138, puis 125 à 150 m | Environ 8° | 19 h 42, couchant derrière à gauche | Véhicule 2 sur 3, place passager ; casquette d'officier | `mafia_boss` avec casquette procédurale ; escorte en `mafia_boss` (à trancher) | « 13 s » : barre FENÊTRE DE TIR à l'entrée du virage. « Vise devant » : avance réelle d'environ 1,5 m (à trancher). Une alerte accélère le convoi | Virage en épingle de R ≈ 60 m, freinage et feux stop, colline, bosquets, moto, sol ≥ 2 km, brume exponentielle 0,0016, near 0,5, far 1 000, zoom de ×6 à ×12 |
 | **M6** | Atelier sous verrière, au ras de la façade | 38, puis 35 à 42,6 m (piste à 37,7 m) | Œil à (0 ; 17,6 ; 14,2), 22,7 à 27,1° | 23 h, nuit, fête audible et étouffée | Ne danse pas, téléphone à l'oreille droite, écran qui éclaire la joue ; place tirée parmi les 14 non-danseurs | Modèle masculin (à trancher) ; 23 civils | Fuite vers la porte d'entrée, échec au franchissement ; fenêtre de 90 s liée à l'appel (à trancher) | Immeuble du tireur reculé de 9 m, rue de 29,5 m, baie vitrée non solide (surface `verre`), salon réaménagé, porte ENTRÉE, plaque VILLA MOREAU, zoom de départ ×3 |
 
@@ -261,10 +263,16 @@ Je propose donc **un socle transverse, puis des sous-lots par groupe de cartes**
 
 **Porte de décision 3.0** : les captures de la sonde de lisibilité (155, 138 et 430 m, ×8 à ×20, Moyen et Bas) sont envoyées à Rayan. Critère par défaut s'il ne répond pas avant la fin de 3a : silhouette ≥ 80 px et signe d'identification ≥ 10 px en Bas au zoom maximum de base de la mission ; sinon M4 passe au repli de 120 à 250 m.
 
+11. **Porte de décision 3.0 mesurée (28 octobre 2026, tâche S0) : M4 passe au repli, à 250 m.** Critère par défaut appliqué par la sonde (`?sonde=1`, `scripts/capture-mission.mjs sonde`), en pixels réellement rendus en Bas, au zoom maximum de base, le plus petit personnage décidant ; mesures et 26 captures dans `annexes/2026-10-28-sonde-lisibilite.json` et son dossier (README des annexes, « Lot 3 : sonde de lisibilité »).
+    - M3 tient à 155 m (×10 : silhouette de 87 px pour Mira, buste de 23 px) et M5 à 138 m (×12 : 125 px, tête de 22 px).
+    - M4 ne tient pas à 430 m (×20 : 63 px pour Verne, la plus petite des trois, et une tête de 9 px) ; le critère n'y tiendrait que jusqu'à 340 m environ. Au haut de la fourchette du repli, 250 m, il tient avec de la marge (109 px, tête de 15 px). C'est la distance retenue pour 3c, la plus proche du briefing : même château d'eau (œil à 37,5 m, plongée de 8,4°), même zoom (×8 à ×20).
+    - Les calculs de la spec se vérifient sur le vrai rendu : silhouettes mesurées de 0,96 à 1,02 fois le calcul.
+    - À ×20, les trois officiers se distinguent pourtant à leur tenue même à 430 m (tailleur bleu nuit, armure noire, chemise blanche) : le critère est plus sévère que l'œil. Rayan peut revenir sur cette décision avant la fin de 3a, en comparant `sonde-430m-x20-bas.jpg` et `sonde-250m-x20-bas.jpg`.
+
 ## 5. Risques principaux
 
 1. **Le lot 2 n'est pas fini** : T4 à T6 restent à faire [V]. Le socle s'appuie sur `resolveImpact`, `solidMeshes()` et `planShotSounds` : tout glissement du lot 2 repousse le lot 3.
-2. **Lisibilité à 430 m.** 86 px à ×20 en 1080p, environ 65 px réels en Bas ou en Auto [calcul]. La sonde 3.0 est la porte de décision. Si c'est illisible, c'est le repli de 120 à 250 m.
+2. **Lisibilité à 430 m.** 86 px à ×20 en 1080p, environ 65 px réels en Bas ou en Auto [calcul]. La sonde 3.0 est la porte de décision. Si c'est illisible, c'est le repli de 120 à 250 m. Mesuré le 28 octobre 2026 : 63 px en Bas, sous le critère ; repli à 250 m (décision 11, §4).
 3. **Nuit illisible sans marqueur** (M1, M2, M3). Les `PointLight` en unités physiques n'éclairent presque rien à 5 à 7 m [R-M2, R-M3]. Il faut des lumières dimensionnées en candelas et un contrôle sur captures en Bas.
 4. **Fuite d'état global entre cartes** : soleil, near et far, brume, cadre d'ombre. Elle dégraderait le menu, le PvP, l'enquête et les captures déterministes. Parade : `resetCameraProfile` et ses tests, plus `memtest` (menu-final identique).
 5. **Budgets** : un décor de 400 m en `box()` ferait exploser les appels de dessin ; les `InstancedMesh` ne sont pas libérés par `dispose.js` [V] ; la kill-cam du lot 4 verra l'entre-deux de près.

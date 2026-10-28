@@ -61,6 +61,21 @@ const cache = {}   // type -> [ {scene, animations, cfg} ]
 // URL des modèles chargés pour un type, dans l'ordre du pool (relecture, tests).
 export function poolUrls(type) { return (cache[type] || []).map(p => p.cfg.url) }
 
+// Modèle chargé désigné par son fichier (« mafia_woman_02 », « mafia_woman_02.glb » ou son adresse), cherché dans
+// tous les pools, sans tirage au hasard : { scene, animations, cfg, type } (la scène reste partagée : à cloner), ou
+// null s'il n'est pas chargé. Pour la sonde de lisibilité (route ?sonde=1 de main.js), qui pose les modèles imposés de
+// la spec du lot 3, dont deux hors du pool de leur rôle : Verne chez les civils, Halder chez les gardes.
+const fichierDe = v => String(v || '').split(/[?#]/)[0].split('/').pop().replace(/\.glb$/i, '')
+export function loadedModel(nom) {
+  const fichier = fichierDe(nom)
+  if (!fichier) return null
+  for (const [type, pool] of Object.entries(cache)) {
+    const p = pool.find(x => fichierDe(x.cfg.url) === fichier)
+    if (p) return { scene: p.scene, animations: p.animations, cfg: p.cfg, type }
+  }
+  return null
+}
+
 // Ressources des modèles chargés (géométries et textures distinctes, marquées partagées) : le renderer les garde pour
 // la session dès qu'un personnage les a dessinées. Relevées par la route ?memtest=1 et publiées avec chaque relevé :
 // le critère « partie complète » les ajoute au menu de départ (spec du lot 1, §6 reformulé le 9 octobre 2026, §8), sans
