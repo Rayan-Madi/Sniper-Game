@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { scene, camera, renderer } from './scene.js'
 import { buildPvpArena, clearPvpMap, getPvpColliders } from './pvpMap.js'
-import { MAP_BUILDERS } from './maps.js'
+import { buildMenuDecor } from './maps/index.js'
 import { spawnCharacter, charactersReady, charactersProgress, charactersSettled } from './characters.js'
 import { NPC, STATES, npcShadowMode } from './npc.js'
 import { playPvpIntro, isPvpIntroActive, stopPvpIntro } from './pvpIntro.js'
@@ -1091,7 +1091,7 @@ function quitToMenu() {
   hideAllMpScreens()
   releaseRoundScene()        // d'ordinaire déjà fait par endRound ; rien ne reste si une manche est encore montée
   const instr = el('instruction'); if (instr) instr.style.display = ''   // restaure l'aide du mode histoire
-  MAP_BUILDERS[0]()          // reconstruit le décor vivant derrière le menu
+  buildMenuDecor()           // reconstruit le décor vivant derrière le menu (src/maps/menu.js)
   setCampaignPaused(false)   // la boucle du mode histoire reprend la main
   menuEl().style.display = 'flex'
 }

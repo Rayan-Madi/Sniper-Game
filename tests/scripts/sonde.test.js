@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest'
 // appliqué (verdict absent). Sans scripts/sonde.mjs, les tests tournent sur cette règle (regleAvant) et échouent sur
 // elle (vus rouges). Les postes du jeu d'aujourd'hui, eux, sont relus dans les cartes (témoin plus bas).
 
-// maps.js pose ses objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
+// Les cartes (src/maps/) posent leurs objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
 vi.mock('../../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
@@ -34,7 +34,7 @@ const { POSTES_SONDE, jobsSonde, urlSonde, verdictPoste, decisionM4, distanceLim
 const SONDE_JS = '../../src/gfx/sonde.js'
 const { lireSonde, plongeeDeg } = await import(/* @vite-ignore */ SONDE_JS).catch(() => ({ lireSonde: () => null, plongeeDeg: () => 0 }))
 const { MODELS } = await import('../../src/characters.js')
-const { MAP_BUILDERS } = await import('../../src/maps.js')
+const { MAP_BUILDERS } = await import('../../src/maps/index.js')
 const { withSeed } = await import('../../src/gfx/memtest.js')
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])

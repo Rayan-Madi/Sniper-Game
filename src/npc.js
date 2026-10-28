@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { scene } from './scene.js'
 import { spawnCharacter, animateRig } from './characters.js'
-import { getObstacles } from './maps.js'
+import { getObstacles } from './maps/index.js'
 import { disposeObject } from './gfx/dispose.js'
 import { npcCastsShadow } from './gfx/quality.js'
 import { zonesFromSkeleton, zonesFromProcedural } from './shot/hitzones.js'

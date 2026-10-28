@@ -1,25 +1,26 @@
 import { describe, it, expect, vi } from 'vitest'
 import * as THREE from 'three'
 
-// Décor qui arrête la balle (spec du lot 2, §3.4 ; plan, tâche T5). maps.js pose userData.solid = true sur ce que ses
-// primitives créent (box, plane, cylinder, bâtiments, voitures), avec userData.surface : 'pierre' par défaut, 'metal'
-// pour les conteneurs, voitures, jeeps, grue, tonneaux, 'bois' pour les caisses, tables, bancs, 'sol' pour les sols.
-// Pluie, lumières, vitres, peinture au sol et marqueurs des cibles ne sont jamais solides. La liste des solides de la
-// carte est tenue par maps.js (solidMeshes()), vidée par clear() ; ?solides=1 teinte les solides (setSolidTint).
+// Décor qui arrête la balle (spec du lot 2, §3.4 ; plan, tâche T5). src/maps/prims.js pose userData.solid = true sur
+// ce que ses primitives créent (box, plane, cylinder, bâtiments, voitures), avec userData.surface : 'pierre' par
+// défaut, 'metal' pour les conteneurs, voitures, jeeps, grue, tonneaux, 'bois' pour les caisses, tables, bancs, 'sol'
+// pour les sols. Pluie, lumières, vitres, peinture au sol et marqueurs des cibles ne sont jamais solides. La liste des
+// solides de la carte est tenue par src/maps/prims.js (solidMeshes()), vidée par clear() ; ?solides=1 teinte les
+// solides (setSolidTint).
 //
 // Témoin : avant le lot 2 (commit ac004b6), rien n'est marqué : aucun rayon ne rencontre de maillage solide, la liste
 // des solides est vide et la teinte de vérification n'existe pas (vus rouges).
 
-// maps.js pose ses objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
+// Les cartes (src/maps/) posent leurs objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
 vi.mock('../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
 })
 
 import { scene } from '../src/scene.js'
-import * as maps from '../src/maps.js'
+import * as maps from '../src/maps/index.js'
 import { NPC } from '../src/npc.js'
-import { withSeed } from '../src/gfx/memtest.js'
+import { withSeed, seedOf } from '../src/gfx/memtest.js'
 
 const { MAP_BUILDERS, clearMap, makeJeep } = maps
 // Absents avant le lot 2 : la liste vide et une teinte sans effet, pour que les tests échouent sur leurs assertions.
@@ -52,7 +53,7 @@ const couleur = o => o.material.color.getHex()
 const centre = o => new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3())
 
 // Rayons horizontaux (ou plongeants) vers un objet connu de chaque carte : surface attendue, et ce que doit valoir le
-// point touché (coordonnée et valeur, à 2 cm près). Positions relevées dans maps.js.
+// point touché (coordonnée et valeur, à 2 cm près). Positions relevées dans les cartes (src/maps/).
 const CAS = [
   // M1 rue
   [0, 'mur d\'un immeuble (pierre)', v(0, 5, -12), v(-1, 0, 0), 'pierre', ['x', -13]],
@@ -298,6 +299,18 @@ describe('?solides=1 : teinte des solides par matière', () => {
       let solides = 0
       jeep.traverse(o => { if (o.isMesh && o.userData.solid) solides++ })
       expect(solides).toBeGreaterThan(20)
+    } finally { setSolidTint(false) }
+  })
+
+  // Le menu a son décor à lui depuis la tâche A1 du lot 3a (src/maps/menu.js) : remonté au retour d'une mission pendant
+  // la vérification, il est teinté comme une carte.
+  it('le décor du menu, monté pendant la vérification, est teinté aussi', () => {
+    setSolidTint(true)
+    try {
+      withSeed(seedOf({ type: 'menu' }), maps.buildMenuDecor)   // la graine du menu de la route ?memtest=1
+      const solides = maillages(o => o.userData.solid === true)
+      expect(solides.length).toBeGreaterThan(20)
+      for (const o of solides) expect(couleur(o), o.userData.surface).toBe(maps.SOLID_TINTS[o.userData.surface])
     } finally { setSolidTint(false) }
   })
 })

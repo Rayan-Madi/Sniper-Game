@@ -1,6 +1,6 @@
 // Convoi de la mission 5 : trois jeeps qui traversent la route, avec leurs occupants.
 // convoy = { baseX, z, groundY, dir, speed, vehicles: [{ mesh, offsetX, riders: [{ npc, dx, dy, dz }] }] } :
-// baseX avance le long de X, z est l'axe de la route, groundY le dessus de sa chaussée (maps.js).
+// baseX avance le long de X, z est l'axe de la route, groundY le dessus de sa chaussée (src/maps/m5-convoi.js).
 import { disposeObject } from '../gfx/dispose.js'
 
 // Au-delà, le convoi a quitté la zone de tir.

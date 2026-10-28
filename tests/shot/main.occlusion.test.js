@@ -27,10 +27,10 @@ const dev = a.program.body.find(n => n.type === 'IfStatement' && texte(n.test) =
 const texteDev = dev ? texte(dev) : ''
 
 describe('ce que la balle touche', () => {
-  it('solidHit et resolveImpact viennent de src/shot/occlusion.js, solidMeshes de maps.js', () => {
+  it('solidHit et resolveImpact viennent de src/shot/occlusion.js, solidMeshes de src/maps/', () => {
     expect(a.imports.get('solidHit')?.from).toBe('./shot/occlusion.js')
     expect(a.imports.get('resolveImpact')?.from).toBe('./shot/occlusion.js')
-    expect(a.imports.get('solidMeshes')?.from).toBe('./maps.js')
+    expect(a.imports.get('solidMeshes')?.from).toBe('./maps/index.js')
   })
 
   it('firstHit cherche les PNJ, le décor et garde le premier', () => {
@@ -131,8 +131,8 @@ describe('impact sur le décor', () => {
 })
 
 describe('développement', () => {
-  it('?solides=1 teinte les solides (setSolidTint, maps.js)', () => {
-    expect(a.imports.get('setSolidTint')?.from).toBe('./maps.js')
+  it('?solides=1 teinte les solides (setSolidTint, src/maps/)', () => {
+    expect(a.imports.get('setSolidTint')?.from).toBe('./maps/index.js')
     expect(texteDev).toMatch(/q\.has\('solides'\)[\s\S]{0,80}setSolidTint\(true\)/)
   })
 

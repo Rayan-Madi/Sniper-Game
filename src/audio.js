@@ -280,7 +280,8 @@ let ambTimer = null, ambGain = null
 // nappe, en fondu aux deux bouts ; niveau et montée réglés dans src/shot/tuning.js (PLUIE).
 let rain = null
 
-// rain : la carte a sa pluie (le port, maps.js) ; REVOIR LE BRIEFING la coupe avec la nappe, le retour la relance.
+// rain : la carte a sa pluie (le port, src/maps/m3-port.js) ; REVOIR LE BRIEFING la coupe avec la nappe, le retour la
+// relance.
 export function startMissionAmbience({ rain: pluie = false } = {}) {
   if (pluie && !rain) {
     const r = createRain({ ctx: getCtx(), dest: out() })

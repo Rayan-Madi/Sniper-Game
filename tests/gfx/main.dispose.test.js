@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { MAIN_SRC as SRC, analyse, callsIn } from './mainSource.js'
 
 // Câblage de la libération dans main.js (spec du lot 1 §4.2). main.js ne s'importe pas sous jsdom (canevas WebGL, DOM
-// du jeu) : les aides (lock.js, convoy.js, effects.js, maps.js) ont leurs propres tests, ce fichier garde leurs points
-// d'appel en lisant le source. Chaque appel attendu est cherché dans le corps de la fonction nommée, et la fonction
-// appelée doit venir du bon module (pas d'une copie locale qui ne libérerait rien). Sans cette garde, retirer
-// removeMoralLock() d'unmountLevel ou MAP_BUILDERS[0]() de showMenu ne ferait rougir aucun test : seuls le memtest et
-// la capture retour<n> le verraient, à la main.
+// du jeu) : les aides (lock.js, convoy.js, effects.js, src/maps/) ont leurs propres tests, ce fichier garde leurs
+// points d'appel en lisant le source. Chaque appel attendu est cherché dans le corps de la fonction nommée, et la
+// fonction appelée doit venir du bon module (pas d'une copie locale qui ne libérerait rien). Sans cette garde, retirer
+// removeMoralLock() d'unmountLevel ou buildMenuDecor() de showMenu ne ferait rougir aucun test : seuls le memtest et
+// la capture retour<n> le verraient, à la main. Depuis la tâche A1 du lot 3a, le menu a son décor à lui
+// (src/maps/menu.js, tests/maps.menu.test.js) : c'est lui que showMenu monte, plus la carte de M1.
 
 // Ce que main.js doit importer, et d'où.
 const IMPORTS = {
@@ -15,7 +16,8 @@ const IMPORTS = {
   clearEffects: './effects.js',
   clearBulletHoles: './effects.js',
   spawnBulletHole: './effects.js',
-  MAP_BUILDERS: './maps.js',
+  MAP_BUILDERS: './maps/index.js',
+  buildMenuDecor: './maps/index.js',
 }
 
 // [fonction de main.js, appel qu'elle doit faire]
@@ -31,7 +33,7 @@ const CALLS = [
   ['removeMoralLock', 'releaseMoralLock'],
   ['mountLevel', 'removeMoralLock'],
   ['showMenu', 'unmountLevel'],
-  ['showMenu', 'MAP_BUILDERS[0]'],        // la carte de la mission est libérée, la rue revient derrière le menu
+  ['showMenu', 'buildMenuDecor'],         // la carte de la mission est libérée, le décor du menu revient
   ['resolveBullet', 'removeMoralLock'],   // cadenas tiré
   ['resolveBullet', 'spawnBulletHole'],   // tir manqué : trou sur la géométrie et le matériau partagés
 ]

@@ -12,10 +12,10 @@ vi.mock('../../src/scene.js', async () => {
 import { scene } from '../../src/scene.js'
 import { buildMoralLock, releaseMoralLock } from '../../src/campaign/lock.js'
 import { releaseConvoy } from '../../src/campaign/convoy.js'
-import { makeJeep } from '../../src/maps.js'
+import { makeJeep } from '../../src/maps/index.js'
 import { createFakeRenderer, trackDisposals } from './fakeRenderer.js'
 
-const LOCK_POS = [-16.5, 1.35, 5.15]   // moralLock.pos du port (maps.js)
+const LOCK_POS = [-16.5, 1.35, 5.15]   // moralLock.pos du port (src/maps/m3-port.js)
 
 // Convoi comme le monte mountLevel : trois jeeps dans la scène, un occupant par jeep (un objet de la scène à part).
 function convoy() {

@@ -77,8 +77,8 @@ export function spawnImpact(pos, color = 0xaa2222, count = 14) {
 }
 
 // ─── Impacts sur le décor (spec du lot 2, §3.4) ────────────────────
-// Gerbes par matière (maps.js, userData.surface) : un ou deux nuages de particules, chacun avec sa couleur, son
-// nombre, sa vitesse (m/s, jaillissant de la surface : le long de la normale, avec un écart au hasard dans la
+// Gerbes par matière (src/maps/prims.js, userData.surface) : un ou deux nuages de particules, chacun avec sa couleur,
+// son nombre, sa vitesse (m/s, jaillissant de la surface : le long de la normale, avec un écart au hasard dans la
 // demi-sphère du tireur), le rayon de ses particules (m), sa durée de vie (s) et sa gravité (m/s²). Lumineux :
 // hors tone mapping, en mélange additif (étincelles).
 const GERBES = {

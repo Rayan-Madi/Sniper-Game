@@ -133,7 +133,7 @@ describe('personnageSonde : le modèle imposé, tel quel', () => {
 describe('solSous : les pieds sur ce qu\'il y a sous le point', () => {
   const dalle = () => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(34, 0.35, 26), new THREE.MeshLambertMaterial())
-    m.position.set(0, 0.17, -2)   // la dalle du quai de M3 (maps.js), dessus à 0,345 m
+    m.position.set(0, 0.17, -2)   // la dalle du quai de M3 (src/maps/m3-port.js), dessus à 0,345 m
     m.updateMatrixWorld(true)
     return m
   }

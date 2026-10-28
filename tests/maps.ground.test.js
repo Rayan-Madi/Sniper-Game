@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import * as THREE from 'three'
 
-// maps.js et npc.js posent leurs objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
+// Les cartes (src/maps/) et npc.js posent leurs objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni
+// lumières.
 vi.mock('../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
 })
 
 import { scene } from '../src/scene.js'
-import { MAP_BUILDERS } from '../src/maps.js'
+import { MAP_BUILDERS } from '../src/maps/index.js'
 import { NPC } from '../src/npc.js'
 
 const NAMES = ['M1 marché', 'M2 parking', 'M3 port', 'M4 base', 'M5 convoi', 'M6 fête']

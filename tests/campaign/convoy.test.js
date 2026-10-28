@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { stepConvoy } from '../../src/campaign/convoy.js'
 
 // Convoi de M5 tel que startLevel le monte : la jeep du colonel (chauffeur + colonel à l'arrière) et une escorte.
-// La route est une dalle dont le dessus est à 0,2 m (maps.js, buildMapConvoy).
+// La route est une dalle dont le dessus est à 0,2 m (src/maps/m5-convoi.js, buildMapConvoy).
 function makeConvoy(groundY = 0.2, z = -4) {
   const npc = () => ({ alive: true, mesh: new THREE.Object3D() })
   const driver = npc(), colonel = npc(), escort = npc()

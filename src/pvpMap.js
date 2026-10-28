@@ -1,10 +1,10 @@
 import * as THREE from 'three'
 import { scene, setLighting } from './scene.js'
-import { clearMap } from './maps.js'
+import { clearMap } from './maps/index.js'
 import { disposeObject } from './gfx/dispose.js'
 
 // ─── Arène PvP dédiée : grande fête d'appartement nocturne ───────────
-// Auto-contenue (ne partage pas le tableau d'objets de maps.js) pour ne
+// Auto-contenue (ne partage pas le tableau d'objets de src/maps/) pour ne
 // jamais interférer avec le mode histoire.
 //
 // Géométrie : une GRANDE salle de fête (48 × 24) ouverte côté sniper par une

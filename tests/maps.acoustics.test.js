@@ -12,7 +12,7 @@ vi.mock('../src/scene.js', async () => {
   return { scene: new THREE.Scene(), setLighting: () => {} }
 })
 
-const { MAP_BUILDERS, clearMap } = await import('../src/maps.js')
+const { MAP_BUILDERS, clearMap } = await import('../src/maps/index.js')
 const { ACOUSTIQUES } = await import('../src/shot/tuning.js')
 const { withSeed } = await import('../src/gfx/memtest.js')
 

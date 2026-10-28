@@ -35,7 +35,7 @@ async function load({ models = true } = {}) {
   characters = await import('../../src/characters.js')
   ;({ NPC } = await import('../../src/npc.js'))
   ;({ isShared } = await import('../../src/gfx/dispose.js'))
-  ;({ MAP_BUILDERS } = await import('../../src/maps.js'))
+  ;({ MAP_BUILDERS } = await import('../../src/maps/index.js'))
   ;({ withSeed } = await import('../../src/gfx/memtest.js'))
   if (models) await characters.preloadCharacters()
   scene.clear()
@@ -235,7 +235,7 @@ describe('corps d\'un PNJ abattu', () => {
 describe('NPC.dispose, niveau 2 : faux renderer', () => {
   // Montage de M6 comme mountLevel : la fête, le commanditaire au téléphone (pool des civils), 2 gardes, 24 civils
   // qui dansent, soit 27 PNJ ; hasard à graine (même foule, mêmes modèles à chaque montage). Démontage comme
-  // unmountLevel : chaque PNJ libéré ; la carte, elle, est libérée par la carte suivante (maps.js, tâche L2).
+  // unmountLevel : chaque PNJ libéré ; la carte, elle, est libérée par la carte suivante (src/maps/, tâche L2).
   function mountM6() {
     return withSeed(1006, () => {
       const info = MAP_BUILDERS[5]()

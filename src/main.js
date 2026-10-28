@@ -4,7 +4,7 @@ import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope,
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { getLevel } from './levels.js'
-import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject, solidMeshes, setSolidTint, clearMap } from './maps.js'
+import { MAP_BUILDERS, buildMenuDecor, updateMapAmbient, makeJeep, isMapObject, solidMeshes, setSolidTint, clearMap } from './maps/index.js'
 import { playShot, playSilencedShot, playShotSounds, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, mountEcho, unmountEcho, audioState, audioContext, masterNode } from './audio.js'
 import { spawnTrail, retargetTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
@@ -132,7 +132,7 @@ loadSettings()
 applyQuality()       // préréglage graphique avant la première image (densité de pixels, ombres)
 loadProgress()        // reprend l'histoire là où le joueur s'était arrêté
 const charactersLoading = preloadCharacters()   // charge les .glb configurés (rien si aucun), voir characters.js
-MAP_BUILDERS[0]()     // décor vivant derrière le menu principal (caméra qui dérive)
+buildMenuDecor()      // décor vivant derrière le menu principal (caméra qui dérive ; src/maps/menu.js)
 initMultiplayerMenu() // mode 1v1 Sniper vs Contre-tueur (voir pvp.js)
 
 // Panneau de performances : ?stats=1 (voir syncStatsPanel)
@@ -625,7 +625,7 @@ function mountLevel(n) {
       hideMarker: !!useHidden,
       lockState: useHidden ? STATES.PHONE : null,
       onPhone: !!useHidden,
-      standUp: useHidden ? hidden.standUp : null,   // en fuite, il se lève devant le canapé (maps.js)
+      standUp: useHidden ? hidden.standUp : null,   // en fuite, il se lève devant le canapé (src/maps/m6-fete.js)
       // Le commanditaire est indiscernable : même pool de modèles que la FOULE.
       // Seul son comportement (assis, au téléphone, ne danse jamais) le trahit.
       modelType: useHidden ? 'civilian' : null,
@@ -728,7 +728,7 @@ function showMenu() {
   abortInvestigation()
   missionToken++   // la mission est abandonnée : ses minuteurs de fin (kill-cam, civil abattu) ne doivent plus tomber sur le menu
   unmountLevel()   // PNJ, convoi, cadenas, impacts et effets de la mission quittée
-  MAP_BUILDERS[0]()   // la carte de la mission est libérée, la rue revient derrière le menu (comme au démarrage)
+  buildMenuDecor()    // la carte de la mission est libérée, le décor du menu revient (comme au démarrage)
   applyQuality()      // hors mission, la résolution dynamique rend la densité pleine
   hideScope()
   releaseMouse()
@@ -915,8 +915,8 @@ function shoot() {
   recoil.kick()
 }
 
-// Ce qui arrête une balle dans la mission, hors PNJ (spec du lot 2, §3.4) : le décor solide de la carte (maps.js), les
-// jeeps du convoi, et le cadenas du port par sa boîte (plus large que lui : il se vise facilement).
+// Ce qui arrête une balle dans la mission, hors PNJ (spec du lot 2, §3.4) : le décor solide de la carte (src/maps/),
+// les jeeps du convoi, et le cadenas du port par sa boîte (plus large que lui : il se vise facilement).
 const missionSolids = () => (convoyCar ? [...solidMeshes(), ...convoyCar.vehicles.map(v => v.mesh)] : solidMeshes())
 const missionBoxes = () => (moralLockBox ? [{ box: moralLockBox, surface: 'metal', cadenas: true }] : [])
 
@@ -1585,7 +1585,8 @@ if (import.meta.env.DEV) {
     trembleMrad: getTrembleMrad(), tremblePx: getTrembleOffset(), regard: viewAngles(),
     reculDeg: { tangage: +THREE.MathUtils.radToDeg(recoilOffset.pitch).toFixed(4), lacet: +THREE.MathUtils.radToDeg(recoilOffset.yaw).toFixed(4) } })
   // ?solides=1 : chaque maillage qui arrête la balle prend la couleur de sa matière (pierre gris clair, métal bleu,
-  // bois orange, sol vert ; maps.js, SOLID_TINTS), la carte affichée et toutes celles qui suivent, jeeps comprises.
+  // bois orange, sol vert ; src/maps/prims.js, SOLID_TINTS), la carte affichée et toutes celles qui suivent, jeeps et
+  // décor du menu compris.
   if (q.has('solides')) setSolidTint(true)
   // Son de la mission (spec du lot 2, §3.5 ; scripts/verif-mission.mjs) : __son() dit l'écho monté (son acoustique),
   // la pluie, la nappe et l'état du contexte audio

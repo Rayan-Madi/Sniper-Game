@@ -41,7 +41,7 @@ beforeEach(async () => {
   vi.resetModules()
   const characters = await import('../src/characters.js')
   ;({ NPC, STATES } = await import('../src/npc.js'))
-  maps = await import('../src/maps.js')
+  maps = await import('../src/maps/index.js')
   await characters.preloadCharacters()
   M6 = maps.MAP_BUILDERS[5]()   // la fête : canapés, table basse, leurs obstacles ; le commanditaire et son canapé
 })

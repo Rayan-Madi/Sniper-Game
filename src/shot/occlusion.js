@@ -4,8 +4,8 @@ import { OCCLUSION } from './tuning.js'
 // Ce que la balle touche en premier (spec du lot 2, §3.4). Module pur : three pour les maths, ni DOM ni scène.
 //
 // Trois sortes d'obstacles sur le rayon du tir : les PNJ (leurs zones, npcHit dans hitzones.js), le décor solide
-// (maillages marqués userData.solid par maps.js : la carte et les jeeps du convoi) et le cadenas du port (sa boîte,
-// plus large que lui). resolveImpact garde le plus proche ; s'il n'y a rien, la balle part au loin.
+// (maillages marqués userData.solid par src/maps/prims.js : la carte et les jeeps du convoi) et le cadenas du port (sa
+// boîte, plus large que lui). resolveImpact garde le plus proche ; s'il n'y a rien, la balle part au loin.
 
 const _raycaster = new THREE.Raycaster()
 const _normalMatrix = new THREE.Matrix3()

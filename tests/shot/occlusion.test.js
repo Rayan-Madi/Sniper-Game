@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as THREE from 'three'
 
 // Ce que la balle touche en premier (spec du lot 2, §3.4 et §4 ; plan, tâche T5) : les zones des PNJ (npcHit), le
-// décor solide de la carte (maillages marqués userData.solid par maps.js, jeeps du convoi) et le cadenas du port ;
+// décor solide de la carte (maillages marqués userData.solid par src/maps/, jeeps du convoi) et le cadenas du port ;
 // resolveImpact garde le plus proche : { kind: 'npc' }, { kind: 'decor' } ou { kind: 'rien' } (point au loin).
 // solidHit cherche le décor sur le rayon : ce qui n'est pas solide est traversé, et les OCCLUSION.departM premiers
 // mètres devant l'œil ne comptent pas (le poste : le joueur est posé sur la face arrière du rebord de sa fenêtre en
@@ -248,12 +248,12 @@ describe('solidHit : le décor solide sur le rayon', () => {
   })
 })
 
-// Sur les vraies cartes (maps.js) et un vrai PNJ (repli procédural, npcHit) : le parcours du tir dans main.js.
+// Sur les vraies cartes (src/maps/) et un vrai PNJ (repli procédural, npcHit) : le parcours du tir dans main.js.
 describe('sur les cartes du jeu', () => {
   let maps, NPC, npcHit, withSeed
   beforeEach(async () => {
     vi.resetModules()
-    maps = await import('../../src/maps.js')
+    maps = await import('../../src/maps/index.js')
     ;({ NPC } = await import('../../src/npc.js'))
     ;({ npcHit } = await import('../../src/shot/hitzones.js'))
     ;({ withSeed } = await import('../../src/gfx/memtest.js'))
