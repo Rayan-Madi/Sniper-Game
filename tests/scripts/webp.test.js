@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { describe, it, expect, vi } from 'vitest'
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { infoWebp, taillePng } from '../../scripts/webp.mjs'
+import { infoWebp, taillePng, chromeDump } from '../../scripts/webp.mjs'
 
 // Portraits à transparence des cinématiques passés en WebP par scripts/webp.mjs (tâche C0 des cinématiques v2) :
-// lecture des en-têtes (format RIFF de WebP, IHDR de PNG) et état du dépôt.
+// lecture des en-têtes (format RIFF de WebP, IHDR de PNG), échec propre quand Chrome ne se lance pas, état du dépôt.
 
 const IMG = join(process.cwd(), 'public', 'briefing', 'img')
 
@@ -77,6 +78,25 @@ describe('taillePng', () => {
 
   it('refuse ce qui n\'est pas un PNG', () => {
     expect(() => taillePng(readFileSync(join(IMG, 'portrait-crime-1.jpg')))).toThrow(/PNG/)
+  })
+})
+
+// Relecture de C0 : un Chrome introuvable (chemin faux dans la variable CHROME) n'émet que l'événement « error »,
+// jamais « exit ». Sans écoute de « error », le script plantait sur ENOENT (ou la promesse attendait sans fin) et
+// laissait son dossier jetable (page et profil) dans le dossier temporaire.
+describe('chromeDump', () => {
+  it('un Chrome qui ne se lance pas rend une erreur qui le nomme, sans laisser ni dossier jetable ni garde', async () => {
+    const temporaire = mkdtempSync(join(tmpdir(), 'webp-test-'))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const chrome = join(temporaire, 'chrome-absent.exe')
+      await expect(chromeDump('<p>essai</p>', { chrome, temporaire })).rejects.toThrow(/chrome-absent\.exe/)
+      expect(readdirSync(temporaire)).toEqual([])
+      expect(vi.getTimerCount()).toBe(0)   // la garde de 2 minutes (taskkill) est arrêtée
+    } finally {
+      vi.useRealTimers()
+      rmSync(temporaire, { recursive: true, force: true })
+    }
   })
 })
 

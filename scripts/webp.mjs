@@ -137,21 +137,24 @@ const attendre = ms => new Promise(r => setTimeout(r, ms))
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 
 // Chrome sans interface sur une page écrite dans un dossier jetable (profil compris), --dump-dom ; rend le JSON de
-// <pre id="webp">. Chrome et ses processus sont arrêtés au bout de 2 minutes ; le dossier est supprimé dans tous les cas.
-async function chromeDump(html) {
-  const dossier = mkdtempSync(join(tmpdir(), 'webp-'))
+// <pre id="webp">. Chrome et ses processus sont arrêtés au bout de 2 minutes ; le dossier est supprimé dans tous les cas,
+// y compris quand Chrome ne se lance pas (la promesse échoue alors avec l'erreur du lancement, qui nomme le chemin).
+// Options (pour les tests) : chrome, chemin de Chrome ; temporaire, dossier où créer le dossier jetable.
+export async function chromeDump(html, { chrome = CHROME, temporaire = tmpdir() } = {}) {
+  const dossier = mkdtempSync(join(temporaire, 'webp-'))
   try {
     const page = join(dossier, 'page.html')
     writeFileSync(page, html)
-    const proc = spawn(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--mute-audio', '--no-first-run',
+    const proc = spawn(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--mute-audio', '--no-first-run',
       `--user-data-dir=${join(dossier, 'profil')}`, '--virtual-time-budget=10000', '--dump-dom', pathToFileURL(page).href],
     { stdio: ['ignore', 'pipe', 'ignore'] })
     let sortie = ''
     proc.stdout.setEncoding('utf8')
     proc.stdout.on('data', d => { sortie += d })
     const garde = setTimeout(() => spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore' }), 120000)
-    const code = await new Promise(r => proc.once('exit', r))
-    clearTimeout(garde)
+    // Chrome qui ne se lance pas (chemin faux : ENOENT) : « error » sans « exit » ; l'erreur sort par le finally.
+    const code = await new Promise((resolve, reject) => { proc.once('exit', resolve); proc.once('error', reject) })
+      .finally(() => clearTimeout(garde))
     const m = sortie.match(/<pre id="webp">([\s\S]*?)<\/pre>/)
     if (!m) throw new Error(`Chrome n'a rien rendu (code ${code}) : ${sortie.slice(0, 200)}`)
     return JSON.parse(m[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))
