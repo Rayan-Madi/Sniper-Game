@@ -58,9 +58,12 @@ function surLaTete(p, oeil, direction, reglages) {
   return angle <= seuilFixation(Math.hypot(vx, vy, vz), reglages) + EPS
 }
 
-// Les regards de la salle sur Viktor. personnes : [{ id, categorie, x, y, z, lacet }], relues à chaque image (l'appelant
-// les tient à jour) ; x, y, z : sa tête (l'os Head) ; lacet : sa face ; categorie : une clé de reglages.tolerance
-// (escorte, civil, fernand, albert). Une catégorie inconnue, ou deux fois le même id, est une erreur.
+// Les regards de la salle sur Viktor. personnes : [{ id, categorie, x, y, z, lacet }] ; x, y, z : sa tête (l'os Head) ;
+// lacet : sa face (recommandé : celle de son corps ou de son siège, pas celle de sa tête tournée, à trancher en B10 et
+// B11 : spec §3.5, « Réglé en B3 ») ; categorie : une clé de reglages.tolerance (escorte, civil, fernand, albert). Le
+// module garde ces objets, pas le tableau : l'appelant modifie sur place x, y, z et lacet de chacun avant chaque image,
+// sans jamais remplacer l'objet (un objet neuf ne serait pas lu). Une catégorie inconnue, ou deux fois le même id, est
+// une erreur.
 export function createRegards(personnes, reglages = REGARD, boites = BOITES) {
   const { tolerance, verre, oubli, alerteS, repliquesS } = reglages
   const suivis = new Map()

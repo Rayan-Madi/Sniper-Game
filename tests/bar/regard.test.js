@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { REGARD, SOUPCON } from '../../src/bar/reglages.js'
 import { seuilFixation, voitViktor, createRegards } from '../../src/bar/regard.js'
 import { createSoupcon } from '../../src/bar/soupcon.js'
-import { ANCRES, dansZone, lacetVers } from '../../src/bar/plan.js'
+import { ANCRES, TYPES_SIEGE, dansZone, lacetVers } from '../../src/bar/plan.js'
 import { forwardOf } from '../../src/prologue/fpsController.js'
 
 // Le regard qui fixe, au Bivouac (spec docs/superpowers/specs/2026-10-28-m5-bar-design.md §3.5 et §10 ; plan
@@ -13,6 +13,8 @@ import { forwardOf } from '../../src/prologue/fpsController.js'
 const DT = 1 / 60                                     // une image à 60 Hz
 const RAD = Math.PI / 180
 const OEIL = Object.freeze({ x: 0, y: 1.65, z: 0 })   // Viktor debout ; sauf mention, aucune boîte autour de lui
+// Viktor assis sur une chaise, au même endroit : son œil (1,20 m) est 0,45 m sous la tête d'une personne debout (1,65 m)
+const ASSIS = Object.freeze({ x: 0, y: TYPES_SIEGE.chaise.oeil, z: 0 })
 // Viktor regarde vers le sud (+z) : dans son dos pour qui est devant lui (−z), de côté pour qui est à l'est ou à l'ouest
 const AILLEURS = Object.freeze({ oeil: OEIL, direction: Object.freeze({ x: 0, y: 0, z: 1 }) })
 
@@ -25,6 +27,14 @@ function vise(p, ecart = 0, oeil = OEIL) {
   const h = Math.hypot(p.x - oeil.x, p.z - oeil.z)
   const a = Math.atan2(p.x - oeil.x, p.z - oeil.z) + ecart * RAD
   return { oeil, direction: { x: Math.sin(a) * h, y: p.y - oeil.y, z: Math.cos(a) * h } }
+}
+// La vue de Viktor depuis `oeil` qui vise `ecart` degrés au-dessus de la tête de p (au-dessous si ecart < 0), dans le
+// plan vertical qui passe par elle : le centre de l'écran est alors exactement à |ecart| degrés de la tête, quelle que
+// soit la hauteur de l'œil.
+function viseAuDessus(p, ecart, oeil = OEIL) {
+  const azimut = Math.atan2(p.x - oeil.x, p.z - oeil.z)
+  const site = Math.atan2(p.y - oeil.y, Math.hypot(p.x - oeil.x, p.z - oeil.z)) + ecart * RAD
+  return { oeil, direction: { x: Math.sin(azimut) * Math.cos(site), y: Math.sin(site), z: Math.cos(azimut) * Math.cos(site) } }
 }
 // Viktor à 3 m d'une personne qui regarde vers −z, à `deg` degrés de sa face
 const aDeSaFace = deg => { const f = forwardOf(deg * RAD); return { x: 3 * f.x, z: 3 * f.z } }
@@ -60,6 +70,25 @@ describe('le seuil du regard (θmax)', () => {
         expect(fixee.etat('dussart').fixation, `${d} m, ${cote * dedans}°`).toBeCloseTo(1, 9)
         expect(ratee.etat('dussart').fixation, `${d} m, ${cote * dehors}°`).toBe(0)   // témoin : seuil fixe de 10°, 1
       }
+    }
+  })
+
+  it('Viktor assis, Sorel debout à 2 m, la tête 12,7° au-dessus de l\'horizontale : l\'écart en hauteur compte', () => {
+    const sorel = enFace('sorel', 'escorte')          // tête à 1,65 m, à 2 m au sol de l'œil de Viktor assis (1,20 m)
+    const fixation = vue => { const r = createRegards([sorel], REGARD, []); avance(r, 1, vue); return r.etat('sorel').fixation }
+    expect(fixation(vise(sorel, 0, ASSIS))).toBeCloseTo(1, 9)                         // le centre de l'écran sur sa tête
+    expect(fixation({ oeil: ASSIS, direction: { x: 0, y: 0, z: -1 } })).toBe(0)       // même azimut, à l'horizontale : 12,7° sous sa tête (témoin : angle horizontal seul, 1)
+    expect(fixation({ oeil: ASSIS, direction: { x: 0, y: 1.45, z: -2 } })).toBe(0)    // 1 m au-dessus de sa tête : 23,3° (témoin : angle horizontal seul, 1)
+  })
+
+  it('le seuil se calcule sur la distance de l\'œil à la tête, pas au sol : debout à 1 m de Viktor assis, 8,2° et non 8,7°', () => {
+    const sorel = enFace('sorel', 'escorte', 1)       // 1 m au sol, 0,45 m plus haut que l'œil : sa tête en est à 1,10 m
+    for (const cote of [1, -1]) {                     // au-dessus comme au-dessous de sa tête
+      const fixee = createRegards([sorel], REGARD, []), ratee = createRegards([sorel], REGARD, [])
+      avance(fixee, 1, viseAuDessus(sorel, cote * 8, ASSIS))
+      avance(ratee, 1, viseAuDessus(sorel, cote * 8.4, ASSIS))
+      expect(fixee.etat('sorel').fixation, `${cote * 8}°`).toBeCloseTo(1, 9)
+      expect(ratee.etat('sorel').fixation, `${cote * 8.4}°`).toBe(0)   // témoin : seuil sur la distance au sol (8,71°), 1
     }
   })
 })
@@ -269,6 +298,22 @@ describe('les entrées', () => {
     p.lacet = NaN
     expect(() => r.update(DT, vise(p))).toThrow(/dussart/)   // témoin : aveugle en silence
     expect(r.etat('dussart').fixation).toBe(0)
+  })
+
+  it('chaque image relit la tête et la face de chacun : l\'appelant les modifie sur place, sans remplacer l\'objet', () => {
+    const p = enFace('dussart', 'escorte')            // en (0 ; −2), tourné vers Viktor
+    const r = createRegards([p], REGARD, [])
+    const vue = vise(p)                               // Viktor garde les yeux où était sa tête
+    const etat = () => [r.etat('dussart').voit, r.etat('dussart').fixe]
+    r.update(DT, vue)
+    expect(etat()).toEqual([true, true])
+    p.x = 1                                           // un pas de côté : sa tête est à 26,6° du centre de l'écran
+    r.update(DT, vue)
+    expect(etat()).toEqual([true, false])             // témoin : personnes copiées à la création, [true, true]
+    p.x = 0
+    p.lacet = 0                                       // revenu, il tourne le dos à Viktor
+    r.update(DT, vue)
+    expect(etat()).toEqual([false, false])            // témoin : personnes copiées à la création, [true, true]
   })
 
   it('un pas de temps invalide ne change rien', () => {
