@@ -3,8 +3,8 @@ import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQual
 import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope, getScopeFov, getScopeOpenness, setZoom, getZoom, getEffectiveZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope, resizeScope, shotGlow, setBoltProgress } from './scope.js'
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
-import { getLevel } from './levels.js'
 import { MAP_BUILDERS, buildMenuDecor, updateMapAmbient, makeJeep, isMapObject, solidMeshes, setSolidTint, clearMap } from './maps/index.js'
+import { missionFor, resoudreAncres, nombreDeCivils } from './campaign/missions/index.js'
 import { playShot, playSilencedShot, playShotSounds, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, mountEcho, unmountEcho, audioState, audioContext, masterNode } from './audio.js'
 import { spawnTrail, retargetTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
@@ -40,8 +40,12 @@ let score = 0
 let gamePhase = 'menu'
 let alertActive = false
 let alertTimer = 0
-let currentLevelData = null
+// Mission en cours (src/campaign/missions/), sa carte (ce que son constructeur a rendu : sol, écho, pluie, ancres), et
+// les ancres de la carte que la mission cite (resoudreAncres : œil et regard du poste, zone des PNJ, places, cadenas,
+// route du convoi)
+let currentMission = null
 let currentMapInfo = null
+let currentAnchors = null
 let clock = new THREE.Clock()
 
 // Hauteur du sol de la carte en cours (dalle du port, tarmac, route du convoi) : pieds des PNJ, tirs manqués
@@ -527,17 +531,18 @@ function startLevel(n, prep = null) {
   statShots = 0; statHits = 0; statStart = performance.now(); statAlerts = 0
   timeScale = 1; killcamActive = false; failPending = false; lastTargetKillAt = -99999
   const token = missionToken   // minuteurs de cette mission : sans effet si elle est relancée ou abandonnée
-  if (((n - 1) % 6) + 1 === 3) upgradeState.freedVictims = false   // chaque essai du port repart d'un choix vierge
+  if (missionFor(n).choixMoral) upgradeState.freedVictims = false   // chaque essai du port repart d'un choix vierge
 
   if (!prepared) mountLevel(n)
 
-  // Cadenas du port : indice au bout de quelques secondes
+  // Cadenas du port : l'indice du choix moral au bout de quelques secondes
   if (moralLockMesh) {
+    const { indice } = currentMission.choixMoral
     setTimeout(() => {
       if (token === missionToken && gamePhase === 'playing' && moralLockMesh) {
-        addKillFeed('👂 Des coups sourds... le conteneur rouge, à gauche.')
+        addKillFeed(indice.texte)
       }
-    }, 5000)
+    }, indice.apresS * 1000)
   }
 
   stress = 0; alertActive = false; alertTimer = 0; bulletInFlight = false
@@ -546,15 +551,15 @@ function startLevel(n, prep = null) {
   score = upgradeState.totalScore
 
   hudEl.style.display = 'block'
-  hudLevel.textContent = `${currentLevelData.name}  ·  ${Math.min(n, MAX_LEVEL)}/${MAX_LEVEL}`
+  hudLevel.textContent = `${currentMission.nom}  ·  ${Math.min(n, MAX_LEVEL)}/${MAX_LEVEL}`
   alertBanner.style.display = 'none'
   startMissionAmbience({ rain: !!currentMapInfo.rain })   // nappe sonore de tension pendant la mission, et la pluie du port
 
-  // Dossier d'indices (cible cachée)
-  const hidden = currentMapInfo.hiddenTarget
+  // Fiche de la cible dans le HUD (aujourd'hui, la cible à identifier de M6)
+  const fiche = currentMission.fiche
   const dossier = document.getElementById('target-dossier')
-  if (hidden && dossier) {
-    document.getElementById('dossier-text').textContent = hidden.clue
+  if (fiche && dossier) {
+    document.getElementById('dossier-text').textContent = fiche.texte
     dossier.style.display = 'block'
   } else if (dossier) {
     dossier.style.display = 'none'
@@ -571,33 +576,33 @@ function startLevel(n, prep = null) {
 }
 
 // Montage de la scène d'une mission (carte, PNJ, cadenas, convoi, caméra de départ, écho de la carte), sans écran, son
-// ni minuteur : startLevel l'appelle, la route ?memtest=1 aussi. Le hasard est tiré dans le même ordre qu'avant
-// l'extraction (l'écho a sa propre graine).
+// ni minuteur : startLevel l'appelle, la route ?memtest=1 aussi. La mission est décrite dans son fichier
+// (src/campaign/missions/) ; ses lieux (poste, zone, places, cadenas, route) sont les ancres de sa carte qu'elle cite.
+// Le hasard est tiré dans le même ordre qu'avant l'extraction (l'écho a sa propre graine).
 function mountLevel(n) {
   removeMoralLock()
   applyQuality()   // ombre des personnages pour les PNJ qui suivent, résolution dynamique repartie de 1
 
-  currentLevelData = getLevel(n)
+  const m = currentMission = missionFor(n)
 
-  // Choisir la map selon le niveau (cyclique si > 5)
+  // La carte de la mission (cyclique au-delà de 6), puis les lieux qu'elle cite parmi ses ancres
   const mapIdx = (n - 1) % MAP_BUILDERS.length
   currentMapInfo = MAP_BUILDERS[mapIdx]()
   // Écho de la carte (spec du lot 2, §3.5) : sa réponse impulsionnelle est générée ici, pendant le briefing, pas au
   // premier tir ; aucun son n'est joué
   mountEcho(currentMapInfo.acoustics)
+  const lieux = currentAnchors = resoudreAncres(m, currentMapInfo.ancres)
 
   // Cadenas du choix moral (port) : un tir dessus libère les victimes du conteneur
-  if (currentMapInfo.moralLock) {
-    ({ mesh: moralLockMesh, box: moralLockBox, light: moralLockLight } = buildMoralLock(currentMapInfo.moralLock.pos))
+  if (m.choixMoral) {
+    ({ mesh: moralLockMesh, box: moralLockBox, light: moralLockLight } = buildMoralLock(lieux.cadenas))
   }
 
-  // Positionner la caméra depuis le point sniper de la map
-  const [cx, cy, cz] = currentMapInfo.cameraPos
+  // La caméra au poste : l'œil, et le regard de départ vers son point (à l'horizontale, vers -Z, sans regard)
+  const [cx, cy, cz] = lieux.oeil
   camera.position.set(cx, cy, cz)
-
-  // Calculer yaw/pitch initial depuis cameraTarget si défini
-  if (currentMapInfo.cameraTarget) {
-    ({ yaw, pitch } = aimAngles(currentMapInfo.cameraPos, currentMapInfo.cameraTarget))
+  if (lieux.regard) {
+    ({ yaw, pitch } = aimAngles(lieux.oeil, lieux.regard))
   } else {
     yaw = 0; pitch = 0
   }
@@ -605,55 +610,55 @@ function mountLevel(n) {
   setZoom(4, { instant: true })   // posé d'un coup, pas lissé depuis la mission d'avant ; la caméra suit dans loop() (syncFov)
   recoil.reset(); recoilOffset = { pitch: 0, yaw: 0 }   // cadrage de départ sans recul de la mission d'avant
 
-  const b = currentMapInfo.spawnBounds
+  const b = lieux.zone
   const groundY = mapGround()   // les pieds des PNJ sur la dalle du port, le tarmac, la route du convoi
-  const sideFlee = !!currentMapInfo.sideExit
+  const sideFlee = m.fuite === 'laterale'
 
-  // Spawner cibles
-  const hidden = currentMapInfo.hiddenTarget  // cible à identifier par indices (niveau final)
-  for (let i = 0; i < currentLevelData.targets; i++) {
-    const useHidden = hidden && i === 0
+  // Spawner cibles : posée à sa place (le canapé du commanditaire de M6), sinon au hasard dans la zone
+  for (const c of m.casting.cibles) {
+    const place = c.place ? lieux.places[c.place] : null
+    const telephone = c.routine === 'telephone'
     const npc = new NPC({
       isTarget: true,
       color: 0xcc4422,
-      x: useHidden ? hidden.spawn[0] : b.minX + Math.random() * (b.maxX - b.minX),
-      z: useHidden ? hidden.spawn[1] : b.minZ + Math.random() * (b.maxZ - b.minZ),
+      x: place ? place.x : b.minX + Math.random() * (b.maxX - b.minX),
+      z: place ? place.z : b.minZ + Math.random() * (b.maxZ - b.minZ),
       groundY,
-      levelData: currentLevelData,
+      allure: m.allure,
       bounds: b,
       fleeSideways: sideFlee,
-      hideMarker: !!useHidden,
-      lockState: useHidden ? STATES.PHONE : null,
-      onPhone: !!useHidden,
-      standUp: useHidden ? hidden.standUp : null,   // en fuite, il se lève devant le canapé (src/maps/m6-fete.js)
+      hideMarker: !m.marqueurs,
+      lockState: telephone ? STATES.PHONE : null,
+      onPhone: telephone,
+      standUp: place ? place.debout : null,   // en fuite, il se lève devant le canapé (src/maps/m6-fete.js)
       // Le commanditaire est indiscernable : même pool de modèles que la FOULE.
       // Seul son comportement (assis, au téléphone, ne danse jamais) le trahit.
-      modelType: useHidden ? 'civilian' : null,
-      female: !useHidden && Math.random() < 0.4,
+      modelType: c.pool || null,
+      female: c.femme ?? Math.random() < 0.4,
     })
     // Assis sur le canapé (la pose "Talk" est assise) → il se démarque des danseurs
-    if (useHidden && hidden.seatY !== undefined) npc.mesh.position.y = hidden.seatY
+    if (place && place.assise !== undefined) npc.mesh.position.y = place.assise
     npcs.push(npc); targets.push(npc)
   }
 
   // Spawner gardes
-  for (let i = 0; i < currentLevelData.guards; i++) {
+  for (let i = 0; i < m.casting.gardes; i++) {
     const npc = new NPC({
       isGuard: true,
       color: 0x334433,
       x: b.minX + Math.random() * (b.maxX - b.minX),
       z: b.minZ + Math.random() * (b.maxZ - b.minZ),
       groundY,
-      levelData: currentLevelData,
+      allure: m.allure,
       bounds: b,
       fleeSideways: sideFlee,
     })
     npcs.push(npc); guards.push(npc)
   }
 
-  // Spawner civils innocents — tirer dessus = game over
+  // Spawner civils innocents : tirer dessus, c'est l'échec
   const civilColors = [0x7a6aaa, 0xaa7a3a, 0x3a7aaa, 0xaaaaaa, 0x6a9a6a, 0xaa5a8a, 0x5aaa8a, 0xccaa44]
-  const numCivils = currentLevelData.civilians ?? (3 + Math.floor(Math.random() * 3))
+  const numCivils = nombreDeCivils(m.casting.civils)
   for (let i = 0; i < numCivils; i++) {
     const npc = new NPC({
       isTarget: false,
@@ -663,10 +668,10 @@ function mountLevel(n) {
       x: b.minX + Math.random() * (b.maxX - b.minX),
       z: b.minZ + Math.random() * (b.maxZ - b.minZ),
       groundY,
-      levelData: currentLevelData,
+      allure: m.allure,
       bounds: b,
       fleeSideways: sideFlee,
-      partyMode: !!currentMapInfo.party,   // à la fête, la foule danse
+      partyMode: !!m.casting.civils.danse,   // à la fête, la foule danse
       female: Math.random() < 0.5,   // mixité des civils
     })
     npcs.push(npc); civilians.push(npc)
@@ -674,7 +679,7 @@ function mountLevel(n) {
 
   // ── Convoi : 3 jeeps (escorte avant, cible+chauffeur, escorte arrière) ──
   convoyCar = null; convoyTarget = null
-  if (currentMapInfo.convoy && targets.length > 0) {
+  if (m.convoi && targets.length > 0) {
     convoyTarget = targets[0]
     convoyTarget.onVehicle = true
 
@@ -713,8 +718,9 @@ function mountLevel(n) {
       { npc: g[3], ...PASS },
     ]})
 
-    // Route le long de X à z = -4, chaussée à groundY : jeeps et occupants sont posés dessus (campaign/convoy.js)
-    convoyCar = { baseX: -55, z: -4, groundY, dir: 1, speed: 8.5, vehicles }
+    // La route de la carte, le long de X, chaussée à groundY : jeeps et occupants sont posés dessus (campaign/convoy.js)
+    const route = lieux.route
+    convoyCar = { baseX: route.depart, z: route.z, groundY, dir: route.sens, speed: m.convoi.vitesse, vehicles }
   }
 }
 
@@ -853,7 +859,7 @@ function triggerLevelClear() {
   // Réussite enregistrée en une fois : points, score ET mission suivante, avant la sauvegarde.
   // Quitter le jeu ici ne doit pas laisser rejouer (et recréditer) la mission qu'on vient de réussir.
   const n = upgradeState.currentLevel
-  const reward = currentLevelData.pointsReward
+  const reward = currentMission.points
   const { last } = recordClear(upgradeState, { level: n, reward, score })
   lastCleared = n
   saveProgress()
@@ -985,14 +991,15 @@ function resolveBullet() {
     const lockPos = moralLockMesh.position.clone()
     removeMoralLock()
     upgradeState.freedVictims = true
-    score += 150
-    addKillFeed('🔓 Conteneur ouvert : ils s\'échappent... (+150 pts)')
-    // trois silhouettes s'enfuient du conteneur
-    for (let i = 0; i < 3; i++) {
+    const { points, victimes } = currentMission.choixMoral
+    score += points
+    addKillFeed(`🔓 Conteneur ouvert : ils s'échappent... (+${points} pts)`)
+    // les victimes (des silhouettes) s'enfuient du conteneur
+    for (let i = 0; i < victimes; i++) {
       const freed = new NPC({
         isCivilian: true, color: 0x8a7a5a,
         x: lockPos.x + 0.5 + i * 0.4, z: lockPos.z + 1 + i * 0.6, groundY: mapGround(),
-        levelData: currentLevelData, bounds: currentMapInfo.spawnBounds,
+        allure: currentMission.allure, bounds: currentAnchors.zone,
       })
       freed.flee(lockPos)
       npcs.push(freed); civilians.push(freed)
@@ -1335,7 +1342,7 @@ function syncFov() {
 // de la route ?memtest=1.
 function aimMissionCamera() {
   syncFov()
-  const [baseX, baseY, baseZ] = currentMapInfo ? currentMapInfo.cameraPos : [0, 8, 30]
+  const [baseX, baseY, baseZ] = currentAnchors ? currentAnchors.oeil : [0, 8, 30]   // l'œil du poste de la mission
   // Regard du joueur, plus le recul du dernier coup qui y revient (spec du lot 2, §3.3)
   const euler = new THREE.Euler(pitch + recoilOffset.pitch, yaw + recoilOffset.yaw, 0, 'YXZ')
   const dir = new THREE.Vector3(0, 0, -1).applyEuler(euler)

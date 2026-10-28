@@ -68,8 +68,16 @@ export function buildMapStreet() {
     solide(cylinder(0.28, 0.32, 0.75, 0x445544, -4 + i * 6, 0.37, 14), 'metal')
   }
 
-  // groundY : hauteur du dessus du sol dans la zone d'apparition (pieds des PNJ, impacts des tirs manqués)
+  // groundY : hauteur du dessus du sol dans la zone des PNJ (leurs pieds)
   // acoustics : l'écho de la carte (src/shot/acoustics.js, que main.js monte avec elle) : réflexions serrées entre façades
-  return { spawnBounds: { minX: -10, maxX: 10, minZ: -12, maxZ: 12 }, groundY: 0, cameraPos: [0, 8, 30], indoors: false,
-    acoustics: 'rue' }
+  // ancres : les lieux nommés que la mission cite (src/campaign/missions/m1.js ; sortes décrites dans son index.js)
+  return {
+    groundY: 0,
+    acoustics: 'rue',
+    ancres: {
+      oeil: [0, 8, 30],                                     // 8 m au-dessus de la route
+      zone: { minX: -10, maxX: 10, minZ: -12, maxZ: 12 },   // la rue et le marché
+      places: {}, sorties: {}, abris: {},
+    },
+  }
 }

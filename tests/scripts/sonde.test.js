@@ -61,7 +61,7 @@ describe('les postes de la sonde (spec du lot 3, §1 et §3)', () => {
   it('témoin : les postes du jeu d\'aujourd\'hui (cartes de M3, M4 et M5) sont à une trentaine de mètres', () => {
     for (const [m, d] of [[3, 155], [4, 430], [5, 138]]) {
       const info = withSeed(1000 + m, MAP_BUILDERS[m - 1])
-      const vu = dist(info.cameraPos, info.cameraTarget)
+      const vu = dist(info.ancres.oeil, info.ancres.regard)
       expect(vu, `M${m}`).toBeLessThan(35)
       expect(Math.abs(vu / d - 1), `M${m}`).toBeGreaterThan(0.01)
     }

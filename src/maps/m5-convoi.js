@@ -100,14 +100,16 @@ export function buildMapConvoy() {
   const sunGlow = new THREE.PointLight(0xff8844, 1.2, 250)
   sunGlow.position.set(-35, 12, -60); add(sunGlow)
 
+  // Ancres : les lieux nommés que la mission cite (src/campaign/missions/m5.js ; sortes décrites dans son index.js)
   return {
-    // Pas de spawn à pied au centre ; les gardes apparaissent sur les bords
-    spawnBounds: { minX: -30, maxX: 30, minZ: -7, maxZ: -1 },
-    groundY:      0.2,             // dessus de la route (0,1 + 0,2 / 2) : PNJ, jeeps et occupants
-    cameraPos:    [0, 7, 24],
-    cameraTarget: [0, 1, -4],     // vise la route
-    indoors: false,
+    groundY:   0.2,                // dessus de la route (0,1 + 0,2 / 2) : PNJ, jeeps et occupants
     acoustics: 'colline',          // désert et collines, très ouvert : des retours lointains qui roulent
-    convoy: true,                  // active le véhicule mobile dans main.js
+    ancres: {
+      oeil:   [0, 7, 24],          // le promontoire
+      regard: [0, 1, -4],          // vise la route
+      zone:   { minX: -30, maxX: 30, minZ: -7, maxZ: -1 },   // la route ; les occupants du convoi y sont tirés, puis assis
+      route:  { z: -4, depart: -55, sens: 1 },              // l'axe de la route ; le convoi y entre par la gauche, vers +X
+      places: {}, sorties: {}, abris: {},
+    },
   }
 }

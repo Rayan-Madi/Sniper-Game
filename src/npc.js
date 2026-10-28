@@ -189,7 +189,9 @@ function addMarker(group) {
 
 export class NPC {
   // groundY : hauteur du sol de la carte (dalle du port, tarmac, route du convoi), 0 par défaut (menu, PvP).
-  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, levelData, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, modelType = null, partyMode = false, onPhone = false, standUp = null }) {
+  // allure : celle de la mission (src/campaign/missions/), { cibles, gardes, imprevisibles } : pas des cibles, que les
+  // civils suivent aussi, et des gardes (m/s) ; cibles imprévisibles. Sans elle (PvP) : 0,5 m/s, 0,4 pour les gardes.
+  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, allure, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, modelType = null, partyMode = false, onPhone = false, standUp = null }) {
     this.groundY    = groundY
     this.isTarget   = isTarget
     this.isGuard    = isGuard
@@ -197,10 +199,10 @@ export class NPC {
     this.fleeSideways = fleeSideways
     this.lockState  = lockState   // bloque le PNJ dans un état (ex: téléphone)
     this.onPhone    = onPhone     // commanditaire : assis, en pleine négociation au téléphone (jusqu'à sa fuite)
-    this.standUp    = standUp     // [dx, dz] (m) : où il se tient une fois levé, depuis l'assise (carte, hiddenTarget)
+    this.standUp    = standUp     // [dx, dz] (m) : où il se tient une fois levé, depuis l'assise (place de la carte)
     this._rising    = null        // { fromY, t, k } : commanditaire qui se lève, du canapé vers le sol, devant l'assise
     this.alive      = true
-    this.levelData  = levelData
+    this.allure     = allure
     this.bounds     = bounds || { minX: -12, maxX: 12, minZ: -15, maxZ: 15 }
 
     // Modèle 3D importé (.glb) si configuré, sinon modèle procédural.
@@ -239,12 +241,12 @@ export class NPC {
     this.ringPulse    = 0
     this.onVehicle    = false   // cible à bord d'un véhicule (position gérée par main.js)
 
-    this.speed        = isGuard ? (levelData?.guardSpeed || 0.4) : (levelData?.targetSpeed || 0.5)
+    this.speed        = isGuard ? (allure?.gardes || 0.4) : (allure?.cibles || 0.5)
     this.stateInterval = this._pickInterval()
   }
 
   _pickInterval() {
-    return this.isTarget && this.levelData?.unpredictable
+    return this.isTarget && this.allure?.imprevisibles
       ? 1.2 + Math.random() * 2
       : 2.5 + Math.random() * 5
   }

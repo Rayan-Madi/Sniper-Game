@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as THREE from 'three'
 import { MAIN_SRC, analyse } from './gfx/mainSource.js'
-import { LEVELS } from '../src/levels.js'
+import M6_MISSION from '../src/campaign/missions/m6.js'
 
-// Commanditaire de M6 (spec du lot 2, §3.7) : assis sur le canapé (clip Talk, une pose assise, le groupe posé à
-// seatY), il ne danse jamais et reste assis tant qu'il négocie, même quand un tir le fait sursauter. Une fois en fuite,
-// il se lève et court (clip Run) sur le parquet : avant le lot 2, il gardait le clip Talk et glissait assis à 5,6 m/s,
-// 20 cm au-dessus du sol. En se levant, il passe devant l'assise (standUp de la carte), au-dessus de ses pieds : resté
-// à la place de ses hanches assises, il courait le long du canapé, les jambes dans la banquette (vu en capture).
+// Commanditaire de M6 (spec du lot 2, §3.7) : assis sur le canapé (clip Talk, une pose assise, le groupe posé à la
+// hauteur de l'assise de sa place), il ne danse jamais et reste assis tant qu'il négocie, même quand un tir le fait
+// sursauter. Une fois en fuite, il se lève et court (clip Run) sur le parquet : avant le lot 2, il gardait le clip Talk et
+// glissait assis à 5,6 m/s, 20 cm au-dessus du sol. En se levant, il passe devant l'assise (le pas debout de sa place,
+// une ancre de la carte depuis la tâche A2 du lot 3), au-dessus de ses pieds : resté à la place de ses hanches assises,
+// il courait le long du canapé, les jambes dans la banquette (vu en capture).
 // Faux modèle Mixamo (tests/gfx/fakeGltf.js) complété des clips Talk (hanches 40 cm plus bas, comme les vrais modèles)
 // et Run, que portent les sept GLB du jeu ; vraie carte M6 (canapés, table basse, obstacles).
 //
@@ -49,13 +50,16 @@ afterEach(() => vi.restoreAllMocks())
 
 const SHOT_FROM = new THREE.Vector3(0, 9, 5)   // la fenêtre d'en face
 
+// La place du commanditaire dans la carte de M6 (l'ancre que cite sa mission, src/campaign/missions/m6.js).
+const canape = () => M6.ancres.places[M6_MISSION.casting.cibles[0].place]
+
 // Comme mountLevel en M6 : modèle de la foule, verrouillé au téléphone, fuite vers les côtés, assis sur le canapé.
 function commanditaire() {
-  const h = M6.hiddenTarget
-  const npc = new NPC({ isTarget: true, color: 0xcc4422, x: h.spawn[0], z: h.spawn[1], groundY: M6.groundY,
-    levelData: LEVELS[5], bounds: M6.spawnBounds, fleeSideways: true, hideMarker: true,
-    lockState: STATES.PHONE, onPhone: true, modelType: 'civilian', standUp: h.standUp })
-  npc.mesh.position.y = h.seatY
+  const p = canape()
+  const npc = new NPC({ isTarget: true, color: 0xcc4422, x: p.x, z: p.z, groundY: M6.groundY,
+    allure: M6_MISSION.allure, bounds: M6.ancres.zone, fleeSideways: true, hideMarker: true,
+    lockState: STATES.PHONE, onPhone: true, modelType: 'civilian', standUp: p.debout })
+  npc.mesh.position.y = p.assise
   return npc
 }
 const run = (npc, seconds, dt = 1 / 60) => { for (let s = 0; s < seconds - 1e-9; s += dt) npc.update(dt) }
@@ -84,9 +88,9 @@ function meublesTraverses(x, z) {
 describe('commanditaire de M6 : assis tant qu\'il négocie, debout quand il fuit', () => {
   it('assis, il est sur le canapé de gauche (la carte le pose dans la banquette)', () => {
     const npc = commanditaire()
-    const [x, z] = M6.hiddenTarget.spawn
+    const { x, z } = canape()
     expect(meublesTraverses(x, z).length).toBeGreaterThan(0)
-    expect(npc.mesh.position.y).toBe(M6.hiddenTarget.seatY)
+    expect(npc.mesh.position.y).toBe(canape().assise)
   })
 
   it('au téléphone, et quand un tir le fait sursauter : clip Talk, sur le canapé', () => {
@@ -96,7 +100,7 @@ describe('commanditaire de M6 : assis tant qu\'il négocie, debout quand il fuit
     npc.react(SHOT_FROM)
     run(npc, 1)
     expect(weight(npc, 'Talk')).toBe(1)
-    expect(npc.mesh.position.y).toBe(M6.hiddenTarget.seatY)
+    expect(npc.mesh.position.y).toBe(canape().assise)
   })
 
   it('en fuite : il quitte la pose assise (clip Run), descend sur le parquet et court', () => {
@@ -111,7 +115,7 @@ describe('commanditaire de M6 : assis tant qu\'il négocie, debout quand il fuit
     expect(npc.mesh.position.y).toBe(M6.groundY)            // les pieds sur le parquet, plus à la hauteur du canapé
     // Debout : hanches remontées de 14 à 19 cm selon la taille tirée au hasard (civils : 1,8 m ± 6 %), au moins 10.
     expect(hipsY(npc) - seatedHips).toBeGreaterThan(0.1)
-    expect(npc.mesh.position.x).toBeLessThan(M6.hiddenTarget.spawn[0] - 3)   // il court vers la sortie de gauche
+    expect(npc.mesh.position.x).toBeLessThan(canape().x - 3)   // il court vers la sortie de gauche
   })
 
   it('il se lève pendant le fondu des clips (0,25 s), sans tomber d\'un coup sur le parquet', () => {
@@ -121,15 +125,15 @@ describe('commanditaire de M6 : assis tant qu\'il négocie, debout quand il fuit
     const ys = []
     for (let i = 0; i < 30; i++) { npc.update(1 / 60); ys.push(npc.mesh.position.y) }
     expect(ys[0]).toBeGreaterThan(0.15)                    // première image de la fuite : encore presque à l'assise
-    expect(ys[0]).toBeLessThan(M6.hiddenTarget.seatY)
+    expect(ys[0]).toBeLessThan(canape().assise)
     for (let i = 1; i < ys.length; i++) expect(ys[i]).toBeLessThanOrEqual(ys[i - 1])
     expect(ys[14]).toBeCloseTo(0, 6)                       // au parquet au bout de 0,25 s
     expect(ys[29]).toBe(0)
   })
 
-  it('en se levant, il passe devant l\'assise (standUp de la carte), au même rythme', () => {
+  it('en se levant, il passe devant l\'assise (le pas debout de sa place), au même rythme', () => {
     const npc = commanditaire()
-    const [x0, z0] = M6.hiddenTarget.spawn, [dx, dz] = M6.hiddenTarget.standUp
+    const { x: x0, z: z0, debout: [dx, dz] } = canape()
     run(npc, 1)
     npc.flee(SHOT_FROM)
     run(npc, 0.15)
@@ -146,7 +150,7 @@ describe('commanditaire de M6 : assis tant qu\'il négocie, debout quand il fuit
   // parquet), update ne finissant plus le lever d'un corps. Il le finit d'un coup en tombant : au parquet, devant l'assise.
   it('tué pendant qu\'il se lève, son corps finit au parquet et devant l\'assise', () => {
     const npc = commanditaire()
-    const z0 = M6.hiddenTarget.spawn[1], dz = M6.hiddenTarget.standUp[1]
+    const { z: z0, debout: [, dz] } = canape()
     run(npc, 1)
     npc.flee(SHOT_FROM)
     run(npc, 0.1)                                          // 0,1 s dans le fondu : encore 12 cm au-dessus du parquet
@@ -185,13 +189,13 @@ describe('commanditaire de M6 : assis tant qu\'il négocie, debout quand il fuit
     }
     const p60 = at(60, 1 / 6), p144 = at(144, 1 / 6)
     expect(p144.y).toBeCloseTo(p60.y, 6)
-    expect(p144.y).toBeCloseTo(M6.hiddenTarget.seatY / 3, 6)   // les deux tiers du fondu : un tiers de l'assise reste
+    expect(p144.y).toBeCloseTo(canape().assise / 3, 6)   // les deux tiers du fondu : un tiers de l'assise reste
     expect(p144.z).toBeCloseTo(p60.z, 6)
     expect(p144.x).toBeCloseTo(p60.x, 6)
   })
 
   it('les autres cibles gardent la fuite d\'avant : ni descente ni pas en avant (debout, déjà au sol)', () => {
-    const npc = new NPC({ isTarget: true, color: 0xcc4422, x: 2, z: -20, groundY: 0.5, bounds: M6.spawnBounds,
+    const npc = new NPC({ isTarget: true, color: 0xcc4422, x: 2, z: -20, groundY: 0.5, bounds: M6.ancres.zone,
       fleeSideways: true })
     run(npc, 0.5)
     const z = npc.mesh.position.z
@@ -203,10 +207,15 @@ describe('commanditaire de M6 : assis tant qu\'il négocie, debout quand il fuit
   })
 })
 
-describe('câblage dans main.js : le commanditaire reçoit le pas de la carte', () => {
-  it('mountLevel passe hiddenTarget.standUp au commanditaire, à lui seul', () => {
+// Depuis la tâche A2 du lot 3, la place du commanditaire est une ancre de la carte (places.canape), que sa mission cite
+// (casting.cibles[0].place) ; avant, c'était le champ hiddenTarget de la carte. Témoin : sur le main.js d'avant la tâche
+// (commit 71edf6a), cette garde est rouge (aucune place prise dans les ancres).
+describe('câblage dans main.js : la cible posée à une place reçoit le pas de cette place', () => {
+  it('mountLevel passe le pas debout de sa place (une ancre de la carte) à la cible qui en a une, à elle seule', () => {
     const a = analyse(MAIN_SRC)
     const corps = a.source.slice(a.fns.get('mountLevel').start, a.fns.get('mountLevel').end)
-    expect(corps).toMatch(/standUp:\s*useHidden\s*\?\s*hidden\.standUp\s*:\s*null/)
+    const place = /const (\w+) = (\w+)\.place \? \w+\.places\[\2\.place\] : null/.exec(corps)
+    expect(place, 'la place de la cible, prise dans les lieux de la mission').toBeTruthy()
+    expect(corps).toMatch(new RegExp(`standUp:\\s*${place[1]}\\s*\\?\\s*${place[1]}\\.debout\\s*:\\s*null`))
   })
 })

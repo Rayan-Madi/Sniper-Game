@@ -104,13 +104,15 @@ export function buildMapMilitary() {
     new THREE.MeshBasicMaterial({ color: 0x335533, side: THREE.DoubleSide }))
   flag.position.set(-6.7, 7, 4); add(flag)
 
+  // Ancres : les lieux nommés que la mission cite (src/campaign/missions/m4.js ; sortes décrites dans son index.js)
   return {
-    // Cour centrale dégagée : x=[-15,15], z=[-18,6], aucun obstacle
-    spawnBounds: { minX: -15, maxX: 15, minZ: -18, maxZ: 6 },
-    groundY:      0.2,             // dessus du tarmac (0,1 + 0,2 / 2)
-    cameraPos:    [0, 14.5, 21],   // bord AVANT de la tour, rien devant
-    cameraTarget: [0, 1, -6],      // plonge vers la cour
-    indoors: false,
+    groundY:   0.2,                // dessus du tarmac (0,1 + 0,2 / 2)
     acoustics: 'base',             // champ ouvert : écho court
+    ancres: {
+      oeil:   [0, 14.5, 21],       // bord AVANT de la tour, rien devant
+      regard: [0, 1, -6],          // plonge vers la cour
+      zone:   { minX: -15, maxX: 15, minZ: -18, maxZ: 6 },   // la cour centrale dégagée, aucun obstacle
+      places: {}, sorties: {}, abris: {},
+    },
   }
 }

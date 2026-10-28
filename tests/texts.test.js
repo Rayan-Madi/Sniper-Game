@@ -95,7 +95,7 @@ describe('textes du jeu sans tiret cadratin', () => {
   const sheets = sources.filter(f => f.endsWith('.css'))
 
   it('le relevé couvre bien le code du jeu (main.js, l\'enquête, le kit des cinématiques)', () => {
-    for (const f of ['main.js', 'levels.js', 'pvp.js', 'prologue/investigation.js', 'briefing/index.js', 'briefing/kit.js']) {
+    for (const f of ['main.js', 'campaign/missions/m6.js', 'pvp.js', 'prologue/investigation.js', 'briefing/index.js', 'briefing/kit.js']) {
       expect(files).toContain(f)
     }
     const main = jsStrings('main.js', readFileSync(join(ROOT, 'src', 'main.js'), 'utf8'))

@@ -318,7 +318,8 @@ describe('masque : le rendu d\'identification d\'un personnage', () => {
 })
 
 describe('monterSonde : la scène de la sonde, mesurée', () => {
-  const carte = { groundY: 0.2, cameraPos: [0, 14.5, 21], cameraTarget: [0, 1, -6] }
+  // Ce que rend la carte de M4 (src/maps/m4-base.js) : son sol et ses ancres, l'œil et le regard de son poste.
+  const carte = { groundY: 0.2, ancres: { oeil: [0, 14.5, 21], regard: [0, 1, -6] } }
   const config = { ...profil430, modeles: ['verne', 'halder', 'rossi'], ecart: 5, carte: 4, qualite: 'bas' }
   // Le sol solide sous les cibles (0,25 m : la peinture épaisse de l'hélipad de M4) n'est pas le sol de la carte
   // (groundY, 0,2 m, le tarmac) : les pieds vont sur ce qu'il y a dessous.

@@ -173,25 +173,21 @@ export function buildMapParty() {
     streetPl.position.set(lx, 6, -5); add(streetPl)
   }
 
+  // Ancres : les lieux nommés que la mission cite (src/campaign/missions/m6.js ; sortes décrites dans son index.js)
   return {
-    // Spawn DANS l'appartement visible + quelques-uns dans la rue
-    spawnBounds: { minX: -10, maxX: 10, minZ: -24, maxZ: -17 },
-    groundY:     0,                   // surface du parquet
-    cameraPos:   [0, 9, 5],           // fenêtre de l'immeuble d'en face
-    cameraTarget: [0, 3, -20],        // vise l'appartement
-    indoors: true,
+    groundY:   0,                     // surface du parquet
     acoustics: 'interieur',           // le tireur est dans l'appartement d'en face : écho court et sourd
-    sideExit: true,                   // les PNJ fuient vers les côtés (sorties latérales)
-    party: true,                      // la foule danse (ambiance fête)
-    // Cible à identifier : AUCUN signe distinctif visuel, même allure que la foule.
-    // Seul indice : son comportement. À toi d'observer.
-    // Assis sur le canapé de gauche (seatY cale l'assise sur la banquette). En fuite, il se lève devant l'assise, au-dessus
-    // de ses pieds (standUp : pas en x et z, en m) : debout entre le canapé et la table basse, il court sans les traverser.
-    hiddenTarget: {
-      spawn: [-8, -21.7],
-      seatY: 0.2,
-      standUp: [0, 0.5],
-      clue:  "Aucune photo. Aucun nom. Une seule certitude : pendant que tout le monde danse... lui reste assis à négocier au téléphone.",
+    ancres: {
+      oeil:   [0, 9, 5],              // fenêtre de l'immeuble d'en face
+      regard: [0, 3, -20],            // vise l'appartement
+      zone:   { minX: -10, maxX: 10, minZ: -24, maxZ: -17 },   // la salle de la fête
+      places: {
+        // Le canapé de gauche : assis, le personnage est posé à 0,2 m (assise : sur la banquette) ; levé pour fuir, il
+        // se tient devant l'assise, au-dessus de ses pieds (debout : pas en x et z, en m), entre le canapé et la table
+        // basse, et court sans les traverser.
+        canape: { x: -8, z: -21.7, assise: 0.2, debout: [0, 0.5] },
+      },
+      sorties: {}, abris: {},
     },
   }
 }

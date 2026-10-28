@@ -139,16 +139,17 @@ export function buildMapDocks() {
     rainGeo.attributes.position.needsUpdate = true
   })
 
+  // Ancres : les lieux nommés que la mission cite (src/campaign/missions/m3.js ; sortes décrites dans son index.js)
   return {
-    // Zone de spawn : dalle plate, aucun obstacle, x=[-13,13] z=[-11,10]
-    spawnBounds: { minX: -13, maxX: 13, minZ: -11, maxZ: 10 },
-    groundY:      0.345,         // dessus de la dalle du quai (0,17 + 0,35 / 2)
-    cameraPos:    [0, 10, 28],
-    cameraTarget: [0, 1, -2],    // vise le quai en contrebas
-    indoors: false,
-    acoustics: 'port',           // écho long et métallique, entre conteneurs et hangars
-    rain: true,                  // la pluie s'entend pendant la mission (nappe de src/audio.js)
-    // CHOIX MORAL : tirer sur le cadenas du conteneur rouge libère les victimes
-    moralLock: { pos: [-16.5, 1.35, 5.15] },
+    groundY:   0.345,              // dessus de la dalle du quai (0,17 + 0,35 / 2)
+    acoustics: 'port',             // écho long et métallique, entre conteneurs et hangars
+    rain: true,                    // la pluie s'entend pendant la mission (nappe de src/audio.js)
+    ancres: {
+      oeil:    [0, 10, 28],        // la plateforme des conteneurs empilés
+      regard:  [0, 1, -2],         // le quai en contrebas
+      zone:    { minX: -13, maxX: 13, minZ: -11, maxZ: 10 },   // la dalle plate, aucun obstacle
+      cadenas: [-16.5, 1.35, 5.15],   // sur la porte du conteneur rouge : le choix moral
+      places: {}, sorties: {}, abris: {},
+    },
   }
 }

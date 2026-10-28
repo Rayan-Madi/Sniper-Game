@@ -55,7 +55,7 @@ describe('sol des cartes : groundY est bien la hauteur du sol sous la zone d\'ap
     it(`${NAMES[i]} : le sol mesuré vaut groundY à 2 cm près`, () => {
       const info = build()
       const groundY = info.groundY ?? 0   // absent : les PNJ sont posés à 0
-      for (const [x, z] of samplePoints(info.spawnBounds)) {
+      for (const [x, z] of samplePoints(info.ancres.zone)) {
         const y = groundAt(x, z)
         expect(y, `sol introuvable en (${x}, ${z})`).not.toBe(null)
         expect(Math.abs(y - groundY), `sol mesuré ${y} en (${x}, ${z}), groundY ${groundY}`).toBeLessThanOrEqual(0.02)

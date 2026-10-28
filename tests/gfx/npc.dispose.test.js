@@ -239,7 +239,7 @@ describe('NPC.dispose, niveau 2 : faux renderer', () => {
   function mountM6() {
     return withSeed(1006, () => {
       const info = MAP_BUILDERS[5]()
-      const b = info.spawnBounds
+      const b = info.ancres.zone
       const at = () => ({ x: b.minX + Math.random() * (b.maxX - b.minX), z: b.minZ + Math.random() * (b.maxZ - b.minZ) })
       const npcs = [new NPC({ isTarget: true, color: 0xcc4422, x: 0, z: 0, bounds: b, hideMarker: true, lockState: 'phone',
         onPhone: true, modelType: 'civilian' })]

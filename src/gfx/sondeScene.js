@@ -172,16 +172,18 @@ export function solNu(scene) {
   return sol
 }
 
-// La sonde montée et mesurée, sur la carte déjà construite (carte : ce que son constructeur a rendu, cameraPos,
-// cameraTarget, groundY ; null pour un sol nu). config : lireSonde (src/gfx/sonde.js). deps : solides (maillages qui
-// portent les pieds : solidMeshes() de la carte), modele(nom) (loadedModel de characters.js), ombre (les personnages
-// en projettent-ils une), fenetre ([largeur, hauteur] de l'écran, pour le relevé). Rend l'état publié par __sonde() :
-// { pret, erreur, config, poste, regard, zoom, ecran, personnages }. Un modèle inconnu : pret faux, rien n'est posé.
+// La sonde montée et mesurée, sur la carte déjà construite (carte : ce que son constructeur a rendu, groundY et ancres,
+// dont oeil et regard, ceux du poste de ses missions ; null pour un sol nu). config : lireSonde (src/gfx/sonde.js).
+// deps : solides (maillages qui portent les pieds : solidMeshes() de la carte), modele(nom) (loadedModel de
+// characters.js), ombre (les personnages en projettent-ils une), fenetre ([largeur, hauteur] de l'écran, pour le
+// relevé). Rend l'état publié par __sonde() : { pret, erreur, config, poste, regard, zoom, ecran, personnages }. Un
+// modèle inconnu : pret faux, rien n'est posé.
 export function monterSonde(ctx, config, { carte, solides = [], modele, ombre = false, fenetre = null }) {
   const { renderer, scene, camera } = ctx
   const info = carte || {}
-  const poste = config.poste || info.cameraPos || [0, 8, 30]
-  const regard = config.regard || info.cameraTarget || [0, 1, 0]
+  const ancres = info.ancres || {}
+  const poste = config.poste || ancres.oeil || [0, 8, 30]
+  const regard = config.regard || ancres.regard || [0, 1, 0]
   const zoom = config.zoom || ZOOM_DEPART
   if (config.modeles.length > PERSONNAGES_MAX) {
     return { pret: false, erreur: `au plus ${PERSONNAGES_MAX} personnages (${config.modeles.length} demandés)`, config }

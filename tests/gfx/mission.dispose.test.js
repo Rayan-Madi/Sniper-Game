@@ -15,7 +15,7 @@ import { releaseConvoy } from '../../src/campaign/convoy.js'
 import { makeJeep } from '../../src/maps/index.js'
 import { createFakeRenderer, trackDisposals } from './fakeRenderer.js'
 
-const LOCK_POS = [-16.5, 1.35, 5.15]   // moralLock.pos du port (src/maps/m3-port.js)
+const LOCK_POS = [-16.5, 1.35, 5.15]   // l'ancre cadenas du port (src/maps/m3-port.js)
 
 // Convoi comme le monte mountLevel : trois jeeps dans la scène, un occupant par jeep (un objet de la scène à part).
 function convoy() {

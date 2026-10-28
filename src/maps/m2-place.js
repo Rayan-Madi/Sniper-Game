@@ -6,7 +6,7 @@ import { clear, add, box, plane, cylinder, car, building, solide } from './prims
 // ─── MAP 2 : Plaza de nuit, toit d'immeuble, vue plongeante ─────────
 // Sniper sur le toit d'un immeuble en bordure de place
 // Caméra à y=22, orientée vers le bas (pitch négatif) sur la place en contrebas
-// SpawnBounds = zone AU SOL directement visible depuis le toit
+// Zone des PNJ (ancre zone) = la place AU SOL, directement visible depuis le toit
 export function buildMapWarehouse() {
   clear()
   setLighting({ ambientI: 0.85, sunI: 0.6, fillI: 0.4, sunColor: 0x9fb0dd, ambColor: 0x8fa0c8 })
@@ -88,13 +88,15 @@ export function buildMapWarehouse() {
   const ambNight = new THREE.AmbientLight(0x111133, 0.8)
   add(ambNight)
 
+  // Ancres : les lieux nommés que la mission cite (src/campaign/missions/m2.js ; sortes décrites dans son index.js)
   return {
-    // Zone de spawn = TOUTE LA PLACE AU SOL, bien visible depuis y=22
-    spawnBounds: { minX: -14, maxX: 14, minZ: -14, maxZ: 14 },
-    groundY:     0,                    // la place dallée
-    cameraPos:   [0, 22.5, 22],        // sur le toit de l'immeuble nord
-    cameraTarget: [0, 0, 0],           // regarde le centre de la place en bas
-    indoors: false,
+    groundY:   0,                      // la place dallée
     acoustics: 'place',                // écho de la place, entourée d'immeubles
+    ancres: {
+      oeil:   [0, 22.5, 22],           // sur le toit de l'immeuble nord
+      regard: [0, 0, 0],               // le centre de la place, en bas
+      zone:   { minX: -14, maxX: 14, minZ: -14, maxZ: 14 },   // toute la place au sol, bien visible depuis le toit
+      places: {}, sorties: {}, abris: {},
+    },
   }
 }
