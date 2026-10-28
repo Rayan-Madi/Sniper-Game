@@ -6,6 +6,8 @@
 
 ## 0. Constats qui orientent l'architecture [V]
 
+> Relevés le 11 octobre 2026, avant la fusion du lot 2 : les numéros de ligne sont des repères à revérifier, pas des adresses à jour. Depuis la tâche A1 du lot 3a, `src/maps.js` n'existe plus : il est découpé en `src/maps/`.
+
 - **Plan lointain unique à 200 m.** `src/scene.js:11` : `PerspectiveCamera(60, …, 0.1, 200)`.
 - **Soleil fixe et cadre d'ombre unique.** Le soleil est fixé en (20, 40, 10) et le cadre d'ombre vaut ±60 m (`scene.js:32-41`). `setLighting` ne règle que les intensités et les couleurs, jamais la position (`scene.js:79-86`). Tout réglage par carte doit donc être **remis à zéro** au menu, en PvP et dans l'enquête.
 - **Zoom de départ ×4 partout** (`main.js:579`). La molette va de ×3 à `6 + 2 × Lunette` (`main.js:1193`, `upgrades.js:77`) et la Lunette va au plus au niveau 3 (`upgrades.js:5`), soit ×12 au maximum.
@@ -13,8 +15,8 @@
 - **Règle de fuite** : un cône fixe de 80° plus une distance de 12 m (`main.js:1097-1116`). À 155 m ou 430 m, elle ne se déclenche jamais.
 - **Casting.** `spawnCharacter` filtre par `match` **dans le seul pool du rôle**, et retombe **en silence** sur tout le pool si rien ne correspond (`characters.js:173-176`). `NPC` ne passe aucune option (`npc.js:207`). Imposer Verne (pool civil) ou Halder (pool garde) comme cible demande donc une recherche dans tous les pools, et la retombée silencieuse rendrait un test de casting menteur.
 - **Fin de mission.** La dernière cible lance tout de suite le ralenti, puis la réussite au bout de 1,5 s (`main.js:1118-1145`). La fin différée de M3 touche donc ce chemin.
-- **Obstacles des PNJ.** Seules les `box()` de hauteur ≥ 1,1 m posées au sol deviennent des obstacles (`maps.js:46`). Des `InstancedMesh` n'en produiraient aucun. `src/gfx/dispose.js` ne parcourt que `o.geometry`, sans traitement propre aux `InstancedMesh` (aucune occurrence) : il faudra appeler `.dispose()` sur l'instance [D].
-- **Tailles des fichiers.** `maps.js` fait 954 lignes, `main.js` 1 677 lignes, et `MAP_BUILDERS` est un tableau de 6 fonctions (`maps.js:947-954`).
+- **Obstacles des PNJ.** Seules les `box()` de hauteur ≥ 1,1 m posées au sol deviennent des obstacles (`maps.js:46` avant A1, aujourd'hui `box()` dans `src/maps/prims.js`). Des `InstancedMesh` n'en produiraient aucun. `src/gfx/dispose.js` ne parcourt que `o.geometry`, sans traitement propre aux `InstancedMesh` (aucune occurrence) : il faudra appeler `.dispose()` sur l'instance [D].
+- **Tailles des fichiers.** `maps.js` fait 954 lignes, `main.js` 1 677 lignes, et `MAP_BUILDERS` est un tableau de 6 fonctions (`maps.js:947-954` avant A1, aujourd'hui dans `src/maps/index.js`).
 - **Lot 2.** Sur `lot2-tir`, seules T1 à T3 sont faites (lunette, recul, culasse ; commits `71578af`, `df6dd66`, `f9f645c`). Le lot 3 a besoin de T4 (zones sur les os), T5 (`solidMeshes()`, `resolveImpact`) et T6 (`planShotSounds`, retard `distance/343`) (spec du lot 2 §3.1, §3.4, §3.5). **Le lot 3 ne commence qu'après la fusion du lot 2.**
 - **Budgets du lot 1.** Les seuils chiffrés ne portent que sur M6 : triangles ≤ 1,5 M en Moyen et ≤ 1,4 M en Bas, plus les Δ = 0 du memtest (spec du lot 1 §6). Pour les autres missions, il n'existe que des relevés : en Moyen à la vue de départ, M1 608 appels pour 386 k triangles, M2 382 pour 642 k, M3 156 pour 606 k, M4 212 pour 856 k, M5 297 pour 486 k, M6 294 pour 1,42 M (`docs/superpowers/specs/annexes/README.md`, « Après la tâche L4 »). Je propose plus bas des plafonds par mission [D].
 
