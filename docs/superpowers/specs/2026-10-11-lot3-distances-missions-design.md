@@ -82,7 +82,26 @@ Je propose donc **un socle transverse, puis des sous-lots par groupe de cartes**
 - Vitesse : 800 m/s, puis 950 m/s au niveau 4 de Vélocité (+37,5 m/s par niveau). Elle remplace `bulletDelay`.
 - Chiffres [calcul] : 430 m donnent 0,54 s de vol et 1,41 m de chute sans réglage. Avec la lunette réglée à 430 m, l'écart dans la zone 412 à 448 m va de -5 à +6 cm : négligeable devant le rayon du torse (15 cm).
 - **Télémètre** dans la lunette : distance au point visé (rayon contre solides, sol et zones), arrondie au mètre, rafraîchie à 10 Hz. Il affiche aussi la distance de réglage (« ZÉRO 430 m »).
-- **`dernierTirMortel`** : `{ origine, dir, v0, g, zero, tTir, tImpact, point, cibleId, zone }`, enregistré à chaque mort de cible nommée. C'est le contrat avec le lot 4.
+- **`dernierTirMortel`** : enregistré à chaque mort de cible nommée. C'est le contrat avec le lot 4 (kill-cams), **complété le 28 octobre 2026 (tâche K0)** à partir de la conception des kill-cams (`.superpowers/sdd/2026-10-28-conceptions/kill-cams-design.md`, §10), pour que le lot 4 n'ait pas à rouvrir la balistique :
+  ```js
+  dernierTirMortel = {
+    origine, dir, v0, g, zero,              // au coup
+    tTir, tImpact,                           // sur l'horloge de la mission ; tImpact interpolé dans le segment, pas la fin de l'image
+    point, cibleId, zone,
+    cible,                                   // référence au PNJ, pas seulement l'id
+    normale,                                 // de la zone au point, si disponible
+    vue: { lacet, tangage, zoom, fov },      // au coup, recul nul : le rejeu commence dans la lunette
+    traversees: [{ t, point, normale, surface }],   // verre traversé (cabine de M3, baie de M6)
+    support: null | { type: 'convoi', vehicule, sTir, sImpact },
+    derniere, fin                            // dernière cible vivante ; 'immediate' | 'differee'
+  }
+  ```
+  - `ballistics.js` expose `vitesseA(t)` (vitesse sur la trajectoire au temps t).
+  - La résolution calcule `derniere` **avant** de programmer les sons de l'impact, pour que le lot 4 puisse couper le son réel par une condition d'une ligne.
+  - L'ordre de résolution « PNJ, puis segments de la balle » est gardé et testé.
+  - A7 : chaque entrée de la fiche HUD est retrouvée par `cibleId` ; le portrait complet (pas seulement la version réduite) figure dans les données de mission, cité par **une seule fonction** `portrait(nom)` (les portraits passeront en WebP au chantier des cinématiques v2) et un test vérifie que le fichier existe dans `public/`.
+  - A8 : la fin paramétrable passe par une seule fonction `lancerFin(dernierTirMortel)` (immédiate, ou à l'échéance du calme en M3) ; le retrait des corps est suspendu dès la première mort en M3 ; la radio d'Anton expose `suspendre()` et `reprendre()`.
+  - 3d : `placerConvoi(convoi, s)`, pur, extrait de `stepConvoy` (`src/campaign/convoy.js`).
 
 **d) Casting**
 
@@ -206,7 +225,7 @@ Je propose donc **un socle transverse, puis des sous-lots par groupe de cartes**
 **Critères de fin 3c**
 - **Lisibilité** en 1080p, validée sur captures par Rayan en Moyen et en Bas :
   - M3 à ×10 (maximum de base) : corps 123 px, torse 30 px ;
-  - M4 à ×20 : corps 86 px, tête 12,5 px (calcul à 430 m ; à 250 m, après la décision 11, la sonde mesure 109 px et une tête de 15 px en Bas).
+  - M4 à ×20 : corps 86 px, tête 12,5 px (calcul à 430 m ; la sonde mesure 63 px et une tête de 9 px dans le tampon de Bas à ×20, environ 84 px à l'écran ; l'amélioration Lunette porte le zoom à ×29 au niveau 3).
 - **Budgets en Moyen** à la vue de départ [proposition] :
   - décor seul ≤ 200 appels et ≤ 300 k triangles ;
   - vue complète ≤ 450 appels et ≤ 1,2 M triangles ;
@@ -283,4 +302,4 @@ Je propose donc **un socle transverse, puis des sous-lots par groupe de cartes**
 7. **Casting.** La retombée silencieuse de `spawnCharacter` (`characters.js:174-175`) [V] fausserait les tests sans le mode strict. L'ordre des tirages du PvP est à garder. Plusieurs cibles nommées partagent un modèle (Markov et Vosko ; les frères, les dockers et peut-être le commanditaire) : la règle « aucun modèle partagé » devient une règle par mission.
 8. **Taille de `main.js`** (1 677 lignes [V]). Sans extraction en modules purs, les tests avec témoin rouge sont impossibles (REPRISE.md:96).
 9. **Captures et références.** Celles de M1 à M6 sont à refaire, toutes jugées par Rayan. Les seuils du memtest évoluent avec far et le décor : il faut les republier dans l'annexe.
-10. **Contrat avec le lot 4.** `dernierTirMortel` et la trajectoire doivent suffire à la caméra qui suit la balle : ralenti d'environ ×0,02 à 31 m, d'environ ×0,3 à 430 m [D]. Ce contrat est à figer dans la spec du lot 3 avant 3c.
+10. **Contrat avec le lot 4.** `dernierTirMortel` et la trajectoire doivent suffire à la caméra qui suit la balle : ralenti d'environ ×0,02 à 31 m, d'environ ×0,3 à 430 m [D]. Contrat figé le 28 octobre 2026 (tâche K0, §2 c), avant A4.
