@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { resolve, join, win32 } from 'node:path'
+import { resolve, join, relative } from 'node:path'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -22,15 +22,18 @@ const nodeRequire = createRequire(import.meta.url)
 // ─── Faux module 'electron' ───────────────────────────────────────────
 // Ce que la fumée utilise en plus du harnais de tests/electron.test.js : session.webRequest, executeJavaScript,
 // reload, événements de webContents, app.setPath et app.exit, process.on et process.stdout. app.whenReady rend une
-// vraie promesse, comme Electron : la fenêtre se crée après l'exécution de tout le fichier. app.setPath lève une erreur
-// sur un chemin qui n'est pas absolu, comme Electron (« Path must be absolute »). modules : modules de Node remplacés
-// pour electron/main.js (os.tmpdir, par exemple).
+// vraie promesse, comme Electron : la fenêtre se crée après l'exécution de tout le fichier. app.setPath suit le contrat
+// d'Electron 42 (electron.d.ts, setPath) : une erreur pour un chemin sans lettre de lecteur ni UNC (« Path must be
+// absolute » : FilePath::IsAbsolute de Chromium sous Windows) ou pour un dossier qui n'existe pas.
+// webRequest.onBeforeRequest garde son filtre éventuel, que requete() applique. modules : modules de Node remplacés pour
+// electron/main.js (os.tmpdir, par exemple).
 function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = false, modules = {} } = {}) {
   const vu = { fenetres: [], gardes: [], chemins: {}, codes: [], lignes: [], vidages: [], muet: null, ralenti: null, gestionnaires: {} }
   class WebContents extends EventEmitter {
     constructor() {
       super()
-      this.session = { webRequest: { onBeforeRequest: (...args) => { vu.gardes.push(args[args.length - 1]) } } }
+      const onBeforeRequest = (...args) => { vu.gardes.push({ filtre: args.length > 1 ? args[0] : null, ecouteur: args[args.length - 1] }) }
+      this.session = { webRequest: { onBeforeRequest } }
     }
     setBackgroundThrottling(v) { vu.ralenti = v }
     setAudioMuted(v) { vu.muet = v }
@@ -55,7 +58,8 @@ function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = fa
       quit() {},
       exit: code => { vu.codes.push(code) },
       setPath: (nom, chemin) => {
-        if (!win32.isAbsolute(chemin)) throw new Error('Path must be absolute')
+        if (!/^([A-Za-z]:[\\/]|[\\/]{2})/.test(chemin)) throw new Error('Path must be absolute')
+        if (!existsSync(chemin)) throw new Error(`dossier inexistant : ${chemin}`)
         vu.chemins[nom] = chemin
       },
     },
@@ -71,9 +75,35 @@ function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = fa
   return vu
 }
 
+// Une requête vue par Electron : la garde la reçoit si elle n'a pas de filtre, ou si son filtre la retient ; sinon la
+// requête passe sans elle ('non vue'). Rend la réponse donnée au rappel, ou null si la garde ne répond jamais (Electron
+// exige une réponse : la requête resterait suspendue). Motifs réduits à ceux de Chromium, jamais plus larges : <all_urls>,
+// ou schéma://hôte/chemin avec des * (le schéma * ne vaut que http et https). excludeUrls et types ne sont pas simulés :
+// une erreur, à vérifier dans Electron.
+function requete(vu, url) {
+  const { filtre, ecouteur } = vu.gardes[0]
+  if (filtre && !retenue(filtre, url)) return 'non vue'
+  let reponse = null
+  ecouteur({ url }, r => { reponse = r })
+  return reponse
+}
+function retenue(filtre, url) {
+  if (filtre.excludeUrls?.length || filtre.types?.length) throw new Error(`filtre de la garde non simulé : ${JSON.stringify(filtre)}`)
+  const u = new URL(url)
+  const schema = u.protocol.slice(0, -1)
+  const glob = g => new RegExp('^' + g.split('*').map(s => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$')
+  return filtre.urls.some(motif => {
+    if (motif === '<all_urls>') return true
+    const m = /^(\*|[a-z][a-z0-9+.-]*):\/\/([^/]*)(\/.*)$/.exec(motif)
+    if (!m) throw new Error(`motif d'URL non simulé : ${motif}`)
+    const schemaRetenu = m[1] === '*' ? schema === 'http' || schema === 'https' : schema === m[1]
+    return schemaRetenu && glob(m[2]).test(u.host) && glob(m[3]).test(u.pathname + u.search)
+  })
+}
+
 // Résultat écrit par le processus principal : la ligne « [fumee] {json} » (lecture locale, indépendante du script).
 function sortie(vu) {
-  const ligne = vu.lignes.join('').split('\n').find(l => l.startsWith('[fumee] '))
+  const ligne = vu.lignes.join('').split('\n').find(l => l.startsWith('[fumee] {'))
   return ligne ? JSON.parse(ligne.slice('[fumee] '.length)) : null
 }
 // Attentes larges (machine partagée, chargée) : le scénario du faux jeu tient en quelques millisecondes
@@ -85,6 +115,8 @@ const finie = vu => vi.waitFor(() => { expect(vu.codes.length).toBe(1) }, { time
 // (src/main.js, refreshMenuButtons ; src/upgrades.js, clé sniper-save), fin du chargement des modèles (data-modeles),
 // REPRENDRE qui joue la cinématique m3 et ses quatre <img> si son briefing n'est pas vu, Échap qui la passe, puis la
 // mission (HUD) et le briefing noté vu dans la sauvegarde. Chaque option casse une chose que la fumée doit voir.
+// echapsIgnores : comme le vrai jeu (src/briefing/index.js), les premiers Échap tombent dans le délai de grâce et sont
+// ignorés ; le suivant pose la classe k-leaving (fondu de sortie) et la racine n'est masquée qu'au tour suivant.
 // porte : promesse qui retient le premier chargement (événements émis par le test avant que le scénario ne parte).
 // Un seul faux jeu à la fois : celui du test précédent est arrêté (ses écouteurs de document retirés).
 const CLE = 'sniper-save'
@@ -92,7 +124,7 @@ const IMAGES_M3 = ['portrait-passeur-cam-lo.png', 'portrait-passeur-cam.jpg', 'p
   .map(f => 'briefing/img/' + f)
 const MISSION_3 = 'LE PORT  ·  3/6'
 let jeuActif = null
-function fauxJeu({ modelesEchecs = [], imageCassee = null, stockagePerdu = false, briefingOublie = false, profilUtilise = false, porte = null } = {}) {
+function fauxJeu({ modelesEchecs = [], imageCassee = null, stockagePerdu = false, briefingOublie = false, profilUtilise = false, echapsIgnores = 0, porte = null } = {}) {
   const jeu = { lus: [], clics: 0, echaps: 0 }
   let ctrl = null
   const lire = () => { try { return JSON.parse(localStorage.getItem(CLE)) } catch { return null } }
@@ -125,12 +157,19 @@ function fauxJeu({ modelesEchecs = [], imageCassee = null, stockagePerdu = false
         Object.defineProperty(img, 'naturalWidth', { value: img.getAttribute('src').endsWith(imageCassee) ? 0 : 360 })
       }
       document.addEventListener('keydown', e => {
-        if (e.code !== 'Escape' || root.hidden) return
+        if (e.code !== 'Escape' || root.hidden || root.classList.contains('k-leaving')) return
         jeu.echaps++
-        root.innerHTML = ''
-        root.hidden = true
-        if (!briefingOublie) { save.briefingSeen[2] = true; localStorage.setItem(CLE, JSON.stringify(save)) }
-        mission()
+        if (jeu.echaps <= echapsIgnores) return
+        const passer = () => {
+          root.innerHTML = ''
+          root.hidden = true
+          root.classList.remove('k-leaving')
+          if (!briefingOublie) { save.briefingSeen[2] = true; localStorage.setItem(CLE, JSON.stringify(save)) }
+          mission()
+        }
+        if (!echapsIgnores) return passer()
+        root.classList.add('k-leaving')
+        setTimeout(passer, 0)
       }, { capture: true, signal: ctrl.signal })
     }, { signal: ctrl.signal })
   }
@@ -155,7 +194,11 @@ beforeEach(() => {
   delete document.documentElement.dataset.modelesEchecs
 })
 
-const FUMEE = ['electron', '.', '--fumee', '--profil=C:/temp/sniper-fumee-test']
+// Profil jetable des tests : un vrai dossier vide, comme celui que crée scripts/fumee.mjs (electron/main.js le lit avant
+// de le confier à Electron, dont le faux exige qu'il existe)
+const PROFIL = mkdtempSync(join(tmpdir(), 'fumee-test-profil-'))
+const FUMEE = ['electron', '.', '--fumee', `--profil=${PROFIL}`]
+afterAll(() => { rmSync(PROFIL, { recursive: true, force: true }) })
 
 describe('electron/main.js --fumee : fenêtre cachée, profil jetable, réseau bloqué', () => {
   it('--fumee : la fenêtre est cachée (show: false), sans son, et la page tourne comme au premier plan', async () => {
@@ -182,7 +225,7 @@ describe('electron/main.js --fumee : fenêtre cachée, profil jetable, réseau b
   it('--fumee : profil jetable passé par --profil (données de session comprises), jamais la sauvegarde du joueur', async () => {
     const vu = lancerMain({ argv: FUMEE })
     await fenetre(vu)
-    expect(vu.chemins).toEqual({ userData: 'C:/temp/sniper-fumee-test', sessionData: 'C:/temp/sniper-fumee-test' })
+    expect(vu.chemins).toEqual({ userData: PROFIL, sessionData: PROFIL })
   })
 
   // Le profil jetable est créé et supprimé par scripts/fumee.mjs : electron/main.js n'en crée jamais (un « electron .
@@ -204,36 +247,62 @@ describe('electron/main.js --fumee : fenêtre cachée, profil jetable, réseau b
     }
   })
 
-  it('--fumee avec un --profil refusé par Electron (chemin relatif) : rouge, sans fenêtre, et l\'erreur ne remonte pas (jamais la boîte de dialogue d\'Electron)', async () => {
-    let vu = null
-    expect(() => { vu = lancerMain({ argv: ['electron', '.', '--fumee', '--profil=profil-relatif'] }) }).not.toThrow()
-    await new Promise(r => setTimeout(r, 20))
-    expect(vu.fenetres).toEqual([])
-    await finie(vu)
-    expect(vu.codes).toEqual([1])
-    expect(sortie(vu).echecs.join('\n')).toMatch(/profil-relatif/)
+  it('--fumee avec un --profil refusé par Electron (chemin relatif, ou sans lettre de lecteur) : rouge, sans fenêtre, et l\'erreur ne remonte pas (jamais la boîte de dialogue d\'Electron)', async () => {
+    const vide = mkdtempSync(join(tmpdir(), 'fumee-test-relatif-'))
+    try {
+      // dossiers existants et vides que seul Electron refuse : relatif au dossier courant, ou à la racine du lecteur
+      for (const chemin of [relative(process.cwd(), vide), vide.slice(2)]) {
+        let vu = null
+        expect(() => { vu = lancerMain({ argv: ['electron', '.', '--fumee', `--profil=${chemin}`] }) }, chemin).not.toThrow()
+        await new Promise(r => setTimeout(r, 20))
+        expect(vu.fenetres, chemin).toEqual([])
+        expect(vu.chemins, chemin).toEqual({})
+        await finie(vu)
+        expect(vu.codes, chemin).toEqual([1])
+        expect(sortie(vu).echecs, chemin).toEqual([`profil jetable refusé par Electron : ${chemin} (Path must be absolute)`])
+      }
+    } finally {
+      rmSync(vide, { recursive: true, force: true })
+    }
   })
 
-  it('--fumee : toute requête http, https, ws ou wss est bloquée ; les fichiers du jeu passent', async () => {
+  it('--fumee : toute requête http, https, ws ou wss passe par la garde (aucun filtre ne la restreint) et y est bloquée', async () => {
     const vu = lancerMain({ argv: FUMEE })
     await fenetre(vu)
     expect(vu.gardes.length).toBe(1)
-    const reponse = url => { let r = null; vu.gardes[0]({ url }, x => { r = x }); return r }
     for (const url of ['http://exemple.invalid/', 'https://exemple.invalid/a.glb', 'ws://127.0.0.1:8787', 'wss://exemple.invalid/'])
-      expect(reponse(url), url).toEqual({ cancel: true })
+      expect(requete(vu, url), url).toEqual({ cancel: true })
+  })
+
+  it('--fumee : les fichiers du jeu (file, data, blob) passent la garde, qui leur répond {} (sans réponse, Electron laisserait la requête suspendue)', async () => {
+    const vu = lancerMain({ argv: FUMEE })
+    await fenetre(vu)
     for (const url of ['file:///C:/jeu/dist/index.html', 'data:image/png;base64,AAAA', 'blob:file:///1'])
-      expect(reponse(url)?.cancel, url).toBeFalsy()
+      expect(requete(vu, url), url).toEqual({})
   })
 
   it('--fumee : une requête bloquée est comptée dans le résultat, qui sort rouge', async () => {
     const { porte, ouvrir } = porteFermee()
     const vu = lancerMain({ argv: FUMEE, page: fauxJeu({ porte }) })
     await fenetre(vu)
-    vu.gardes[0]({ url: 'http://exemple.invalid/' }, () => {})
+    expect(requete(vu, 'http://exemple.invalid/')).toEqual({ cancel: true })
     ouvrir()
     await finie(vu)
     expect(sortie(vu).requetesBloquees).toEqual(['http://exemple.invalid/'])
     expect(vu.codes).toEqual([1])
+  })
+
+  // La fumée vérifie le jeu tel qu'il tourne : même isolation de la page dans les deux modes. webSecurity: false est le
+  // contournement courant de fetch sous file:// (spec §3.2 et §10.1) : il ne passerait jamais en douce.
+  it('webPreferences identiques avec et sans --fumee, jamais webSecurity: false', async () => {
+    const jeu = lancerMain()
+    const fum = lancerMain({ argv: FUMEE })
+    await fenetre(jeu)
+    await fenetre(fum)
+    const prefs = jeu.fenetres[0].opts.webPreferences
+    expect(fum.fenetres[0].opts.webPreferences).toEqual(prefs)
+    expect(prefs).toMatchObject({ contextIsolation: true, nodeIntegration: false })
+    expect(prefs.webSecurity).not.toBe(false)
   })
 
   it('sans --fumee : fenêtre visible, aucune garde réseau, ni profil changé, ni son coupé, aucune sortie', async () => {
@@ -253,7 +322,7 @@ describe('electron/main.js --fumee : fenêtre cachée, profil jetable, réseau b
 
 describe('electron/main.js --fumee : scénario joué dans la page (faux jeu)', () => {
   it('vert : sauvegarde de M3 posée, menu, modèles, images de la cinématique m3, mission, sauvegarde relue', async () => {
-    const jeu = fauxJeu()
+    const jeu = fauxJeu({ echapsIgnores: 1 })
     const vu = lancerMain({ argv: FUMEE, page: jeu })
     await finie(vu)
     const r = sortie(vu)
@@ -269,9 +338,10 @@ describe('electron/main.js --fumee : scénario joué dans la page (faux jeu)', (
     // premier lancement sur un profil vierge, puis la sauvegarde posée : M3 en cours, briefing de M3 pas encore vu
     expect(jeu.lus[0]).toBeNull()
     expect(jeu.lus[1]).toMatchObject({ currentLevel: 3, briefingSeen: [true, true, false, false, false, false] })
-    // REPRENDRE deux fois (cinématique, puis mission directe après le rechargement), la cinématique passée une fois
+    // REPRENDRE deux fois (cinématique, puis mission directe après le rechargement) ; Échap renvoyé tant que le jeu
+    // l'ignore : le premier tombe dans le délai de grâce, le second passe la cinématique (fondu k-leaving)
     expect(jeu.clics).toBe(2)
-    expect(jeu.echaps).toBe(1)
+    expect(jeu.echaps).toBe(2)
   })
 
   it('un modèle en échec (PNJ procédural) rend la fumée rouge et le nomme', async () => {
@@ -320,7 +390,7 @@ describe('electron/main.js --fumee : scénario joué dans la page (faux jeu)', (
     expect(vu.codes).toEqual([1])
   })
 
-  it('erreur de console, « [characters] échec » et chargement en échec sont comptés et rendent la fumée rouge', async () => {
+  it('erreur de console, « [characters] échec » et chargement en échec d\'un sous-cadre sont comptés et rendent la fumée rouge ; le scénario va quand même au bout', async () => {
     const { porte, ouvrir } = porteFermee()
     const vu = lancerMain({ argv: FUMEE, page: fauxJeu({ porte }) })
     await fenetre(vu)
@@ -332,12 +402,41 @@ describe('electron/main.js --fumee : scénario joué dans la page (faux jeu)', (
     wc.emit('did-fail-load', {}, -6, 'ERR_FILE_NOT_FOUND', 'file:///C:/jeu/dist/briefing/x.html', false)
     ouvrir()
     await finie(vu)
-    const echecs = sortie(vu).echecs.join('\n')
+    const r = sortie(vu)
+    const echecs = r.echecs.join('\n')
     expect(echecs).toMatch(/boum/)
     expect(echecs).toMatch(/\[characters\] échec \.\/models\/mafia_boss\.glb/)
     expect(echecs).toMatch(/ERR_FILE_NOT_FOUND/)
-    expect(echecs).not.toMatch(/simple avertissement|chargé/)
+    expect(echecs).not.toMatch(/simple avertissement|\[characters\] chargé/)
+    expect(r.modeles).toEqual({ charges: 7, echecs: [] })
+    expect(r.sauvegarde.relue).toBe(true)
     expect(vu.codes).toEqual([1])
+  })
+
+  it('le cadre principal qui ne se charge pas (dist/index.html absent) : rouge « page non chargée », sans scénario', async () => {
+    const { porte, ouvrir } = porteFermee()
+    const jeu = fauxJeu({ porte })
+    const vu = lancerMain({ argv: FUMEE, page: jeu })
+    await fenetre(vu)
+    vu.fenetres[0].webContents.emit('did-fail-load', {}, -6, 'ERR_FILE_NOT_FOUND', 'file:///C:/jeu/dist/index.html', true)
+    await finie(vu)
+    const r = sortie(vu)
+    expect(r.echecs).toContain('page non chargée : file:///C:/jeu/dist/index.html (ERR_FILE_NOT_FOUND, -6)')
+    expect(r.modeles).toBeNull()
+    expect(vu.codes).toEqual([1])
+    ouvrir()   // le chargement du faux jeu arrive trop tard : rien ne repart
+    await new Promise(f => setTimeout(f, 20))
+    expect(jeu.clics).toBe(0)
+    expect(vu.codes).toEqual([1])
+  })
+
+  it('la page arrêtée (render-process-gone) termine la fumée en rouge et le dit', async () => {
+    const { porte } = porteFermee()
+    const vu = lancerMain({ argv: FUMEE, page: fauxJeu({ porte }) })
+    await fenetre(vu)
+    vu.fenetres[0].webContents.emit('render-process-gone', {}, { reason: 'crashed', exitCode: -1 })
+    expect(vu.codes).toEqual([1])
+    expect(sortie(vu).echecs).toEqual(['page arrêtée : crashed'])
   })
 
   it('page muette : la fumée se ferme seule au délai de garde, rouge', async () => {
@@ -352,6 +451,22 @@ describe('electron/main.js --fumee : scénario joué dans la page (faux jeu)', (
     }
   })
 
+  it('une étape qui n\'aboutit pas (menu jamais affiché) : rouge au bout de 60 s, l\'étape nommée, bien avant le délai de garde', async () => {
+    vi.useFakeTimers()
+    try {
+      // page chargée, mais vide : le menu ne vient jamais
+      const page = { charger: wc => setTimeout(() => wc.emit('did-finish-load'), 0), recharger() {}, executer: code => Promise.resolve().then(() => (0, eval)(code)) }
+      const vu = lancerMain({ argv: FUMEE, page })
+      await vi.advanceTimersByTimeAsync(59 * 1000)
+      expect(vu.codes).toEqual([])
+      await vi.advanceTimersByTimeAsync(2 * 1000)
+      expect(vu.codes).toEqual([1])
+      expect(sortie(vu).echecs).toEqual(['menu au premier lancement : rien au bout de 60 s'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('une exception du processus principal termine la fumée en rouge (jamais la boîte de dialogue d\'Electron)', async () => {
     const vu = lancerMain({ argv: FUMEE })
     await fenetre(vu)
@@ -361,6 +476,15 @@ describe('electron/main.js --fumee : scénario joué dans la page (faux jeu)', (
     expect(sortie(vu).echecs.join('\n')).toMatch(/boum du processus principal/)
   })
 
+  it('une promesse rejetée dans le processus principal termine la fumée en rouge', async () => {
+    const vu = lancerMain({ argv: FUMEE })
+    await fenetre(vu)
+    expect(typeof vu.gestionnaires.unhandledRejection).toBe('function')
+    vu.gestionnaires.unhandledRejection(new Error('chargement rejeté'))
+    expect(vu.codes).toEqual([1])
+    expect(sortie(vu).echecs).toEqual(['promesse rejetée dans le processus principal : chargement rejeté'])
+  })
+
   it('le résultat tient sur une ligne « [fumee] {json} », et le processus ne quitte qu\'une fois la ligne écrite', async () => {
     const vu = lancerMain({ argv: FUMEE, page: fauxJeu(), sortieDifferee: true })
     await vi.waitFor(() => { expect(vu.lignes.length).toBe(1) })
@@ -368,6 +492,22 @@ describe('electron/main.js --fumee : scénario joué dans la page (faux jeu)', (
     expect(vu.codes).toEqual([])          // sortie pas encore écrite : on ne quitte pas
     vu.vidages[0]()
     expect(vu.codes).toEqual([0])
+  })
+
+  it('une ligne de résultat dont l\'écriture ne finit jamais : sortie quand même 2 s après, une seule fois', () => {
+    vi.useFakeTimers()
+    try {
+      const vu = lancerMain({ argv: ['electron', '.', '--fumee'], sortieDifferee: true })   // sans profil : fin immédiate
+      expect(sortie(vu).echecs.join('\n')).toMatch(/--profil/)
+      vi.advanceTimersByTime(1999)
+      expect(vu.codes).toEqual([])
+      vi.advanceTimersByTime(1)
+      expect(vu.codes).toEqual([1])
+      vu.vidages[0]()   // l'écriture finit enfin : pas de seconde sortie
+      expect(vu.codes).toEqual([1])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -424,26 +564,30 @@ describe('page : fin du chargement des modèles publiée sur <html> (data-modele
 })
 
 // ─── scripts/fumee.mjs ────────────────────────────────────────────────
+// Chemin calculé à l'exécution : un script absent ne fait rougir que ce bloc, pas tout le fichier
+const chargerScript = () => import(/* @vite-ignore */ pathToFileURL(join(ROOT, 'scripts', 'fumee.mjs')).href)
+const VERT = {
+  echecs: [], requetesBloquees: [], modeles: { charges: 7, echecs: [] },
+  images: IMAGES_M3.map(src => ({ src, largeur: 360 })), mission: MISSION_3,
+  sauvegarde: { libelle: 'REPRENDRE : MISSION 3', briefingVu: true, relue: true },
+}
+
 describe('scripts/fumee.mjs : lecture du résultat, verdict, commande', () => {
   let S
-  // Chemin calculé à l'exécution : un script absent ne fait rougir que ce bloc, pas tout le fichier
-  beforeAll(async () => { S = await import(/* @vite-ignore */ pathToFileURL(join(ROOT, 'scripts', 'fumee.mjs')).href) })
-  const VERT = {
-    echecs: [], requetesBloquees: [], modeles: { charges: 7, echecs: [] },
-    images: IMAGES_M3.map(src => ({ src, largeur: 360 })), mission: MISSION_3,
-    sauvegarde: { libelle: 'REPRENDRE : MISSION 3', briefingVu: true, relue: true },
-  }
+  beforeAll(async () => { S = await chargerScript() })
 
   it('lit la ligne « [fumee] » au milieu des messages de Chromium (fins de ligne Windows comprises)', () => {
     const bruit = '[1028/101010.123:ERROR:gpu_init.cc(523)] Passthrough is not supported\r\n' +
       `[fumee] ${JSON.stringify(VERT)}\r\n` + 'DevTools listening on rien\r\n'
     expect(S.lireResultat(bruit)).toEqual(VERT)
+    expect(S.lireResultat(`[fumee] debut\r\n${bruit}`)).toEqual(VERT)   // la ligne de départ n'est pas un résultat
   })
 
   it('sans ligne de résultat, ou ligne tronquée (processus tué pendant l\'écriture) : aucun résultat', () => {
     expect(S.lireResultat('')).toBeNull()
     expect(S.lireResultat('[1028/101010:ERROR:x] rien\n')).toBeNull()
     expect(S.lireResultat('[fumee] {"echecs":[],"requetes')).toBeNull()
+    expect(S.lireResultat('[fumee] debut\n')).toBeNull()
   })
 
   it('vert seulement si Electron sort à 0 et que le résultat tient le critère 12 de la spec', () => {
@@ -490,13 +634,20 @@ describe('scripts/fumee.mjs : lecture du résultat, verdict, commande', () => {
     }
   })
 
-  it('la ligne écrite par electron/main.js se lit par le script, qui rend le même verdict que le code de sortie', async () => {
+  // Deux tests, chacun sur un stockage vierge (beforeEach) : la moitié rouge n'hérite pas de la sauvegarde de la verte
+  it('la ligne écrite par electron/main.js se lit par le script, qui rend le même verdict que le code de sortie : vert', async () => {
     const vert = lancerMain({ argv: FUMEE, page: fauxJeu() })
     await finie(vert)
+    expect(vert.codes).toEqual([0])
     expect(S.lireResultat(vert.lignes.join(''))).toEqual(sortie(vert))
     expect(S.verdict({ code: vert.codes[0], resultat: S.lireResultat(vert.lignes.join('')) })).toMatchObject({ ok: true, code: 0 })
+  })
+
+  it('la ligne écrite par electron/main.js se lit par le script, qui rend le même verdict que le code de sortie : rouge (une image)', async () => {
     const rouge = lancerMain({ argv: FUMEE, page: fauxJeu({ imageCassee: 'portrait-passeur-cam.jpg' }) })
     await finie(rouge)
+    expect(rouge.codes).toEqual([1])
+    expect(sortie(rouge).echecs).toEqual(['image non chargée : briefing/img/portrait-passeur-cam.jpg'])
     expect(S.verdict({ code: rouge.codes[0], resultat: S.lireResultat(rouge.lignes.join('')) })).toMatchObject({ ok: false, code: 1 })
   })
 })
