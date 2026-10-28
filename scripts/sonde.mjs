@@ -147,6 +147,15 @@ export function ecartAuCalcul(releves) {
   return r.length ? { min: Math.min(...r), max: Math.max(...r) } : null
 }
 
+// Annexe où capture-mission.mjs recopie le relevé et les captures d'une passe (ANNEXE_SONDE) : nom, ou null pour
+// aucune. echecs : nombre de captures en échec dans la passe. Une passe incomplète (une capture refusée à chaque essai
+// pour rendu interrompu, par exemple : scripts/garde-rendu.mjs) n'en écrit aucune : le relevé versionné y perdrait des
+// mesures, voire le verdict d'un poste et la décision pour M4, et les images de la passe d'avant resteraient à côté
+// d'un relevé qui ne les cite plus.
+export function annexeSonde(nom, echecs) {
+  return nom && !echecs ? nom : null
+}
+
 // Tableau Markdown des verdicts : une ligne par poste.
 export function tableauVerdicts(verdicts) {
   const lignes = ['| Mission | Distance | Zoom maximum de base | Silhouette, en Bas | Signe, en Bas | Critère |',

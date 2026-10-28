@@ -32,13 +32,18 @@
 // graphique enregistré dans le profil jetable : auto, bas, moyen, haut ; sans elle, celui d'un premier lancement, Auto).
 // Le port DevTools est choisi par Chrome (--remote-debugging-port=0, relu dans DevToolsActivePort) : jamais un port
 // fixe, qui pourrait désigner le navigateur d'une autre session. Profil jetable, supprimé à la fin.
+// Rendu interrompu (scripts/garde-rendu.mjs) : l'état du rendu est lu dans la page juste avant et juste après chaque
+// capture. Contexte WebGL perdu, écran « LE RENDU A ÉTÉ INTERROMPU » affiché ou page rechargée : l'image est refusée
+// (rien n'est écrit) et la capture refaite dans un Chrome neuf, après 5 s, trois essais en tout ; refusée à chaque
+// essai, elle compte comme un échec, et une passe de la sonde incomplète laisse l'annexe (ANNEXE_SONDE) telle quelle.
 import { spawn, execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, existsSync, writeFileSync, copyFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import { POSTES_SONDE, SEUILS, jobsSonde, urlSonde, verdictPoste, decisionM4, distanceLimite, carreLunette, tableauMesures,
-  tableauVerdicts, ecartAuCalcul } from './sonde.mjs'
+  tableauVerdicts, ecartAuCalcul, annexeSonde } from './sonde.mjs'
+import { captureGardee, avecNouveauxEssais } from './garde-rendu.mjs'
 
 const [dir, ...what] = process.argv.slice(2)
 if (!dir || !what.length) { console.error('Usage : node scripts/capture-mission.mjs <dossier> [menu] [1…6] [sonde]'); process.exit(1) }
@@ -211,11 +216,10 @@ async function shoot(target) {
     } else {
       await js(c, `__step(1)`)
     }
-    const { data } = await c.send('Page.captureScreenshot', { format: 'png' })
+    const buf = await captureGardee(c, { format: 'png' })
     const nom = target === 'menu' ? 'menu' : retour ? `retour-m${n}` : lunette ? `${lunette[1] || ''}lunette-m${n}` : tir ? `tir-m${n}` : `m${n}`
     const out = resolve('shots', dir, `${nom}.png`)
     mkdirSync(resolve('shots', dir), { recursive: true })
-    const buf = Buffer.from(data, 'base64')
     writeFileSync(out, buf)
     console.log(out, createHash('sha256').update(buf).digest('hex').slice(0, 16))
     if (retour) console.log('  décor au menu :', JSON.stringify(await js(c, '__decor()')))
@@ -238,11 +242,10 @@ async function captureSonde(c, sonde, url) {
   if (!etat.pret) throw new Error(`sonde : ${etat.erreur}`)
   const [w, h] = etat.ecran.fenetre
   if (w !== ECRAN_SONDE.width || h !== ECRAN_SONDE.height) throw new Error(`sonde : écran de ${w} × ${h}, ${ECRAN_SONDE.width} × ${ECRAN_SONDE.height} attendu`)
-  const { data } = await c.send('Page.captureScreenshot', { format: 'jpeg', quality: JPEG, clip: { ...carreLunette(w, h), scale: 1 } })
+  const buf = await captureGardee(c, { format: 'jpeg', quality: JPEG, clip: { ...carreLunette(w, h), scale: 1 } })
   const fichier = sonde.libre ? 'sonde-libre.jpg' : sonde.fichier
   const out = resolve('shots', dir, fichier)
   mkdirSync(resolve('shots', dir), { recursive: true })
-  const buf = Buffer.from(data, 'base64')
   writeFileSync(out, buf)
   const empreinte = createHash('sha256').update(buf).digest('hex').slice(0, 16)
   console.log(out, empreinte, `${Math.round(buf.length / 1024)} ko`)
@@ -265,8 +268,8 @@ function gitState() {
 
 // Rapport de la sonde : verdict de chaque poste (critère par défaut de la spec §4), décision pour M4, distance où le
 // critère tiendrait encore, mesure contre calcul ; tableaux en Markdown pour l'annexe. → shots/<dossier>/sonde.json, et
-// docs/superpowers/specs/annexes/<ANNEXE_SONDE>.json avec ses captures si ANNEXE_SONDE est donné.
-function rapportSonde(releves) {
+// docs/superpowers/specs/annexes/<annexe>.json avec ses captures si annexe est donnée (annexeSonde, scripts/sonde.mjs).
+function rapportSonde(releves, annexe) {
   const postes = POSTES_SONDE.filter(p => releves.some(r => r.nom === p.nom))
   const verdicts = postes.map(p => verdictPoste(p, releves)).filter(Boolean)
   const v430 = verdicts.find(v => v.nom === '430m')
@@ -285,13 +288,13 @@ function rapportSonde(releves) {
   for (const v of verdicts) console.log(`${v.nom} : le critère tiendrait jusqu'à ${rapport.distancesLimites[v.nom]} m (×${v.zoom}, en Bas)`)
   if (rapport.ecartAuCalcul) console.log(`silhouettes mesurées : de ${rapport.ecartAuCalcul.min.toFixed(3)} à ${rapport.ecartAuCalcul.max.toFixed(3)} fois le calcul`)
   console.log(`relevé : ${fichier}`)
-  if (process.env.ANNEXE_SONDE) {
+  if (annexe) {
     const annexes = resolve('docs', 'superpowers', 'specs', 'annexes')
-    const dossier = join(annexes, process.env.ANNEXE_SONDE)
+    const dossier = join(annexes, annexe)
     mkdirSync(dossier, { recursive: true })
     for (const r of releves) copyFileSync(resolve('shots', dir, r.fichier), join(dossier, r.fichier))
-    copyFileSync(fichier, join(annexes, process.env.ANNEXE_SONDE + '.json'))
-    console.log(`annexe : ${join(annexes, process.env.ANNEXE_SONDE + '.json')} et ${dossier}`)
+    copyFileSync(fichier, join(annexes, annexe + '.json'))
+    console.log(`annexe : ${join(annexes, annexe + '.json')} et ${dossier}`)
   }
 }
 
@@ -340,7 +343,8 @@ for (const t of what) {
 const releves = []
 for (const t of cibles) {
   const nom = typeof t === 'object' ? (t.libre ? 'sonde-libre' : t.fichier) : t
-  try { const r = await shoot(t); if (r) releves.push(r) } catch (e) { failed++; console.error(`${nom} : ${e.message}`) }
+  try { const r = await avecNouveauxEssais(() => shoot(t), { nom }); if (r) releves.push(r) } catch (e) { failed++; console.error(`${nom} : ${e.message}`) }
 }
-if (releves.length) rapportSonde(releves)
+if (releves.length) rapportSonde(releves, annexeSonde(process.env.ANNEXE_SONDE, failed))
+if (process.env.ANNEXE_SONDE && failed) console.error(`annexe ${process.env.ANNEXE_SONDE} laissée telle quelle : ${failed} capture(s) en échec, passe à relancer`)
 process.exit(failed ? 1 : 0)
