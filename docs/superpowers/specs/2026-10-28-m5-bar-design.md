@@ -129,6 +129,13 @@ LE CONVOI (phase 'playing', sous-lot 3d)          échec → RECOMMENCER (mêmes
 - **Places d'écoute prévues** : chaise ouest de la table d'Albert (1,9 m du centre de A) ; mange-debout est (2,6 m de B, prétexte des fléchettes) ; entrée du couloir en attendant les toilettes (1,0 m du combiné). Les autres places entendent sans les mots-clés : c'est voulu (« fais le dur »).
 - **Sièges** : chaises de 0,45 m (le groupe du PNJ posé au sol, sans calage), tabourets de 0,75 m (+0,33 m, pieds sur le repose-pieds) [M, lecteur 1 §1.3]. Viktor assis : œil à 1,20 m sur chaise, 1,45 m sur tabouret (`setPose({ y })`).
 - **Collisions** : boîtes 2D `{ minX, maxX, minZ, maxZ, son }` (`son` : `mur` 0,05, `cloison` 0,6, `porte` 0,9, `meuble` 1). Une seule source de vérité pour `moveCircle` (`fpsController.js:20`), la transmission du son et la ligne de vue.
+- **Réglé en B2** [V, 28 octobre 2026] : `src/bar/plan.js` fait foi pour les coordonnées, tenues par le tableau des places (`tests/bar/ecoute.test.js`). Ce qui a bougé depuis le plan ci-dessus, et pourquoi :
+  - la table D passe en (2,3 ; 1,4) : sa chaise ouest est à 1,91 m de A, la table A presque de côté (95°) pour Viktor tourné vers la télé (au départ, 2,25 m) ;
+  - le juke-box passe en (−1,6 ; 4,1), à 4,2 m de cette chaise : en (−0,5 ; 4,1), son bruit la faisait tomber à 0,8495 en MÉFIANCE, sous le 0,85 du §10 ;
+  - les cinq tabourets vont de z = −0,8 à 2,4 (pas de 0,8 m) : celui de z = −2 entendait Sorel au téléphone à 0,92, donc TRAJET et HEURE depuis le zinc, contre le parcours `bar-zinc` du §11 ; aucun siège libre hors des places prévues n'entend un mot-clé, même tourné vers la source (test) ;
+  - le couloir des toilettes s'ouvre par un sas de 0,6 m dans la salle, à l'est du téléphone : sans lui, rien n'est « derrière la cloison » seule (le mur nord s'ajoute, T = 0,03) ; l'entrée du couloir est devant le sas, en (−2,4 ; −3,3), à 1 m du combiné tenu en (−3,0 ; −4,1) ;
+  - Viktor accoudé au mange-debout est se tient en (5,0 ; −0,45), à 2,64 m de B, hors de sa zone privée ; la porte de l'arrière-cuisine est au mur ouest, derrière le zinc ; une réserve fermée occupe le sud du zinc : on ne passe derrière le zinc que par son bout nord ; les chaises vides ne sont pas des obstacles, les patrons attablés et les ouvriers en sont.
+  - À observer en jouant (B11, B19) : entendre le colonel (1,07 m au plus) met Viktor à moins de 1,3 m de Sorel ; debout et vu (de Fernand), « trop près » monte la jauge. C'est le prix de PLACE par l'appel (« difficile »), qui reste possible par A2a et R1.
 
 ### 3.2 Les personnages [D, ancres V]
 | Rôle affiché, puis nom | Qui | Place | Modèle | Bips (hauteur, débit) |

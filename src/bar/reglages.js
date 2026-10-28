@@ -5,6 +5,41 @@
 // Catégories de personnes, communes au regard et à la jauge : escorte (Dussart, Lenoir, Mattei, Haas, Sorel), fernand,
 // civil (Lise, les ouvriers), albert.
 
+// ─── L'écoute (§3.4) ───────────────────────────────────────────────
+// Ce que Viktor comprend d'une réplique (src/bar/ecoute.js) : I = A(d / voix) × T × O(α) × (1 − N), entre 0 et 1 ; d, la
+// distance de son oreille à la bouche ; T, ce que laissent passer les boîtes du plan entre les deux ; α, l'angle entre
+// son regard et la source ; N, le bruit de la salle et du juke-box. Un mot s'affiche si I atteint sa fragilité au moment
+// où il est frappé. Au calme et loin du juke-box, les mots-clés passent jusqu'à 3,0 m environ ; en MÉFIANCE, 2,1 m ; la
+// voix du colonel dans le combiné, 1,1 m.
+export const ECOUTE = {
+  pleineM: 2.5,         // A = 1 en deçà de cette distance (rapportée à la voix) : tout s'entend
+  nulleM: 5,            // A = 0 au-delà ; entre les deux, une courbe douce u²(3 − 2u), u = (5 − x) / 2,5
+  voix: {               // force de la voix d'une réplique : la distance est divisée par elle
+    normale: 1,         // une conversation de table
+    baissee: 0.7,       // l'escorte dès MÉFIANCE (SOUPCON.effets.voixEscorte) : mots-clés à 2,1 m au lieu de 3,0 m
+    rires: 1.25,        // les éclats et les rires portent plus loin
+    combine: 0.35,      // la voix du colonel dans le combiné du téléphone : à 1,1 m au plus
+  },
+  transmission: {       // ce que laisse passer une boîte coupée par la ligne oreille-bouche (produit sur les boîtes)
+    mur: 0.05,          // un mur plein : presque rien
+    cloison: 0.6,       // la cloison du couloir des toilettes : on entend, on ne comprend plus les mots-clés
+    porte: 0.9,         // une porte, seulement si la ligne passe par elle ; à côté, c'est le mur
+    meuble: 1,          // le zinc, une table : rien n'est retenu (le meuble arrête le pas, pas la voix)
+  },
+  orientationLibreDeg: 75,   // jusqu'à cet angle entre le regard et la source, O = 1 : se tourner un peu suffit
+  orientationDos: 0.9,  // O dos tourné (180°), linéaire depuis 75° : fixer est inutile, tourner le dos coûte peu
+  bruitFond: 0.08,      // N loin de tout : le brouhaha de la salle (I ne dépasse jamais 0,92)
+  bruitJukebox: 0.25,   // ajouté à N tout contre le juke-box, décroît jusqu'à jukeboxM
+  jukeboxM: 4,          // au-delà de cette distance du juke-box, il ne couvre plus les voix
+  murmuresSous: 0.15,   // en deçà, le sous-titre n'est que « (murmures) », sans bips intelligibles
+  fragiliteMax: 0.7,    // fragilité d'un mot ordinaire, tirée à graine entre 0 et cette valeur
+  fragiliteCle: 0.8,    // fragilité d'un mot-clé : il faut I ≥ 0,8 quand il est frappé pour le lire
+  changementSousTitre: 0.25,   // un seul échange sous-titré, le plus intelligible ; on n'en change que s'il est dépassé de tant
+  porteeBips: 1.6,      // gain des voix bipées : A(d / (1,6 × voix)) × T, on entend plus loin qu'on ne comprend
+  passeBas: { baseHz: 600, plageHz: 2400 },   // coupure des voix bipées : 600 + 2 400 × T Hz, assourdies par les murs
+  voixBipeesMax: 3,     // au plus trois voix bipées à la fois : la sous-titrée et les deux suivantes
+}
+
 // ─── Le regard qui fixe (§3.5) ─────────────────────────────────────
 // Viktor fixe une personne quand le centre de l'écran est à moins de atan(rayonTeteM / d) + margeDeg de sa tête (d : la
 // distance), qu'elle le voit et qu'elle n'est pas son interlocuteur. Son temps de fixation monte tant que cela dure et
@@ -75,7 +110,7 @@ export const SOUPCON = {
     demasque: { monte: 100 },                 // DÉMASQUÉ : S plafonne là ; on n'en redescend pas, le bar échoue
   },
   effets: {             // ce que les paliers changent ailleurs (écoute, personnages, soirée)
-    voixEscorte: 0.7,   // dès MÉFIANCE, l'escorte parle plus bas : mots-clés compris à 2,1 m au lieu de 3,0 m (§3.4)
+    voixEscorte: ECOUTE.voix.baissee,   // dès MÉFIANCE, l'escorte parle plus bas : mots-clés à 2,1 m au lieu de 3,0 m (§3.4)
     regardS: [8, 12],   // dès MÉFIANCE, un homme de l'escorte jette un regard vers Viktor toutes les 8 à 12 s
     reportS: 20,        // en SOUPÇON, un échange porteur d'un renseignement est retenté toutes les 20 s
     reportEssais: 2,    // deux fois, puis il est perdu
