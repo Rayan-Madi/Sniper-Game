@@ -26,16 +26,18 @@
 //   critère par défaut de la spec §4 appliqué (tableaux en Markdown dans la sortie). sonde-<poste> (ex. sonde-430m) :
 //   ce poste seulement. sonde-libre : une capture de la route avec les paramètres de PARAMS (poste=…&regard=…&zoom=…,
 //   voir main.js), QUALITE et MISSION (la mission en cours, défaut 1) → sonde-libre.jpg. ANNEXE_SONDE=<nom> : le JSON
-//   et les captures vont aussi dans docs/superpowers/specs/annexes/<nom>.json et <nom>/.
+//   et les captures vont aussi dans docs/superpowers/specs/annexes/<nom>.json et <nom>/, pour la passe complète
+//   seulement (cible sonde) : avec un seul poste, sonde-libre ou un poste inconnu, elle est refusée avant tout Chrome.
 // Variables : CHROME (chemin de Chrome), BASE_URL (défaut http://localhost:5173/), IMAGES (défaut 20),
 // GPU=1 (carte graphique au lieu du rendu logiciel), PARAMS (ajoutés à l'URL, ex. stats=1), QUALITE (préréglage
 // graphique enregistré dans le profil jetable : auto, bas, moyen, haut ; sans elle, celui d'un premier lancement, Auto).
 // Le port DevTools est choisi par Chrome (--remote-debugging-port=0, relu dans DevToolsActivePort) : jamais un port
 // fixe, qui pourrait désigner le navigateur d'une autre session. Profil jetable, supprimé à la fin.
 // Rendu interrompu (scripts/garde-rendu.mjs) : l'état du rendu est lu dans la page juste avant et juste après chaque
-// capture. Contexte WebGL perdu, écran « LE RENDU A ÉTÉ INTERROMPU » affiché ou page rechargée : l'image est refusée
-// (rien n'est écrit) et la capture refaite dans un Chrome neuf, après 5 s, trois essais en tout ; refusée à chaque
-// essai, elle compte comme un échec, et une passe de la sonde incomplète laisse l'annexe (ANNEXE_SONDE) telle quelle.
+// capture. Contexte WebGL perdu, écran « LE RENDU A ÉTÉ INTERROMPU » affiché ou page rechargée (pendant la capture, ou
+// depuis le relevé des mesures de la sonde), que la capture ait abouti ou échoué : l'image est refusée (rien n'est
+// écrit) et la capture refaite dans un Chrome neuf, après 5 s, trois essais en tout ; refusée à chaque essai, elle
+// compte comme un échec, et une passe de la sonde incomplète laisse l'annexe (ANNEXE_SONDE) telle quelle.
 import { spawn, execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, existsSync, writeFileSync, copyFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -233,17 +235,22 @@ async function shoot(target) {
   }
 }
 
+// Fichier d'une capture de la sonde : celui du job (scripts/sonde.mjs), ou sonde-libre.jpg.
+const fichierSonde = sonde => (sonde.libre ? 'sonde-libre.jpg' : sonde.fichier)
+
 // Capture de la sonde : la route ?sonde=1 a monté sa scène (carte, profil, personnages), l'a mesurée et l'a rendue.
 // Capture du carré de la lunette, en JPEG, puis le relevé : les mesures de la page, chaque personnage nommé comme
 // dans scripts/sonde.mjs (Vosko, Mira…).
 async function captureSonde(c, sonde, url) {
   await until(c, `window.__sonde && (__sonde().pret || !!__sonde().erreur)`, 60000)
-  const etat = await js(c, '__sonde()')
+  // Les mesures et l'origine de leur page, lues ensemble : une page rechargée avant la capture (le jeu la recharge quand
+  // le navigateur lui rend son contexte WebGL) n'aurait plus l'image des mesures, et la capture est refusée.
+  const { etat, page } = await js(c, '({ etat: __sonde(), page: performance.timeOrigin })')
   if (!etat.pret) throw new Error(`sonde : ${etat.erreur}`)
   const [w, h] = etat.ecran.fenetre
   if (w !== ECRAN_SONDE.width || h !== ECRAN_SONDE.height) throw new Error(`sonde : écran de ${w} × ${h}, ${ECRAN_SONDE.width} × ${ECRAN_SONDE.height} attendu`)
-  const buf = await captureGardee(c, { format: 'jpeg', quality: JPEG, clip: { ...carreLunette(w, h), scale: 1 } })
-  const fichier = sonde.libre ? 'sonde-libre.jpg' : sonde.fichier
+  const buf = await captureGardee(c, { format: 'jpeg', quality: JPEG, clip: { ...carreLunette(w, h), scale: 1 } }, { page })
+  const fichier = fichierSonde(sonde)
   const out = resolve('shots', dir, fichier)
   mkdirSync(resolve('shots', dir), { recursive: true })
   writeFileSync(out, buf)
@@ -340,11 +347,20 @@ for (const t of what) {
     cibles.push(...jobs)
   }
 }
+// Annexe demandée (ANNEXE_SONDE) : refusée d'emblée, avant tout Chrome, si la passe demandée n'est pas la passe
+// complète de la sonde (annexeSonde : un seul poste, sonde-libre, un poste inconnu) ; après la passe, une capture en
+// échec la laisse telle quelle.
+const prevus = cibles.filter(t => typeof t === 'object').map(fichierSonde)
+if (process.env.ANNEXE_SONDE && !annexeSonde(process.env.ANNEXE_SONDE, failed, prevus)) {
+  console.error(`annexe ${process.env.ANNEXE_SONDE} refusée : elle ne s'écrit que sur la passe complète de la sonde ` +
+    `(cible sonde : ${jobsSonde().length} captures, sans sonde-libre ni poste inconnu) ; rien n'est capturé`)
+  process.exit(1)
+}
 const releves = []
 for (const t of cibles) {
   const nom = typeof t === 'object' ? (t.libre ? 'sonde-libre' : t.fichier) : t
   try { const r = await avecNouveauxEssais(() => shoot(t), { nom }); if (r) releves.push(r) } catch (e) { failed++; console.error(`${nom} : ${e.message}`) }
 }
-if (releves.length) rapportSonde(releves, annexeSonde(process.env.ANNEXE_SONDE, failed))
+if (releves.length) rapportSonde(releves, annexeSonde(process.env.ANNEXE_SONDE, failed, releves.map(r => r.fichier)))
 if (process.env.ANNEXE_SONDE && failed) console.error(`annexe ${process.env.ANNEXE_SONDE} laissée telle quelle : ${failed} capture(s) en échec, passe à relancer`)
 process.exit(failed ? 1 : 0)

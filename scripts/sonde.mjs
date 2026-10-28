@@ -148,12 +148,16 @@ export function ecartAuCalcul(releves) {
 }
 
 // Annexe où capture-mission.mjs recopie le relevé et les captures d'une passe (ANNEXE_SONDE) : nom, ou null pour
-// aucune. echecs : nombre de captures en échec dans la passe. Une passe incomplète (une capture refusée à chaque essai
-// pour rendu interrompu, par exemple : scripts/garde-rendu.mjs) n'en écrit aucune : le relevé versionné y perdrait des
-// mesures, voire le verdict d'un poste et la décision pour M4, et les images de la passe d'avant resteraient à côté
-// d'un relevé qui ne les cite plus.
-export function annexeSonde(nom, echecs) {
-  return nom && !echecs ? nom : null
+// aucune. Seule une passe complète l'écrit : chacune des captures de jobsSonde() une fois, aucune autre, aucune en
+// échec. fichiers : les captures de la passe, prévues ou faites (job.fichier, sonde-libre.jpg) ; echecs : le nombre de
+// captures en échec. Une passe incomplète (un seul poste, comme sonde-430m ; sonde-libre ; une capture refusée à chaque
+// essai pour rendu interrompu, scripts/garde-rendu.mjs) n'en écrit aucune : le relevé versionné y perdrait des mesures,
+// voire le verdict d'un poste et la décision pour M4, et les images de la passe d'avant resteraient à côté d'un relevé
+// qui ne les cite plus.
+export function annexeSonde(nom, echecs, fichiers = []) {
+  const attendus = jobsSonde().map(j => j.fichier)
+  const complete = fichiers.length === attendus.length && attendus.every(f => fichiers.includes(f))
+  return nom && !echecs && complete ? nom : null
 }
 
 // Tableau Markdown des verdicts : une ligne par poste.

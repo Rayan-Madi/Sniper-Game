@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { captureGardee, avecNouveauxEssais } from '../../scripts/garde-rendu.mjs'
-import { annexeSonde } from '../../scripts/sonde.mjs'
+import { annexeSonde, jobsSonde } from '../../scripts/sonde.mjs'
 import { watchContextLoss } from '../../src/campaign/loading.js'
 
 // Captures de scripts/capture-mission.mjs sur un rendu interrompu (reprise de la tâche S0 du lot 3, 28 octobre 2026).
@@ -56,15 +56,19 @@ function chargerPage({ rendue = true } = {}) {
 }
 
 // Client DevTools de la page en cours (le c de capture-mission.mjs) : Runtime.evaluate évalue l'expression dans la page
-// et rend sa valeur par copie (returnByValue) ; Page.captureScreenshot rend ce que la page montre. pendantLaCapture :
-// ce qui arrive entre la demande de la capture et l'image.
+// et rend sa valeur par copie (returnByValue) ; Page.captureScreenshot rend ce que la page montre. pendantLaCapture(c) :
+// ce qui arrive entre la demande de la capture et l'image ; s'il lève une erreur, Page.captureScreenshot échoue avec
+// elle (processus graphique tombé, paramètres refusés). c.muette : la page ne répond plus, chaque Runtime.evaluate
+// échoue (Chrome tombé, cible fermée).
 function devtools({ pendantLaCapture } = {}) {
   const methodes = []
-  return {
+  const c = {
     methodes,
+    muette: false,
     async send(methode, params = {}) {
       methodes.push(methode)
       if (methode === 'Runtime.evaluate') {
+        if (c.muette) throw new Error('Target closed')
         try {
           const v = (0, eval)(params.expression)
           return { result: { value: v === undefined ? undefined : JSON.parse(JSON.stringify(v)) } }
@@ -73,13 +77,17 @@ function devtools({ pendantLaCapture } = {}) {
         }
       }
       if (methode === 'Page.captureScreenshot') {
-        if (pendantLaCapture) pendantLaCapture()
+        if (pendantLaCapture) pendantLaCapture(c)
         return { data: Buffer.from(page.image()).toString('base64') }
       }
       throw new Error(`méthode DevTools inattendue : ${methode}`)
     },
   }
+  return c
 }
+
+// Pendant la capture, le processus graphique tombe : le contexte WebGL est perdu et Page.captureScreenshot échoue.
+const tombe = p => () => { p.perdre(); throw new Error('Unable to capture screenshot') }
 
 beforeEach(() => {
   origine = 0
@@ -91,7 +99,7 @@ afterEach(() => {
 })
 
 // L'image (son texte), ou l'erreur si la capture est refusée.
-const capturer = (c = devtools(), params = { format: 'png' }) => captureGardee(c, params).then(b => b.toString(), e => e)
+const capturer = (c = devtools(), params = { format: 'png' }, options) => captureGardee(c, params, options).then(b => b.toString(), e => e)
 
 describe('captureGardee : une image prise sur un rendu interrompu est refusée', () => {
   it('rendu intact : l\'image telle quelle, sans rien changer à la page', async () => {
@@ -142,6 +150,28 @@ describe('captureGardee : une image prise sur un rendu interrompu est refusée',
     expect(e.message).toMatch(/page rechargée pendant la capture/)
   })
 
+  // Relecture de S0 : la sonde relève ses mesures sur la page (__sonde()), puis la capture est prise. Une page rechargée
+  // entre les deux passait : avant et après la capture, la garde lisait la page neuve, intacte, où la sonde n'est
+  // peut-être pas encore rendue, et l'image n'était plus celle des mesures. page : l'origine de la page où l'appelant a
+  // relevé ce que l'image doit montrer (performance.timeOrigin, lue avec les mesures).
+  // Témoin : captureGardee de 970b8ba, qui ignore page, prend l'image de la page neuve : vu rouge sur lui.
+  it('page rechargée entre le relevé des mesures et la capture : refusée', async () => {
+    chargerPage()
+    const page = performance.timeOrigin    // lue avec les mesures
+    chargerPage({ rendue: false })         // rechargée : intacte, rien encore à l'écran
+    const e = await capturer(devtools(), { format: 'jpeg', quality: 85 }, { page })
+    expect(e, 'image d\'une page rechargée depuis le relevé acceptée').toBeInstanceOf(Error)
+    expect(e.name).toBe('RenduInterrompu')
+    expect(e.message).toMatch(/^rendu interrompu \(page rechargée depuis le relevé des mesures/)
+    expect(e.message).toMatch(/image refusée$/)
+  })
+
+  it('même page que le relevé : l\'image', async () => {
+    chargerPage()
+    const page = performance.timeOrigin
+    expect(await capturer(devtools(), { format: 'jpeg', quality: 85 }, { page })).toBe('SCENE')
+  })
+
   it('canevas du jeu ou écran du rendu interrompu introuvables : refusée, la garde ne se tait jamais', async () => {
     chargerPage()
     document.getElementById('canvas').remove()
@@ -156,19 +186,74 @@ describe('captureGardee : une image prise sur un rendu interrompu est refusée',
   })
 })
 
+// Relecture de S0 : une erreur de Page.captureScreenshot elle-même (processus graphique tombé pendant la capture, page
+// perdue) passait telle quelle, sans nouvel essai. Le rendu est désormais relu après l'échec : perdu, rechargé ou muet,
+// la capture est refusée pour rendu interrompu (RenduInterrompu), donc refaite dans un Chrome neuf ; intact, l'erreur
+// passe telle quelle, comme toute erreur qui ne tient pas au rendu.
+// Témoin : captureGardee de 970b8ba laisse passer l'erreur de la capture telle quelle : les trois premiers tests ont
+// été vus rouges sur lui ; le dernier garde son comportement (non-régression).
+describe('captureGardee : la capture elle-même échoue', () => {
+  it('contexte perdu pendant la capture, qui échoue : refusée pour rendu interrompu, l\'erreur de la capture dans le message', async () => {
+    const p = chargerPage()
+    const e = await capturer(devtools({ pendantLaCapture: tombe(p) }))
+    expect(e).toBeInstanceOf(Error)
+    expect(e.name, e.message).toBe('RenduInterrompu')
+    expect(e.message).toMatch(/^rendu interrompu après la capture \(contexte WebGL perdu/)
+    expect(e.message).toMatch(/, capture en erreur « Unable to capture screenshot » : image refusée$/)
+  })
+
+  it('la page ne répond plus après la capture, qui échoue : refusée pour rendu interrompu', async () => {
+    chargerPage()
+    const e = await capturer(devtools({ pendantLaCapture: c => { c.muette = true; throw new Error('Target closed') } }))
+    expect(e).toBeInstanceOf(Error)
+    expect(e.name, e.message).toBe('RenduInterrompu')
+    expect(e.message).toMatch(/^rendu interrompu après la capture \(état du rendu illisible\), capture en erreur « Target closed »/)
+  })
+
+  it('page rechargée pendant la capture, qui échoue : refusée pour rendu interrompu', async () => {
+    chargerPage()
+    const e = await capturer(devtools({ pendantLaCapture: () => { chargerPage({ rendue: false }); throw new Error('Unable to capture screenshot') } }))
+    expect(e).toBeInstanceOf(Error)
+    expect(e.name, e.message).toBe('RenduInterrompu')
+    expect(e.message).toMatch(/page rechargée pendant la capture/)
+  })
+
+  it('rendu intact, la capture en erreur (paramètres refusés) : l\'erreur telle quelle, qui ne tient pas au rendu', async () => {
+    chargerPage()
+    const erreur = new Error('Invalid parameters')
+    expect(await capturer(devtools({ pendantLaCapture: () => { throw erreur } }))).toBe(erreur)
+  })
+})
+
 describe('avecNouveauxEssais : une image refusée est reprise dans un Chrome neuf', () => {
   // Une passe sur des Chrome successifs, comme shoot dans capture-mission.mjs : chaque essai charge une page neuve,
-  // perdue ou intacte selon chromes, et la capture avec la garde.
+  // perdue, intacte, ou dont le processus graphique tombe pendant la capture (tombe), selon chromes, et la capture avec
+  // la garde.
   const passe = chromes => {
     const essais = []
     const capture = async essai => {
       essais.push(essai)
+      const etat = chromes[essais.length - 1]
       const p = chargerPage()
-      if (chromes[essais.length - 1] === 'perdu') p.perdre()
-      return (await captureGardee(devtools(), { format: 'jpeg' })).toString()
+      if (etat === 'perdu') p.perdre()
+      const c = devtools(etat === 'tombe' ? { pendantLaCapture: tombe(p) } : {})
+      return (await captureGardee(c, { format: 'jpeg' })).toString()
     }
     return { capture, essais }
   }
+
+  it('capture en erreur, processus graphique tombé au premier essai : refaite dans un Chrome neuf', async () => {
+    const { capture, essais } = passe(['tombe', 'intact'])
+    const journal = [], pauses = []
+    const image = await avecNouveauxEssais(capture, {
+      nom: 'sonde-430m-x20-bas.jpg', journal: m => journal.push(m), attendre: ms => { pauses.push(ms) },
+    }).catch(e => e)
+    expect(image, 'erreur de la capture passée sans nouvel essai').toBe('SCENE')
+    expect(essais).toEqual([1, 2])
+    expect(pauses).toEqual([5000])
+    expect(journal).toHaveLength(1)
+    expect(journal[0]).toMatch(/capture en erreur « Unable to capture screenshot » : image refusée ; nouvel essai \(2 sur 3\)/)
+  })
 
   it('refusée au premier essai, prise au deuxième : l\'image du deuxième Chrome, après une pause et un message', async () => {
     const { capture, essais } = passe(['perdu', 'intact'])
@@ -215,18 +300,43 @@ describe('avecNouveauxEssais : une image refusée est reprise dans un Chrome neu
   })
 })
 
-// Une capture refusée à chaque essai manque au relevé : recopié dans l'annexe versionnée, il y perdrait des mesures,
+// Une passe incomplète ne touche pas à l'annexe : recopié dans l'annexe versionnée, son relevé y perdrait des mesures,
 // voire le verdict d'un poste et la décision pour M4, et les anciennes images resteraient à côté d'un relevé qui ne
-// les cite plus. Une passe incomplète ne touche donc pas à l'annexe.
-describe('annexeSonde : une passe incomplète ne touche pas à l\'annexe', () => {
-  it('passe complète : l\'annexe demandée (ANNEXE_SONDE) ; sans elle, aucune', () => {
-    expect(annexeSonde('2026-10-28-sonde-lisibilite', 0)).toBe('2026-10-28-sonde-lisibilite')
-    expect(annexeSonde(undefined, 0)).toBeNull()
-    expect(annexeSonde('', 0)).toBeNull()
+// les cite plus. Incomplète : une capture refusée à chaque essai (rendu interrompu), ou une passe qui ne couvre pas
+// toutes les captures de la sonde. Relecture de S0 : ANNEXE_SONDE avec la cible sonde-430m réécrivait l'annexe avec ce
+// seul poste, sans le verdict des autres ni la décision pour M4. fichiers : les captures de la passe (job.fichier de
+// jobsSonde, sonde-libre.jpg).
+// Témoin : annexeSonde de 970b8ba (l'annexe dès qu'aucune capture n'est en échec, quelle que soit la passe) la donne à
+// une passe d'un seul poste ou à sonde-libre : les deux derniers tests ont été vus rouges sur lui.
+describe('annexeSonde : seule une passe complète de la sonde écrit l\'annexe', () => {
+  const NOM = '2026-10-28-sonde-lisibilite'
+  const toutes = jobsSonde().map(j => j.fichier)
+  const duPoste = nom => jobsSonde().filter(j => j.nom === nom).map(j => j.fichier)
+
+  it('passe complète (les 26 captures, dans n\'importe quel ordre) : l\'annexe demandée (ANNEXE_SONDE) ; sans elle, aucune', () => {
+    expect(toutes).toHaveLength(26)
+    expect(annexeSonde(NOM, 0, toutes)).toBe(NOM)
+    expect(annexeSonde(NOM, 0, [...toutes].reverse())).toBe(NOM)   // sonde-250m sonde-155m … : chaque poste à son tour
+    expect(annexeSonde(undefined, 0, toutes)).toBeNull()
+    expect(annexeSonde('', 0, toutes)).toBeNull()
   })
 
   it('une capture en échec : aucune annexe', () => {
-    expect(annexeSonde('2026-10-28-sonde-lisibilite', 1)).toBeNull()
-    expect(annexeSonde('2026-10-28-sonde-lisibilite', 26)).toBeNull()
+    expect(annexeSonde(NOM, 1, toutes)).toBeNull()
+    expect(annexeSonde(NOM, 26, toutes)).toBeNull()
+  })
+
+  it('un seul poste (sonde-430m), même sans échec : aucune annexe ; de même s\'il manque une capture ou si la passe n\'est pas dite', () => {
+    expect(duPoste('430m')).toHaveLength(6)
+    expect(annexeSonde(NOM, 0, duPoste('430m')), 'annexe réécrite avec le seul poste de 430 m').toBeNull()
+    expect(annexeSonde(NOM, 0, toutes.filter(f => f !== 'sonde-250m-x20-bas.jpg'))).toBeNull()
+    expect(annexeSonde(NOM, 0, [])).toBeNull()
+    expect(annexeSonde(NOM, 0)).toBeNull()
+  })
+
+  it('une capture hors de la sonde (sonde-libre) ou en double : aucune annexe', () => {
+    expect(annexeSonde(NOM, 0, ['sonde-libre.jpg']), 'annexe réécrite avec une capture libre').toBeNull()
+    expect(annexeSonde(NOM, 0, [...toutes, 'sonde-libre.jpg'])).toBeNull()
+    expect(annexeSonde(NOM, 0, [...toutes, ...duPoste('430m')])).toBeNull()   // sonde sonde-430m
   })
 })

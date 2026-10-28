@@ -4,7 +4,8 @@
 // la scène. Le 28 octobre 2026, une passe de la sonde de lisibilité (lot 3, tâche S0) en a capturé deux comme des
 // images de la scène, écrites dans l'annexe, sans aucune erreur. Ici, l'état du rendu se lit dans la page juste avant et
 // juste après chaque capture : une image prise sur un rendu interrompu est refusée (RenduInterrompu, rien n'est écrit),
-// puis refaite dans un Chrome neuf (avecNouveauxEssais). Éprouvé sans Chrome : tests/scripts/garde-rendu.test.js.
+// puis refaite dans un Chrome neuf (avecNouveauxEssais). De même pour une page rechargée depuis le relevé des mesures, et
+// pour une capture qui échoue elle-même sur un rendu interrompu. Éprouvé sans Chrome : tests/scripts/garde-rendu.test.js.
 // c : le client DevTools de la page (send(méthode, paramètres)).
 
 // Essais d'une capture refusée pour rendu interrompu, en tout, et pause avant chaque nouvel essai : le Chrome refusé est
@@ -43,14 +44,18 @@ function defauts(e) {
 }
 
 // Raison de refuser une capture, d'après l'état du rendu lu juste avant et juste après elle ; null si le rendu est
-// resté intact, dans la même page.
-export function refusDuRendu(avant, apres) {
+// resté intact, dans la même page. page : l'origine de la page où l'appelant a relevé ce que l'image doit montrer (les
+// mesures de la sonde, lues avec performance.timeOrigin) ; sans elle, rien n'est comparé à un relevé.
+export function refusDuRendu(avant, apres, page) {
   for (const [moment, e] of [['avant', avant], ['après', apres]]) {
     const d = defauts(e)
     if (d.length) return `${moment} la capture (${d.join(', ')})`
   }
   if (avant.page !== apres.page) {
     return '(page rechargée pendant la capture : le jeu la recharge quand le navigateur lui rend son contexte WebGL)'
+  }
+  if (page !== undefined && avant.page !== page) {
+    return '(page rechargée depuis le relevé des mesures : l\'image ne serait plus celle de la page mesurée)'
   }
   return null
 }
@@ -76,12 +81,21 @@ async function lireRendu(c) {
 
 // Capture d'écran de la page (Page.captureScreenshot, params), gardée : l'état du rendu est lu juste avant et juste
 // après. Rend le tampon de l'image, que l'appelant n'écrit qu'ensuite ; RenduInterrompu si le contexte WebGL est perdu,
-// si l'écran du rendu interrompu est affiché, ou si la page a été rechargée entre les deux lectures.
-export async function captureGardee(c, params) {
+// si l'écran du rendu interrompu est affiché, si la page a été rechargée entre les deux lectures, ou depuis le relevé
+// de l'appelant (page : voir refusDuRendu). Si la capture elle-même échoue (processus graphique tombé), l'état relu
+// juste après en juge de même : rendu interrompu, page rechargée ou qui ne répond plus, RenduInterrompu ; rendu intact,
+// l'erreur de la capture passe telle quelle, elle ne tient pas au rendu (paramètres refusés).
+export async function captureGardee(c, params, { page } = {}) {
   const avant = await lireRendu(c)
-  const { data } = await c.send('Page.captureScreenshot', params)
-  const apres = await lireRendu(c)
-  const raison = refusDuRendu(avant, apres)
+  let data
+  try {
+    ({ data } = await c.send('Page.captureScreenshot', params))
+  } catch (e) {
+    const raison = refusDuRendu(avant, await lireRendu(c), page)
+    if (raison) throw new RenduInterrompu(`${raison}, capture en erreur « ${e.message} »`)
+    throw e
+  }
+  const raison = refusDuRendu(avant, await lireRendu(c), page)
   if (raison) throw new RenduInterrompu(raison)
   return Buffer.from(data, 'base64')
 }
