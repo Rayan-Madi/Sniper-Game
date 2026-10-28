@@ -37,7 +37,8 @@ const cartes = MAP_BUILDERS.map((build, i) => {
 })
 clearMap()
 
-// Forme de chaque sorte d'ancre (voir l'en-tête de src/campaign/missions/index.js), relue ici sans le module.
+// Forme de chaque sorte d'ancre (voir l'en-tête de src/campaign/missions/index.js), relue ici sans le module. La garde
+// « la copie des formes connaît chaque sorte que cite le module », plus bas, vérifie qu'elle n'en oublie aucune.
 const fini = v => typeof v === 'number' && Number.isFinite(v)
 const FORMES = {
   point: a => Array.isArray(a) && a.length === 3 && a.every(fini),
@@ -51,6 +52,49 @@ const FORMES = {
 const GROUPES = { sorties: 'sortie', abris: 'abri', places: 'place' }
 const AVEC_ARTICLE = { point: 'un point', zone: 'une zone', place: 'une place', sortie: 'une sortie', abri: 'un abri', route: 'une route' }
 
+// Source d'index.js, en fins de ligne LF comme le dépôt le stocke (sous Windows, core.autocrlf peut l'extraire en CRLF).
+const SOURCE_INDEX = readFileSync(join(DOSSIER, 'index.js'), 'utf8').replace(/\r\n/g, '\n')
+
+// Les citations que range ancresCitees, lues dans son source : { sorte, groupe } pour chaque objet qui porte une sorte
+// (groupe undefined : une ancre à la racine de la carte). Une sorte ou un groupe qui n'est pas un texte écrit en toutes
+// lettres vaut null, pour que rien n'échappe à la lecture.
+function citationsDuSource(source) {
+  const { program, errors } = parseSync('index.js', source)
+  if (errors.length) throw new Error(`index.js : analyse impossible (${errors[0].message})`)
+  const fn = program.body.map(n => (n.type === 'ExportNamedDeclaration' ? n.declaration : n))
+    .find(n => n && n.type === 'FunctionDeclaration' && n.id.name === 'ancresCitees')
+  if (!fn) throw new Error('index.js : ancresCitees introuvable')
+  const texte = v => (v.type === 'Literal' && typeof v.value === 'string' ? v.value : null)
+  const out = []
+  const walk = n => {
+    if (Array.isArray(n)) return n.forEach(walk)
+    if (!n || typeof n !== 'object') return
+    if (n.type === 'ObjectExpression') {
+      const p = new Map(n.properties.filter(x => x.type === 'Property' && !x.computed).map(x => [x.key.name ?? x.key.value, x.value]))
+      if (p.has('sorte')) out.push({ sorte: texte(p.get('sorte')), groupe: p.has('groupe') ? texte(p.get('groupe')) : undefined })
+    }
+    for (const k in n) if (k !== 'parent') walk(n[k])
+  }
+  walk(fn.body)
+  return out
+}
+
+// Ce que la copie ci-dessus ignore de ces citations : une sorte sans forme (FORMES) ou sans article (AVEC_ARTICLE), un
+// groupe absent de GROUPES ou rangé ici sous une autre sorte.
+function inconnuesDeLaCopie(citations) {
+  const out = new Set()
+  for (const { sorte, groupe } of citations) {
+    if (sorte === null) { out.add('une sorte qui n\'est pas écrite en toutes lettres'); continue }
+    if (!Object.hasOwn(FORMES, sorte)) out.add(`sorte ${sorte} : pas de forme ici (FORMES)`)
+    if (!Object.hasOwn(AVEC_ARTICLE, sorte)) out.add(`sorte ${sorte} : pas d'article ici (AVEC_ARTICLE)`)
+    if (groupe === null) out.add('un groupe qui n\'est pas écrit en toutes lettres')
+    else if (groupe !== undefined && GROUPES[groupe] !== sorte) {
+      out.add(`groupe ${groupe} : ${Object.hasOwn(GROUPES, groupe) ? `sorte ${GROUPES[groupe]} ici` : 'absent ici (GROUPES)'}, ${sorte} dans ancresCitees`)
+    }
+  }
+  return [...out]
+}
+
 describe('six missions, dans l\'ordre de la campagne', () => {
   it('une par mission de la campagne et par carte, numérotées de 1 à 6', () => {
     expect(MISSIONS).toHaveLength(MAX_LEVEL)
@@ -60,6 +104,13 @@ describe('six missions, dans l\'ordre de la campagne', () => {
 
   it('missionFor(n) : la mission n, celle de la carte MAP_BUILDERS[n - 1]', () => {
     for (let n = 1; n <= 6; n++) expect(missionFor(n)).toBe(MISSIONS[n - 1])
+  })
+
+  // Au-delà de 6, où seule une sauvegarde corrompue mène (recordClear plafonne à MAX_LEVEL, raccourcis de 1 à 6),
+  // mountLevel prend la carte MAP_BUILDERS[(n - 1) % 6] : la mission suit sa carte. getLevel (src/levels.js, avant la
+  // tâche A2) bornait à la dernière, d'où la carte 1 avec les données de M6 (relecture de A2).
+  it('missionFor(n) au-delà de 6 : la mission de sa carte, MAP_BUILDERS[(n - 1) % 6], pas la dernière', () => {
+    for (let n = 7; n <= 12; n++) expect(missionFor(n), `n = ${n}`).toBe(MISSIONS[(n - 1) % MISSIONS.length])
   })
 
   it('modules purs : les fichiers de mission n\'importent rien, index.js n\'importe qu\'eux (ni three ni DOM)', () => {
@@ -154,6 +205,35 @@ describe('les cartes ne disent que leur décor : sol, écho, pluie et ancres nom
   })
 })
 
+// La copie des formes (en tête de ce fichier) ne doit rien ignorer de ce que le module cite : sinon, une sorte d'ancre
+// ajoutée à index.js, que nulle mission ne cite encore, passerait sans qu'aucun test ne la relise (relecture de A2).
+// Témoin : index.js qui gagne une sorte « ligne » (forme, article, lieu et citation d'une patrouille), sans mission qui
+// la cite, laisse vert tout le reste de ce fichier ; cette garde, et la mission inventée plus bas, rougissent.
+describe('la copie des formes connaît chaque sorte que cite le module', () => {
+  it('chaque sorte que range ancresCitees (lue dans index.js) a sa forme et son article ici, chaque groupe sa sorte', () => {
+    const citations = citationsDuSource(SOURCE_INDEX)
+    expect(citations.length, 'aucune citation lue dans ancresCitees').toBeGreaterThan(0)
+    expect(inconnuesDeLaCopie(citations)).toEqual([])
+  })
+
+  // Témoins : chaque écart entre le source et la copie est relevé.
+  it.each([
+    ['une sorte nouvelle, à la racine des ancres', '  return out\n}',
+      "  if (m.patrouille) out.push({ champ: 'patrouille', sorte: 'ligne', nom: m.patrouille })\n  return out\n}",
+      ['sorte ligne : pas de forme ici (FORMES)', 'sorte ligne : pas d\'article ici (AVEC_ARTICLE)']],
+    ['une sorte nouvelle, dans un groupe nouveau', '  return out\n}',
+      "  m.portes.forEach((nom, i) => out.push({ champ: `portes[${i}]`, sorte: 'porte', groupe: 'portes', nom }))\n  return out\n}",
+      ['sorte porte : pas de forme ici (FORMES)', 'sorte porte : pas d\'article ici (AVEC_ARTICLE)',
+        'groupe portes : absent ici (GROUPES), porte dans ancresCitees']],
+    ['un abri rangé dans le groupe des sorties', "groupe: 'abris'", "groupe: 'sorties'", ['groupe sorties : sorte sortie ici, abri dans ancresCitees']],
+    ['une sorte qui n\'est pas écrite en toutes lettres', "sorte: 'route'", 'sorte: m.convoi.sorte', ['une sorte qui n\'est pas écrite en toutes lettres']],
+    ['un groupe qui n\'est pas écrit en toutes lettres', "groupe: 'places'", 'groupe: c.groupe', ['un groupe qui n\'est pas écrit en toutes lettres']],
+  ])('témoin : %s : relevé', (_, avant, apres, attendu) => {
+    expect(SOURCE_INDEX.split(avant), `« ${avant} » absent d'index.js, ou plusieurs fois : témoin impossible`).toHaveLength(2)
+    expect(inconnuesDeLaCopie(citationsDuSource(SOURCE_INDEX.replace(avant, apres)))).toEqual(attendu)
+  })
+})
+
 describe('contrat : chaque ancre citée par une mission existe dans sa carte, de la bonne sorte', () => {
   MISSIONS.forEach((m, i) => {
     it(`M${m.numero} : ${ancresCitees(m).map(c => c.nom).join(', ')}`, () => {
@@ -185,6 +265,13 @@ describe('ancresCitees et resoudreAncres', () => {
     sorties: ['ruelle'], abris: ['igloo'],
     choixMoral: { cadenas: 'cadenas' }, convoi: { route: 'route' },
   }
+
+  // Les tests qui suivent passent par chaque sorte et chaque groupe : la mission inventée n'en oublie aucun de ceux que
+  // le source d'ancresCitees range, et la lecture du source n'en manque aucun de ceux qu'elle cite à l'exécution.
+  it('la mission inventée cite chaque sorte et chaque groupe que range ancresCitees (lus dans index.js)', () => {
+    const cle = c => `${c.sorte} ${c.groupe ?? '(racine)'}`
+    expect([...new Set(ancresCitees(mission).map(cle))].sort()).toEqual([...new Set(citationsDuSource(SOURCE_INDEX).map(cle))].sort())
+  })
 
   it('ancresCitees : chaque citation, son champ, sa sorte, et son groupe pour les places, sorties et abris', () => {
     expect(ancresCitees(mission)).toEqual([
