@@ -3,189 +3,20 @@
 // lumière : nuit bleue par les fenêtres + la lampe renversée (seule ombre) + la veilleuse de la chambre.
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-// prologue v2 (N4) : RoundedBoxGeometry dérive de BoxGeometry, déjà dans le bundle principal ; elle reste dans le
-// morceau de l'enquête
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { canvasTexture, path, makeRnd, indexed, createBatcher } from '../gfx/batcher.js'
+import { V, clamp, smooth, between, rod, UP, fromTriangles, extrude, lathe, prism, P_PLINTHE, P_CORNICHE, P_CHAMBRANLE,
+  W_CHAMBRANLE, P_APPUI, raisedPanel, roundedRect, rounded, taper, warp, cushion, worldUV, tint, flat } from './decor.js'
 
 const H = 2.6          // hauteur sous plafond
 const T = 0.12         // épaisseur des murs, centrés sur leur ligne
 const DEG = Math.PI / 180
 
 // ───────────────────────────── outils ─────────────────────────────
+// Les outils communs du décor sont dans src/gfx/batcher.js (textures en canvas, hasard à graine, fusion par matériau) et
+// src/prologue/decor.js (géométries, moulures et leurs profils, UV planaires) ; restent ici ceux qui tiennent à
+// l'appartement : la couette et l'écharpe de la petite (mobilier, prologue v2, N4), la planche des images, et les UV
+// réglées sur ses cotes (plafond à H, palier, portes de 2,05 m).
 
-// Texture dessinée en canvas ; sans contexte 2D (jamais en jeu), la texture reste blanche et unie.
-function canvasTexture(w, h, draw, { repeat = null } = {}) {
-  const c = document.createElement('canvas'); c.width = w; c.height = h
-  const g = c.getContext('2d'); if (g) draw(g, w, h)
-  const t = new THREE.CanvasTexture(c)
-  t.colorSpace = THREE.SRGBColorSpace
-  if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]) }
-  return t
-}
-
-// Générateur pseudo-aléatoire de la maquette (même graine que la ville des cinématiques : 7)
-function makeRnd(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646 } }
-
-// Géométrie non indexée (faite de triangles à plat) rendue indexée : la fusion veut des géométries toutes indexées.
-function indexed(g) { if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]); return g }
-
-// Rassemble des géométries par matériau, puis fusionne : un maillage par matériau.
-function createBatcher() {
-  const buckets = new Map()   // matériau → géométries déjà transformées
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3()
-  return {
-    // geo : géométrie (indexée ou non) ; place : { x, y, z, rx, ry, rz, order, sx, sy, sz } (order : ordre des rotations,
-    // 'XYZ' par défaut ; 'YXZ' incline un meuble dans son propre repère avant de le tourner)
-    add(mat, geo, place = {}) {
-      const g = indexed(geo.clone())
-      m4.compose(p.set(place.x || 0, place.y || 0, place.z || 0), q.setFromEuler(e.set(place.rx || 0, place.ry || 0, place.rz || 0, place.order || 'XYZ')),
-        s.set(place.sx ?? 1, place.sy ?? 1, place.sz ?? 1))
-      g.applyMatrix4(m4)
-      if (!buckets.has(mat)) buckets.set(mat, [])
-      buckets.get(mat).push(g)
-      geo.dispose()
-    },
-    box(mat, cx, cy, cz, w, h, d, place = {}) { this.add(mat, new THREE.BoxGeometry(w, h, d), { x: cx, y: cy, z: cz, ...place }) },
-    // un maillage par matériau ; castShadow / receiveShadow selon les options du matériau (mat.userData)
-    finish(parent) {
-      const meshes = []
-      for (const [mat, list] of buckets) {
-        const merged = mergeGeometries(list, false); list.forEach(g => g.dispose())
-        if (!merged) throw new Error(`appartement : fusion impossible (${mat.name || mat.type})`)
-        const mesh = new THREE.Mesh(merged, mat)
-        mesh.castShadow = !!mat.userData.cast; mesh.receiveShadow = mat.userData.receive !== false
-        parent.add(mesh); meshes.push(mesh)
-      }
-      buckets.clear()
-      return meshes
-    },
-  }
-}
-
-const V = (x, y, z) => new THREE.Vector3(x, y, z)
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
-const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t) }
-
-// Géométrie d'axe Y posée de a à b (cylindres, capsules, cônes).
-function between(geo, a, b) {
-  const d = new THREE.Vector3().subVectors(b, a)
-  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), d.normalize()))
-  geo.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2)
-  return geo
-}
-const rod = (a, b, r, seg = 8) => between(new THREE.CylinderGeometry(r, r, a.distanceTo(b), seg), a, b)
-const UP = new THREE.Vector3(0, 1, 0)   // jamais modifié
-
-// Constructeurs maison plutôt qu'ExtrudeGeometry et LatheGeometry : three est d'un seul bloc dans le bundle principal,
-// et toute classe qu'on n'y utilisait pas l'y ferait grossir ; ceux-ci restent dans le morceau de l'enquête.
-// Géométrie faite de triangles à plat (sommets [x, y, z] trois par trois) : une normale par face, uv nulles.
-function fromTriangles(v) {
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(v.length / 3 * 2), 2))
-  g.computeVertexNormals()
-  return indexed(g)
-}
-// Le polygone simple pts ([x, y]) tiré le long de z, de 0 à len : côtés à arêtes vives, bouts triangulés.
-function extrude(pts, len) {
-  const c = pts.map(([x, y]) => new THREE.Vector2(x, y)), v = [], tri = (a, b, d) => v.push(...a, ...b, ...d)
-  if (THREE.ShapeUtils.isClockWise(c)) c.reverse()
-  for (let i = 0; i < c.length; i++) {
-    const p = c[i], q = c[(i + 1) % c.length]
-    tri([p.x, p.y, 0], [q.x, q.y, 0], [q.x, q.y, len]); tri([p.x, p.y, 0], [q.x, q.y, len], [p.x, p.y, len])
-  }
-  for (const [a, b, d] of THREE.ShapeUtils.triangulateShape(c, [])) {
-    const A = c[a], ccw = (c[b].x - A.x) * (c[d].y - A.y) - (c[b].y - A.y) * (c[d].x - A.x) > 0
-    const [P, Q] = ccw ? [c[b], c[d]] : [c[d], c[b]]           // dans le sens direct, vu de +z
-    tri([A.x, A.y, len], [P.x, P.y, len], [Q.x, Q.y, len]); tri([A.x, A.y, 0], [Q.x, Q.y, 0], [P.x, P.y, 0])
-  }
-  return fromTriangles(v)
-}
-// Révolution d'un profil [r, y] autour de l'axe y, en seg côtés ; un profil qui s'éloigne de l'axe regarde vers le bas.
-function lathe(profile, seg) {
-  const v = [], at = (r, y, a) => [r * Math.cos(a), y, r * Math.sin(a)]
-  for (let s = 0; s < seg; s++) {
-    const a0 = s / seg * Math.PI * 2, a1 = (s + 1) / seg * Math.PI * 2
-    for (let i = 0; i + 1 < profile.length; i++) {
-      const [r0, y0] = profile[i], [r1, y1] = profile[i + 1], A = at(r0, y0, a0), C = at(r1, y1, a1)
-      v.push(...A, ...at(r1, y1, a0), ...C)
-      if (r0 > 0) v.push(...A, ...C, ...at(r0, y0, a1))
-    }
-  }
-  return fromTriangles(v)
-}
-
-// Prisme : un profil [u, v] (plan de coupe, en mètres) tiré en ligne droite de p0 à p1, son point (0, 0) sur cette
-// ligne ; u suit le vecteur unitaire au, v le vecteur unitaire av (perpendiculaires). Moulures, appuis.
-function prism(profile, au, av, p0, p1) {
-  const ax = new THREE.Vector3().crossVectors(au, av), d = new THREE.Vector3().subVectors(p1, p0)
-  return extrude(profile, d.length()).applyMatrix4(new THREE.Matrix4().makeBasis(au, av, ax).setPosition(ax.dot(d) >= 0 ? p0 : p1))   // repère direct
-}
-// Profils des moulures (mètres). Plinthe : u saillie hors du mur, v hauteur ; épaisse au pied, amincie en tête.
-const P_PLINTHE = [[0, 0], [0.016, 0], [0.016, 0.07], [0.013, 0.08], [0.009, 0.09], [0.004, 0.1], [0, 0.1]]
-// Corniche en gorge : u saillie hors du mur, v sous le plafond (négatif). Elle déborde de plus en plus en montant :
-// dans un angle rentrant, l'union des deux longueurs qui se croisent dessine l'onglet, sans coupe.
-const P_CORNICHE = [[0, 0], [0, -0.11], [0.008, -0.11], [0.008, -0.1], [0.018, -0.094], [0.034, -0.082], [0.05, -0.064],
-  [0.062, -0.044], [0.07, -0.028], [0.074, -0.02], [0.086, -0.02], [0.086, -0.01], [0.095, -0.01], [0.095, 0]]
-// Chambranle : u depuis le bord de l'ouverture vers l'extérieur, v saillie. Plus épais vers l'extérieur : au coin, l'union
-// du montant et de la traverse dessine l'onglet.
-const P_CHAMBRANLE = [[0, 0], [0, 0.01], [0.012, 0.012], [0.016, 0.015], [0.03, 0.016], [0.034, 0.019], [0.052, 0.02],
-  [0.056, 0.024], [0.068, 0.025], [0.072, 0.022], [0.072, 0]]
-const W_CHAMBRANLE = 0.072
-// Appui de fenêtre : u vers la pièce depuis la face du mur (négatif : sous la menuiserie), v hauteur ; nez arrondi.
-const P_APPUI = [[-0.24, 0], [0.03, 0], [0.038, 0.004], [0.042, 0.012], [0.042, 0.022], [0.038, 0.03], [0.03, 0.034], [-0.24, 0.034]]
-
-// Panneau à plate-bande, w × h, centré : posé sur la face d'un battant (z = 0), son pourtour monte en biseau (largeur b)
-// jusqu'au champ du panneau, t plus haut ; le dessous, dans le battant, n'a pas de face.
-function raisedPanel(w, h, b = 0.02, t = 0.01) {
-  const X = w / 2, Y = h / 2, x = X - b, y = Y - b, v = [], tri = (p, q, r) => v.push(...p, ...q, ...r)
-  const lo = [[-X, -Y], [X, -Y], [X, Y], [-X, Y]], hi = [[-x, -y], [x, -y], [x, y], [-x, y]]
-  for (let i = 0; i < 4; i++) {
-    const j = (i + 1) % 4, A = [...lo[i], 0], C = [...hi[j], t]
-    tri(A, [...lo[j], 0], C); tri(A, C, [...hi[i], t])
-  }
-  tri([-x, -y, t], [x, -y, t], [x, y, t]); tri([-x, -y, t], [x, y, t], [-x, y, t])
-  return fromTriangles(v)
-}
-// Rectangle w × h à coins arrondis (rayon r, k segments par coin), centré : la tranche d'un élément de radiateur.
-function roundedRect(w, h, r, k = 2) {
-  const pts = []
-  for (const [cx, cy, a0] of [[w / 2 - r, -h / 2 + r, -Math.PI / 2], [w / 2 - r, h / 2 - r, 0], [-w / 2 + r, h / 2 - r, Math.PI / 2], [-w / 2 + r, -h / 2 + r, Math.PI]])
-    for (let i = 0; i <= k; i++) { const a = a0 + i / k * Math.PI / 2; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]) }
-  return pts
-}
-
-// ── le mobilier (prologue v2, N4) : arêtes adoucies, coussins, couette ──
-// Boîte w × h × d aux arêtes arrondies (rayon r), normales lissées ; seg 1 : deux facettes par quart de rond (108
-// triangles), seg 2 : quatre (300 triangles). Elle n'est pas indexée : B.add l'indexe ; une fusion faite à part passe
-// par indexed().
-const rounded = (w, h, d, r, seg = 1) => new RoundedBoxGeometry(w, h, d, seg, r)
-// Effile une géométrie centrée vers le bas : à son pied, x et z sont multipliés par k (normales gardées : la pente est faible).
-function taper(g, k) {
-  const p = g.attributes.position
-  g.computeBoundingBox()
-  const { min, max } = g.boundingBox
-  for (let i = 0; i < p.count; i++) { const s = k + (1 - k) * (p.getY(i) - min.y) / (max.y - min.y); p.setX(i, p.getX(i) * s); p.setZ(i, p.getZ(i) * s) }
-  return g
-}
-// Déforme une géométrie indexée point par point (fn : (x, y, z) → [x, y, z]), puis relisse ses normales.
-function warp(g, fn) {
-  const p = g.attributes.position
-  for (let i = 0; i < p.count; i++) { const [x, y, z] = fn(p.getX(i), p.getY(i), p.getZ(i)); p.setXYZ(i, x, y, z) }
-  g.computeVertexNormals()
-  return g
-}
-// Coussin w × h × d (superquadrique tirée d'une sphère) : e1 règle le bombé de la tranche (1 : rond, vers 0 : carré),
-// e2 l'arrondi des coins en plan. Le dessus (+y) bombe : plus haut au milieu qu'au bord. Les restes d'arrondi (sin π
-// vaut 1,2e-16, que la puissance 0,2 grossit en 6,6e-4) sont ramenés à zéro : sans cela, les deux colonnes de sommets
-// de la couture de la sphère s'écartaient de 0,3 mm, une fente au travers du coussin.
-function cushion(w, h, d, e1 = 0.5, e2 = 0.2, ws = 16, hs = 10) {
-  const sp = (t, e) => Math.abs(t) < 1e-9 ? 0 : Math.sign(t) * Math.pow(Math.abs(t), e)
-  return warp(new THREE.SphereGeometry(1, ws, hs), (x, y, z) => {
-    const c = Math.hypot(x, z), th = Math.atan2(z, x)
-    return [w / 2 * sp(c, e1) * sp(Math.cos(th), e2), h / 2 * sp(y, e1), d / 2 * sp(c, e1) * sp(Math.sin(th), e2)]
-  })
-}
 // Couette posée sur un matelas (dessus en y0, demi-largeur half, centré en x = cx), de z0 à z1 : dessus bombé à plis doux,
 // qui tourne sur les bords du matelas et tombe le long du lit jusqu'en yLow. Une seule nappe (matériau double face).
 function duvet(cx, z0, z1, half, y0, yLow, seed) {
@@ -241,12 +72,6 @@ function pictureGeo(w, h, [x, y, rw, rh]) {
   return g
 }
 
-// UV planaires (x, z) en mètres / tuile : le parquet et le carrelage gardent la même échelle d'une pièce à l'autre.
-function worldUV(geo, tu, tv = tu) {
-  const p = geo.attributes.position, uv = geo.attributes.uv
-  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / tu, p.getZ(i) / tv)
-  return geo
-}
 // UV verticales du monde (v = y / H) : le dégradé de lumière du néon reste continu d'un morceau de mur à l'autre.
 function heightUV(geo) {
   const p = geo.attributes.position, uv = geo.attributes.uv
@@ -282,22 +107,6 @@ function doorUV(geo, x0, w, flip = false) {
   for (let i = 0; i < p.count; i++) { const t = (p.getX(i) - x0) / w; uv.setXY(i, flip ? 1 - t : t, p.getY(i) / 2.05) }
   return geo
 }
-// Couleur par sommet (matériaux en vertexColors : livres, jouets, lueurs)
-function tint(geo, hex) {
-  const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3)
-  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b }
-  geo.setAttribute('color', new THREE.BufferAttribute(a, 3))
-  return geo
-}
-// Plan couché au sol (normale +y), centré en (x, y, z), tourné de ry, UV éventuellement recadrées [u0, u1] × [v0, v1].
-function flat(w, d, x, y, z, ry = 0, crop = null) {
-  const g = new THREE.PlaneGeometry(w, d)
-  if (crop) { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, crop[0] + uv.getX(i) * (crop[1] - crop[0]), crop[2] + uv.getY(i) * (crop[3] - crop[2])) }
-  g.rotateX(-Math.PI / 2); g.rotateY(ry); g.translate(x, y, z)
-  return g
-}
-// Chemin SVG dessiné en canvas (Path2D n'existe pas sous jsdom : on saute)
-const path = (g, d, fill = true) => { if (typeof Path2D === 'undefined') return; const p = new Path2D(d); if (fill) g.fill(p); else g.stroke(p) }
 
 // ───────────────────────────── textures ─────────────────────────────
 
