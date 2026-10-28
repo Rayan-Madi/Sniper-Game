@@ -6,13 +6,13 @@
 //   --exe=…    : l'exécutable empaqueté (tâche E2), lancé avec --fumee
 // Sortie : le JSON du scénario ({ echecs, requetesBloquees, modeles, images, sauvegarde, … }), puis le verdict ; code 0
 // (vert), 1 (rouge) ou 2 (aucun résultat : Electron arrêté avant d'écrire, ou tué au délai de garde). Profil jetable,
-// supprimé à la fin ; Electron et ses processus fils arrêtés au délai de garde. Aucune fenêtre, aucun port de débogage.
-// Machine partagée : un seul Electron ou Chrome sans interface à la fois (verrou Chrome des chantiers, REPRISE.md).
+// supprimé à la fin ; Electron et ses processus fils arrêtés au délai de garde. Aucune fenêtre, aucun port de débogage,
+// aucun téléchargement (binaire Electron absent : le script le dit et s'arrête).
+// Machine partagée : un seul Electron ou Chrome sans interface à la fois (verrou Chrome des chantiers parallèles).
 import { spawn } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
-import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const MARQUE = '[fumee] '
@@ -43,12 +43,25 @@ export function verdict({ code, resultat }) {
   return raisons.length ? { ok: false, code: 1, raisons } : { ok: true, code: 0, raisons: [] }
 }
 
+// Binaire Electron installé dans node_modules (path.txt, puis dist/), lu sans require('electron') : dans Electron 42, ce
+// require télécharge le binaire s'il manque (environ 100 Mo). Absent : une erreur qui dit comment l'installer.
+export function binaireElectron(racine) {
+  const dossier = join(racine, 'node_modules', 'electron')
+  const nom = existsSync(join(dossier, 'path.txt')) ? readFileSync(join(dossier, 'path.txt'), 'utf8').trim() : ''
+  const chemin = nom ? join(dossier, 'dist', nom) : null
+  if (!chemin || !existsSync(chemin)) {
+    throw new Error('binaire Electron absent de node_modules : « node node_modules/electron/install.js » (environ 100 Mo, gratuit) avant la fumée')
+  }
+  return chemin
+}
+
 // Commande lancée : l'Electron de node_modules sur le dossier du jeu, ou l'exécutable empaqueté ; toujours en --fumee,
-// avec le profil jetable que ce script crée puis supprime.
+// avec le profil jetable que ce script crée puis supprime. electron() rend le chemin du binaire de node_modules : appelé
+// seulement sans --exe (le jeu empaqueté se vérifie même dans une copie installée sans ce binaire).
 export function commandeFumee({ racine, exe = null, profil, electron }) {
   return exe
     ? { commande: resolve(racine, exe), args: ['--fumee', `--profil=${profil}`] }
-    : { commande: electron, args: [racine, '--fumee', `--profil=${profil}`] }
+    : { commande: electron(), args: [racine, '--fumee', `--profil=${profil}`] }
 }
 
 const pause = ms => new Promise(r => setTimeout(r, ms))
@@ -61,25 +74,31 @@ async function main(argv) {
     console.error('dist/index.html introuvable : lancer « npx vite build » avant la fumée')
     return 2
   }
+  // Profil jetable, supprimé dans tous les cas (lancement impossible compris)
   const profil = mkdtempSync(join(tmpdir(), 'sniper-fumee-'))
-  const { commande, args } = commandeFumee({ racine, exe, profil, electron: createRequire(import.meta.url)('electron') })
-  const env = { ...process.env }
-  delete env.ELECTRON_RUN_AS_NODE   // sinon electron.exe se comporte comme node
-  console.log(`fumée : ${exe ? exe : 'electron .'} --fumee (fenêtre cachée, réseau bloqué, profil jetable)`)
   const t0 = Date.now()
-  const proc = spawn(commande, args, { cwd: racine, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
-  let sortie = '', erreurs = ''
-  proc.stdout.setEncoding('utf8')
-  proc.stderr.setEncoding('utf8')
-  proc.stdout.on('data', d => { sortie += d })
-  proc.stderr.on('data', d => { erreurs += d })
-  // Délai de garde : Electron et tous ses processus fils arrêtés
-  let tue = false
-  const garde = setTimeout(() => { tue = true; spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore' }) }, DELAI_GARDE_MS)
-  const code = await new Promise(r => { proc.once('exit', c => r(c)); proc.once('error', e => { erreurs += String(e); r(null) }) })
-  clearTimeout(garde)
-  for (let i = 0; i < 20; i++) {
-    try { rmSync(profil, { recursive: true, force: true }); break } catch { await pause(300) }
+  let code = null, sortie = '', erreurs = '', tue = false
+  try {
+    const { commande, args } = commandeFumee({ racine, exe, profil, electron: () => binaireElectron(racine) })
+    const env = { ...process.env }
+    delete env.ELECTRON_RUN_AS_NODE   // sinon electron.exe se comporte comme node
+    console.log(`fumée : ${exe ? exe : 'electron .'} --fumee (fenêtre cachée, réseau bloqué, profil jetable)`)
+    const proc = spawn(commande, args, { cwd: racine, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    proc.stdout.setEncoding('utf8')
+    proc.stderr.setEncoding('utf8')
+    proc.stdout.on('data', d => { sortie += d })
+    proc.stderr.on('data', d => { erreurs += d })
+    // Délai de garde : Electron et tous ses processus fils arrêtés
+    const garde = setTimeout(() => { tue = true; spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore' }) }, DELAI_GARDE_MS)
+    code = await new Promise(r => { proc.once('exit', c => r(c)); proc.once('error', e => { erreurs += String(e); r(null) }) })
+    clearTimeout(garde)
+  } catch (e) {
+    console.error(`fumée impossible : ${e.message}`)
+    return 2
+  } finally {
+    for (let i = 0; i < 20; i++) {
+      try { rmSync(profil, { recursive: true, force: true }); break } catch { await pause(300) }
+    }
   }
   const resultat = lireResultat(sortie)
   const v = verdict({ code, resultat })

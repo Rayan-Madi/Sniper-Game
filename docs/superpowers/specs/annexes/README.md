@@ -342,7 +342,8 @@ Le jeu installé n'avait jamais été lancé sur ce PC (spec du lot 5, §0.4) : 
   5. cinématique passée (Échap) : la mission démarre (HUD) et le jeu note le briefing vu dans sa sauvegarde ;
   6. page rechargée : le menu propose toujours REPRENDRE : MISSION 3, et REPRENDRE va droit à la mission (briefing vu, relu dans la sauvegarde) ;
 - **échecs comptés** : chargement en échec (`did-fail-load`), erreur de console, « [characters] échec », écart du scénario, page arrêtée, exception du processus principal ;
-- **délais de garde** : 3 min dans le processus principal (la fumée se ferme seule, rouge), 5 min dans le script (Electron et ses processus fils tués, code 2).
+- **délais de garde** : 3 min dans le processus principal (la fumée se ferme seule, rouge), 5 min dans le script (Electron et ses processus fils tués, code 2) ;
+- **aucun téléchargement** : le script lit le binaire d'Electron dans `node_modules/electron` (`path.txt`, puis `dist/`) sans `require('electron')`, qui le téléchargerait s'il manquait (environ 100 Mo) ; binaire absent, il le dit (« node node_modules/electron/install.js ») et sort en 2 ; avec `--exe`, il ne le cherche pas.
 
 ```bash
 npx vite build
@@ -350,7 +351,7 @@ node scripts/fumee.mjs                                          # electron . --f
 node scripts/fumee.mjs --exe=release/win-unpacked/Sniper.exe    # le jeu empaqueté (tâche E2)
 ```
 
-Sortie : le JSON du scénario (`electron`, `origine`, `echecs`, `requetesBloquees`, `modeles`, `images`, `mission`, `sauvegarde`, `dureeMs`), puis FUMÉE VERTE ou FUMÉE ROUGE et ses raisons ; code 0 (vert), 1 (rouge), 2 (aucun résultat : Electron arrêté avant d'écrire, ou tué au délai de garde). Le vert demande le code 0 d'Electron **et** le critère 12 de la spec, relu par le script dans le JSON : aucun échec, aucune requête bloquée, des modèles chargés et aucun en échec, des images toutes décodées, la sauvegarde relue. Sur la machine partagée des chantiers, la fumée passe toujours par le verrou Chrome (un seul Electron ou Chrome sans interface à la fois). Garde : `tests/electron.fumee.test.js` (faux module `electron` et faux jeu monté dans jsdom), chaque test vu rouge sur le code d'avant ou par mutation (garde réseau coupée, requête non comptée, modèle, image ou sauvegarde non vérifiés, délai de garde absent, sortie avant que la ligne de résultat soit écrite, `data-modeles` posé trop tôt, verdict vert sans résultat, etc. : 30 mutations, toutes vues rouges).
+Sortie : le JSON du scénario (`electron`, `origine`, `echecs`, `requetesBloquees`, `modeles`, `images`, `mission`, `sauvegarde`, `dureeMs`), puis FUMÉE VERTE ou FUMÉE ROUGE et ses raisons ; code 0 (vert), 1 (rouge), 2 (aucun résultat : Electron arrêté avant d'écrire, ou tué au délai de garde). Le vert demande le code 0 d'Electron **et** le critère 12 de la spec, relu par le script dans le JSON : aucun échec, aucune requête bloquée, des modèles chargés et aucun en échec, des images toutes décodées, la sauvegarde relue. Sur la machine partagée des chantiers, la fumée passe toujours par le verrou Chrome (un seul Electron ou Chrome sans interface à la fois). Garde : `tests/electron.fumee.test.js` (faux module `electron` et faux jeu monté dans jsdom), chaque test vu rouge sur le code d'avant ou par mutation (garde réseau coupée, requête non comptée, modèle, image ou sauvegarde non vérifiés, délai de garde absent, sortie avant que la ligne de résultat soit écrite, `data-modeles` posé trop tôt, verdict vert sans résultat, binaire Electron résolu par `require`, etc. : 33 mutations, toutes vues rouges).
 
 ### Résultat du 28 octobre 2026
 

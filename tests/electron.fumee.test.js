@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { readFileSync } from 'node:fs'
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -432,10 +433,27 @@ describe('scripts/fumee.mjs : lecture du résultat, verdict, commande', () => {
 
   it('commande : « electron . --fumee » sur le build, ou l\'exécutable empaqueté (--exe), toujours avec le profil jetable', () => {
     const racine = resolve('C:/jeu')
-    expect(S.commandeFumee({ racine, profil: 'P', electron: 'E.exe' }))
+    expect(S.commandeFumee({ racine, profil: 'P', electron: () => 'E.exe' }))
       .toEqual({ commande: 'E.exe', args: [racine, '--fumee', '--profil=P'] })
-    expect(S.commandeFumee({ racine, profil: 'P', electron: 'E.exe', exe: 'release/win-unpacked/Sniper.exe' }))
+    // le jeu empaqueté se vérifie sans le binaire Electron de node_modules (copie installée avec --ignore-scripts)
+    const absent = () => { throw new Error('Electron failed to install correctly') }
+    expect(S.commandeFumee({ racine, profil: 'P', electron: absent, exe: 'release/win-unpacked/Sniper.exe' }))
       .toEqual({ commande: join(racine, 'release', 'win-unpacked', 'Sniper.exe'), args: ['--fumee', '--profil=P'] })
+  })
+
+  it('binaire Electron de node_modules : son chemin s\'il est installé, sinon une erreur qui dit quoi faire, sans require(\'electron\') (qui le téléchargerait)', () => {
+    const racine = mkdtempSync(join(tmpdir(), 'fumee-binaire-'))
+    try {
+      expect(() => S.binaireElectron(racine)).toThrow(/install\.js/)
+      const dossier = join(racine, 'node_modules', 'electron')
+      mkdirSync(join(dossier, 'dist'), { recursive: true })
+      writeFileSync(join(dossier, 'path.txt'), 'electron.exe')
+      expect(() => S.binaireElectron(racine)).toThrow(/install\.js/)   // path.txt sans le binaire : absent
+      writeFileSync(join(dossier, 'dist', 'electron.exe'), '')
+      expect(S.binaireElectron(racine)).toBe(join(dossier, 'dist', 'electron.exe'))
+    } finally {
+      rmSync(racine, { recursive: true, force: true })
+    }
   })
 
   it('la ligne écrite par electron/main.js se lit par le script, qui rend le même verdict que le code de sortie', async () => {
