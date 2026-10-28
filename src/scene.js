@@ -79,7 +79,9 @@ export function applyRenderQuality({ pixelRatio, shadowSize }, scale = 1, target
 // Règle l'éclairage selon l'ambiance de la map (jour / nuit / intérieur). sunPos : la position du soleil, celle du
 // profil hors mission par défaut, (20, 40, 10) : chaque décor qui règle ses lumières (cartes, menu, arène du PvP, sol nu
 // de la sonde) remet le soleil à sa place, et le soleil d'une mission (son profil, appliqué après sa carte) ne déborde
-// pas sur le décor suivant (spec du lot 3, §2 b).
+// pas sur le décor suivant (spec du lot 3, §2 b). Le soleil d'une mission se règle uniquement dans le champ profil de
+// sa mission (src/campaign/missions/), jamais par sa carte, ni par sunPos ni en le déplaçant elle-même : mountLevel
+// applique le profil après la carte, et l'écraserait sans bruit.
 export function setLighting({ ambientI = 0.6, sunI = 1.2, fillI = 0.4, sunColor = 0xfff0cc, ambColor = 0xfff0e0,
   sunPos = PROFIL_HORS_MISSION.soleil.pos } = {}) {
   if (!ambient) return

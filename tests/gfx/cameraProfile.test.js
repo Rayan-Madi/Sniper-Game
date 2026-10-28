@@ -12,9 +12,10 @@ import { applyCameraProfile, resetCameraProfile, PROFIL_HORS_MISSION } from '../
 // création de la carte d'ombre). La mesure (etat) les relit, pas seulement les champs.
 //
 // Témoins : ces règles n'existent pas avant la tâche (plan lointain, brume, soleil et cadre posés une fois pour toutes
-// par initScene et les cartes) ; les parcours hors mission qui les exigent (menu, PvP) sont vus rouges dans
-// cameraProfile.horsMission.test.js, et le câblage de main.js dans main.cameraProfile.test.js. Ici, le témoin montre
-// que la mesure voit un profil posé champ par champ sans recalcul.
+// par initScene et les cartes) ; les parcours hors mission qui les exigent sont vus rouges dans
+// cameraProfile.horsMission.test.js (menu, PvP) et tests/prologue/stop.test.js (fin de l'enquête), et le câblage de
+// main.js dans main.cameraProfile.test.js. Ici, le témoin montre que la mesure voit un profil posé champ par champ sans
+// recalcul.
 
 const r = v => +v.toFixed(9)
 const projection = cam => cam.projectionMatrix.elements.map(r)

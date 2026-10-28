@@ -8,8 +8,8 @@ import * as THREE from 'three'
 // plan lointain, une brume exponentielle, un soleil de midi ou de couchant). Rien de cela ne doit déborder hors de la
 // mission : le menu (au démarrage, à showMenu et à QUITTER du PvP, qui montent tous le décor du menu) et le départ d'une
 // manche PvP reviennent au profil hors mission : plans de 0,1 à 200 m, soleil en (20, 40, 10) visé vers l'origine,
-// cadre d'ombre de ±60 m, et la brume du menu (celle de l'arène pour le PvP). La fin de l'enquête, dans main.js, est
-// gardée par tests/gfx/main.cameraProfile.test.js.
+// cadre d'ombre de ±60 m, et la brume du menu (celle de l'arène pour le PvP). La fin de l'enquête est gardée sur la
+// vraie enquête par tests/prologue/stop.test.js, et son câblage dans main.js par tests/gfx/main.cameraProfile.test.js.
 // Vrais décors (src/maps/menu.js, src/pvpMap.js), vraie manche PvP (pvp.js, net.js sur un faux WebSocket) ; la caméra,
 // la scène et le soleil sont ceux de src/scene.js, créés comme initScene les crée. setLighting n'y fait rien : la remise à
 // zéro doit venir du décor lui-même (le soleil par défaut de setLighting est gardé par tests/gfx/scene.lighting.test.js).

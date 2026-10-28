@@ -31,6 +31,8 @@
 //                { type: 'exp2', couleur, densite } ; soleil { pos, cible } ; cadreOmbre, le demi-côté du cadre d'ombre
 //                du soleil (m). mountLevel l'applique après la carte (applyCameraProfile, src/gfx/cameraProfile.js),
 //                qui ne pose plus de brume ; hors mission (menu, PvP, fin de l'enquête), le profil hors mission revient.
+//                Le soleil d'une mission se règle ici seulement : la carte ne le déplace pas (le profil, posé après
+//                elle, l'écraserait sans bruit).
 //   casting      { cibles, gardes, civils }. cibles : une entrée par cible ; {} : un modèle tiré dans le pool des cibles,
 //                posé au hasard dans la zone. Facultatifs : place (une ancre de places, où la cible est posée au lieu du
 //                hasard), pool (le pool de src/characters.js où son modèle est tiré : 'target', 'guard' ou 'civilian'),

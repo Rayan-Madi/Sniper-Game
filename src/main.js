@@ -29,7 +29,8 @@ import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController, npcCastsShadow } from './gfx/quality.js'
 import { onPixelRatioChange } from './gfx/pixelRatio.js'
-import { applyCameraProfile, resetCameraProfile } from './gfx/cameraProfile.js'
+import { applyCameraProfile } from './gfx/cameraProfile.js'
+import { stopInvestigation } from './prologue/stop.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
 import { prepareDuringBriefing, afterPaint } from './campaign/prepare.js'
 import { bindFullscreenButton } from './comfort.js'
@@ -385,6 +386,9 @@ function cinematicAudio() {
 
 // ── Enquête du prologue (module chargé à la demande) ──
 // Elle ne doit jamais bloquer la partie : erreur de chargement, de démarrage ou en cours d'image → on enchaîne.
+// Toute fin de l'enquête, achevée (run.next), abandonnée (abortInvestigation) ou finie pendant son démarrage, passe par
+// stopInvestigation (src/prologue/stop.js) : l'enquête se démonte et rend la caméra telle qu'elle l'a trouvée, puis le
+// profil de caméra repart du profil hors mission (spec du lot 3, §2 b ; src/gfx/cameraProfile.js).
 let enquete = null   // { handle, next, ended }
 function investigate(onNext, options = {}) {
   abortInvestigation()   // une enquête déjà en cours (ou en chargement) ne reste pas orpheline
@@ -393,7 +397,7 @@ function investigate(onNext, options = {}) {
     if (run.ended) return
     run.ended = true
     if (enquete === run) enquete = null
-    stopInvestigation(run)
+    stopInvestigation(run, camera, scene, sun)
     releaseMouse()
     gamePhase = 'briefing'          // la suite est une cinématique : plus de rendu WebGL
     clock.getDelta()
@@ -407,9 +411,9 @@ function investigate(onNext, options = {}) {
   import('./prologue/investigation.js')
     .then(m => {
       if (run.ended) return
-      const h = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options: { stats: STATS_URL || settings.showStats, ...options } })
-      if (run.ended) { try { h.stop() } catch (e) { /* déjà démontée */ } return }
-      run.handle = h
+      run.handle = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options: { stats: STATS_URL || settings.showStats, ...options } })
+      // finie pendant son démarrage (son contrat l'exclut : onDone jamais pendant l'appel) : arrêtée comme toute fin
+      if (run.ended) { stopInvestigation(run, camera, scene, sun); return }
       gamePhase = 'investigation'
       clock.getDelta()
     })
@@ -420,14 +424,7 @@ function abortInvestigation() {
   const run = enquete
   if (!run) return
   enquete = null; run.ended = true
-  stopInvestigation(run)
-}
-// Fin de l'enquête, achevée (run.next) ou abandonnée (abortInvestigation) : elle se démonte et rend la caméra telle
-// qu'elle l'a trouvée, puis le profil de caméra repart du profil hors mission (spec du lot 3, §2 b ;
-// src/gfx/cameraProfile.js), quel qu'il fût à son départ.
-function stopInvestigation(run) {
-  if (run.handle) { try { run.handle.stop() } catch (e) { console.error('[enquête]', e) } }
-  resetCameraProfile(camera, scene, sun)
+  stopInvestigation(run, camera, scene, sun)
 }
 
 // Briefing de la mission au premier essai seulement (ou sur demande), puis le niveau.

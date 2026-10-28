@@ -1,10 +1,12 @@
 // Profil de caméra d'une mission (spec du lot 3, §2 b ; plan du lot 3a, tâche A3) : plans proche et lointain de la
 // caméra, brume de la scène, position et cible du soleil, cadre de son ombre. Une mission le décrit dans ses données
 // (champ profil, src/campaign/missions/) ; mountLevel (main.js) l'applique après avoir construit sa carte, qui ne pose
-// plus de brume. Hors mission, tout revient au profil hors mission (resetCameraProfile) : le décor du menu au démarrage,
-// à showMenu et à QUITTER du PvP (src/maps/menu.js), l'arène du PvP avec sa propre brume (src/pvpMap.js), et la fin de
-// l'enquête (main.js, stopInvestigation). Sans cela, le plan lointain de 1 700 m de M4, sa brume ou son soleil de midi
-// déborderaient sur le menu, le PvP et les captures déterministes (spec, §5, risque 4).
+// plus de brume. Le soleil d'une mission se règle donc uniquement dans son profil : une carte qui le déplacerait
+// elle-même serait écrasée sans bruit par le profil, posé après elle. Hors mission, tout revient au profil hors mission
+// (resetCameraProfile) : le décor du menu au démarrage, à showMenu et à QUITTER du PvP (src/maps/menu.js), l'arène du
+// PvP avec sa propre brume (src/pvpMap.js), et la fin de l'enquête (stopInvestigation, src/prologue/stop.js). Sans
+// cela, le plan lointain de 1 700 m de M4, sa brume ou son soleil de midi déborderaient sur le menu, le PvP et les
+// captures déterministes (spec, §5, risque 4).
 // Fonctions pures sur les objets qu'on leur donne (la caméra, la scène et le soleil du jeu, src/scene.js, ou des
 // doublures dans les tests) ; seul three est importé.
 import * as THREE from 'three'
