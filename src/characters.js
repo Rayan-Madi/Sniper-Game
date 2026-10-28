@@ -102,7 +102,8 @@ export function preloadCharacters() {
     // Promise.all garde l'ordre des variantes, pas celui d'arrivée des fichiers :
     // en PvP, les deux machines tirent leurs modèles avec la même graine et
     // doivent donc avoir des pools rangés pareil.
-    const loaded = await Promise.all(variantsFor(type, cfg).map(async (vcfg) => {
+    const variants = variantsFor(type, cfg)
+    const loaded = await Promise.all(variants.map(async (vcfg) => {
       const f = { loaded: 0, total: 0, done: false }
       files.push(f)
       try {
@@ -119,8 +120,22 @@ export function preloadCharacters() {
     }))
     const pool = loaded.filter(Boolean)
     if (pool.length) cache[type] = pool
-  })).then(() => { settled = true })
+    return { charges: pool.length, echecs: variants.filter((v, i) => !loaded[i]).map(v => v.url) }
+  })).then(parType => {
+    settled = true
+    publishLoaded(parType)
+  })
   return loading
+}
+
+// Fin du chargement publiée sur <html> pour la fumée du livrable Electron (spec du lot 5 §3.2, scripts/fumee.mjs) : un
+// build n'a pas les accroches de développement (__mission). data-modeles : nombre de modèles chargés ;
+// data-modeles-echecs : leurs URL en échec, séparées par des espaces (vide : aucun PNJ procédural faute de modèle).
+function publishLoaded(parType) {
+  if (typeof document === 'undefined') return
+  const html = document.documentElement
+  html.dataset.modeles = String(parType.reduce((n, t) => n + t.charges, 0))
+  html.dataset.modelesEchecs = parType.flatMap(t => t.echecs).join(' ')
 }
 
 // Modèle chargé, une fois pour toutes. Certains .glb (ex : gangster_man_02) exportent le matériau du CORPS en

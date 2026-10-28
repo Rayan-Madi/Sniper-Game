@@ -326,3 +326,48 @@ Avant : `main` à `7a39416` (la fin du lot 1 et celle de l'enquête, dont aucune
 - **Lunette ouverte** (15 images après le clic droit) : 0,3 à 0,4 % des pixels diffèrent, tous sur le réticule et au bout de la barre de stress du HUD. La scène, la vignette et le reste du HUD sont identiques au pixel près : le réticule est déplacé par le tremblement, réglé en milliradians depuis T1, et le stress monte moins vite (0,07 par seconde au lieu de 0,48).
 - **Après un tir** : avant le lot, rien ne dit le coup à 200 ms (la cible au centre du réticule, la balle en vol invisible) ; après, la vue est relevée par le recul (0,94° encore, sur les 2,5° du coup), le sillage monte du bas de l'image vers le point visé, et la jauge de la culasse (17 %) barre le trait vertical du réticule sous son centre : c'est le point de la relecture de T3, à juger par Rayan. Personnages, textures, décor et ombres sont intacts dans les quatre missions.
 - **Retour au menu** (`retour3`, après trois tirs manqués au port, marques, gerbes et sillage encore en vie) : 16 objets hors de la carte avant le retour (les PNJ, le cadenas, les trois marques et le sillage), aucun au menu (`{"fond":"87a0b0","horsCarte":[]}`).
+
+## Lot 5 : fumée du livrable Electron (tâche E1)
+
+Le jeu installé n'avait jamais été lancé sur ce PC (spec du lot 5, §0.4) : rien ne prouvait qu'il charge ses modèles et ses images sous `file://`, où three charge par `fetch`. `scripts/fumee.mjs` lance le jeu construit (`dist/`) dans Electron en mode `--fumee` (`electron/main.js`, section « Fumée du livrable ») :
+
+- **rien sur le bureau** : fenêtre cachée (`show: false` ; une fenêtre montrée par un autre code est recachée aussitôt et la fumée sort rouge), son coupé, exceptions du processus principal rattrapées (jamais la boîte de dialogue d'Electron) ;
+- **profil jetable** (`--profil=<dossier>`, créé puis supprimé par le script) : jamais la sauvegarde du joueur ni son dossier dans `%APPDATA%` ;
+- **hors ligne** : toute requête `http`, `https`, `ws` ou `wss` est bloquée et comptée (`session.webRequest.onBeforeRequest`) ;
+- **scénario joué dans la page** par `executeJavaScript` depuis le processus principal (aucun port de débogage) :
+  1. premier lancement : le menu propose COMMENCER (profil vierge), les modèles finissent de charger ;
+  2. sauvegarde posée (M3 en cours, briefing de M3 pas vu), page rechargée : le menu propose REPRENDRE : MISSION 3 ;
+  3. modèles chargés sans repli procédural : `data-modeles` (nombre chargé) et `data-modeles-echecs` (URL en échec), posés sur `<html>` par `src/characters.js` à la fin du chargement, seule trace lisible dans un build (pas de `__mission()`) ;
+  4. REPRENDRE joue la cinématique m3 (la route `?cine=` n'existe qu'en développement) : ses quatre `<img>` sont chargées (`complete`, `naturalWidth > 0`) ;
+  5. cinématique passée (Échap) : la mission démarre (HUD) et le jeu note le briefing vu dans sa sauvegarde ;
+  6. page rechargée : le menu propose toujours REPRENDRE : MISSION 3, et REPRENDRE va droit à la mission (briefing vu, relu dans la sauvegarde) ;
+- **échecs comptés** : chargement en échec (`did-fail-load`), erreur de console, « [characters] échec », écart du scénario, page arrêtée, exception du processus principal ;
+- **délais de garde** : 3 min dans le processus principal (la fumée se ferme seule, rouge), 5 min dans le script (Electron et ses processus fils tués, code 2).
+
+```bash
+npx vite build
+node scripts/fumee.mjs                                          # electron . --fumee, sur dist/
+node scripts/fumee.mjs --exe=release/win-unpacked/Sniper.exe    # le jeu empaqueté (tâche E2)
+```
+
+Sortie : le JSON du scénario (`electron`, `origine`, `echecs`, `requetesBloquees`, `modeles`, `images`, `mission`, `sauvegarde`, `dureeMs`), puis FUMÉE VERTE ou FUMÉE ROUGE et ses raisons ; code 0 (vert), 1 (rouge), 2 (aucun résultat : Electron arrêté avant d'écrire, ou tué au délai de garde). Le vert demande le code 0 d'Electron **et** le critère 12 de la spec, relu par le script dans le JSON : aucun échec, aucune requête bloquée, des modèles chargés et aucun en échec, des images toutes décodées, la sauvegarde relue. Sur la machine partagée des chantiers, la fumée passe toujours par le verrou Chrome (un seul Electron ou Chrome sans interface à la fois). Garde : `tests/electron.fumee.test.js` (faux module `electron` et faux jeu monté dans jsdom), chaque test vu rouge sur le code d'avant ou par mutation (garde réseau coupée, requête non comptée, modèle, image ou sauvegarde non vérifiés, délai de garde absent, sortie avant que la ligne de résultat soit écrite, `data-modeles` posé trop tôt, verdict vert sans résultat, etc. : 30 mutations, toutes vues rouges).
+
+### Résultat du 28 octobre 2026
+
+Electron **42.5.0** (binaire installé dans la copie `Sniper-Game-fumee`, branche `lot5-fumee`), build de `2e4734c` plus cette tâche :
+
+| Critère 12 de la spec | Résultat |
+|---|---|
+| Échecs (chargements, console, scénario) | 0 |
+| Requêtes réseau, bloquées | 0 |
+| Modèles | 7 chargés, 0 en échec : aucun PNJ procédural |
+| Images de la cinématique m3 | 4 sur 4 décodées (360 et 40 px de large) |
+| Mission lancée par REPRENDRE | HUD `Niveau 3 : Port  ·  3/6` |
+| Sauvegarde | posée, lue au menu, notée par le jeu (briefing vu), relue après rechargement |
+| Durée du scénario | 3,8 s (4 s avec le lancement d'Electron) |
+
+**Origine retenue : `file://`** (décision T3 de Rayan : `file://` si la fumée passe). `fetch` et les modules ES du build (`<script type="module" crossorigin>`, morceaux chargés par `import()`) marchent sous `file://` dans Electron 42.5.0 : le protocole `app://jeu` prévu en repli n'a pas été nécessaire. Le `localStorage` des sauvegardes appartient à cette origine : ne plus la changer une fois une version publiée (spec du lot 5, §3.2). Le lot 6 (tâche R5) vérifie l'expéditeur de ses IPC contre `file://`.
+
+**Témoin rouge réel** : le même build cassé de trois façons le temps d'une fumée, puis remis en place (fichiers comparés à leurs sources) : `models/mafia_woman_03.glb` retiré, `briefing/img/portrait-seconde-cam.jpg` retirée, une image `http://exemple.invalid/fumee.png` ajoutée à `index.html`. La fumée sort rouge (code 1) et nomme les trois : `"modeles":{"charges":6,"echecs":["./models/mafia_woman_03.glb"]}` et « [characters] échec ./models/mafia_woman_03.glb TypeError: Failed to fetch » à chacun des trois chargements de la page, « image non chargée : briefing/img/portrait-seconde-cam.jpg » (largeur 0), la requête `http` bloquée et comptée trois fois. Après chaque fumée : aucun processus Electron, aucun profil jetable restant, aucun dossier `sniper-game` dans `%APPDATA%`.
+
+La fumée ne joue pas la mission (aucun tir) : elle prouve que le jeu construit démarre hors ligne, charge ses modèles et ses images, lance une mission et garde sa sauvegarde. Le jeu empaqueté (`--exe`) se vérifie à la tâche E2.
