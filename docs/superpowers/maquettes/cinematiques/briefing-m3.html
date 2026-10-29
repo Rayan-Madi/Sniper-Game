@@ -33,7 +33,10 @@
       background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><g stroke='rgb(170,200,245)' stroke-width='1' stroke-linecap='round'><path d='M15 8 L11.7 18 M48 30 L44.7 40 M80 12 L76.7 22 M30 62 L26.7 72 M66 70 L62.7 80 M92 46 L88.7 56 M8 84 L4.7 94'/></g></svg>") 0 0 / 6cqw 6cqw; }
   @keyframes m3-rainA { to { background-position: -11cqw 33cqw; } }
   @keyframes m3-rainB { to { background-position: -6cqw 18cqw; } }
+  /* effets atténués (k-reduced, posée par le kit sur #st) : pluie arrêtée à sa pose de repos */
+  .m3.k-reduced .rain::before, .m3.k-reduced .rain::after { animation: none; }
   .m3 .blinkr { animation: k-blink 1.4s steps(2) infinite; }
+  .m3.k-reduced .blinkr { animation: none; }   /* effets atténués : allumé fixe */
 
   /* ── A. plan large du port, puis poussée vers les deux silhouettes du quai 4 ── */
   .m3 .vista { position: absolute; left: 3cqw; top: 4.8cqw; width: 94cqw; height: 41.3cqw; overflow: hidden; background: #02040a;
@@ -46,6 +49,7 @@
   .m3 .vista .vh { position: absolute; top: .9cqw; left: 1.2cqw; font-size: 1.15cqw; letter-spacing: .25em; color: var(--ice); }
   .m3 .vista .vt { position: absolute; top: .9cqw; right: 1.2cqw; font-size: 1.15cqw; letter-spacing: .2em; color: rgba(215,220,207,.7); }
   .m3 .vista .vt b { color: var(--blood); font-weight: normal; animation: k-blink 1s steps(2) infinite; }
+  .m3.k-reduced .vista .vt b { animation: none; }   /* effets atténués : voyant allumé fixe */
   .m3 .vista .vc { position: absolute; left: 1.6cqw; bottom: 1.5cqw; transition: opacity .3s; }
   .m3 .vista.zoom .vc { opacity: 0; }
   .m3 .vista .vc .a { font-size: 2.6cqw; letter-spacing: .32em; color: #f1f4ea; min-height: 3.4cqw; }
@@ -85,9 +89,13 @@
   .m3 .feed .vg { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 50%, rgba(0,6,2,.8) 100%); }
   .m3 .feed .roll { position: absolute; left: 0; right: 0; height: 3cqw; top: -4cqw; background: linear-gradient(180deg, transparent, rgba(160,255,180,.1), transparent); animation: m3-roll 3.2s linear infinite; }
   @keyframes m3-roll { to { top: 44cqw } }
+  .m3.k-reduced .feed .roll { animation: none; }   /* effets atténués : bande de défilement à sa pose de repos, hors cadre */
   .m3 .feed .fx { position: absolute; inset: 0; background: #f2fff4; opacity: 0; pointer-events: none; }
   .m3 .feed .fx.on { animation: m3-fx .5s ease-out forwards; }
   @keyframes m3-fx { 0% { opacity: .9 } 100% { opacity: 0 } }
+  /* effets atténués : éclair de la caméra plafonné à .3 */
+  .m3.k-reduced .feed .fx.on { animation: m3-fx-attenue .5s ease-out forwards; }
+  @keyframes m3-fx-attenue { 0% { opacity: .3 } 100% { opacity: 0 } }
   .m3 .feed .hud { position: absolute; font-size: 1.2cqw; letter-spacing: .14em; color: #c8ffd4; text-shadow: 0 0 .4cqw rgba(80,255,120,.7); white-space: nowrap; transition: opacity .3s; }
   .m3 #camB .hud { color: #d6ecff; text-shadow: 0 0 .4cqw rgba(110,180,255,.7); }
   .m3 .feed .hud.tl { top: 1cqw; left: 1.2cqw; } .m3 .feed .hud.tr { top: 1cqw; right: 1.2cqw; }

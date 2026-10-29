@@ -25,4 +25,11 @@ musique (son 100 % procédural).
 `controle-outils.html` n'est pas une scène (jamais convertie) : page de contrôle des outils communs des
 cinématiques v2 (gel exact de `K.anim`, encre et papier), à ouvrir avec `?freeze=1000`.
 
+Règles gardées par les tests sur les scènes régénérées (spec cinématiques v2, §3.1 et §3.3) : toute animation
+`infinite` a sa règle jumelle, même sélecteur avec `.k-reduced` sur la classe de scène (`.pro.k-reduced .hh`), qui
+met `animation: none` ou une autre animation (`tests/briefing/attenue.test.js`) ; un `@keyframes` n'anime que
+`transform`, `opacity` ou `stroke-dashoffset`, et le script n'a ni `setInterval`, ni `element.animate`, ni SMIL, ni
+`Math.random` : tout tirage passe par `K.graine` (`tests/briefing/rendu.test.js`) ; aucun tiret cadratin dans ce que
+le joueur voit (`tests/briefing/textes-scenes.test.js`).
+
 Spec : `docs/superpowers/specs/2026-10-02-cinematiques-design.md`.

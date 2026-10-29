@@ -34,6 +34,9 @@
   .m2 .flash2 { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 5; }
   .m2 .flash2.on { animation: m2-flash .4s ease-out forwards; }
   @keyframes m2-flash { 0% { opacity: 0 } 18% { opacity: .5 } 100% { opacity: 0 } }
+  /* effets atténués (k-reduced, posée par le kit sur #st) : flash plein écran plafonné à .3 */
+  .m2.k-reduced .flash2.on { animation: m2-flash-attenue .4s ease-out forwards; }
+  @keyframes m2-flash-attenue { 0% { opacity: 0 } 18% { opacity: .3 } 100% { opacity: 0 } }
 
   /* ── deux dossiers en miroir ── */
   .m2 .dossier { top: 14cqw; width: 41cqw; padding: 1.6cqw; border-color: rgba(239,59,59,.3);
@@ -141,6 +144,7 @@
   .m2 #fM.on .bd, .m2 #dM.on .bd { fill: var(--beige); stroke: var(--beige); }
   .m2 #fL.on .hd, .m2 #fM.on .hd, .m2 #dL.on .hd, .m2 #dM.on .hd { fill: rgba(215,220,207,.35); stroke: rgba(241,237,227,.8); }
   .m2 .blink { animation: k-blink .9s steps(2) infinite; }
+  .m2.k-reduced .blink { animation: none; }   /* effets atténués : « < 2 s » allumé fixe */
 
   /* ── carton-titre aux couleurs de la mission ── */
   .m2 .title .t1 { color: var(--bred2); }

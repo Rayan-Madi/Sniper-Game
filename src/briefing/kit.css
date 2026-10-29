@@ -157,6 +157,17 @@
    hausse, .09 + (.32 - .09) / 3 ; carton SIGNAL PERDU sans clignoter (5,5 Hz sinon, au-delà de 3 flashs par seconde) */
 .st.k-reduced.gl .grain { opacity: .17; }
 .st.k-reduced .lost.on { animation: none; }
+/* jumelles des animations infinies du kit (spec cinématiques v2 §3.7, garde G4 : tests/briefing/attenue.test.js) :
+   voyants allumés fixes, ligne de balayage à sa pose de repos (hors cadre), ondes en anneau fixe, égaliseur de la radio
+   figé à mi-hauteur tant qu'Anton parle ; flash des pièces à conviction plafonné à .3 */
+.st.k-reduced .track { animation: none; }
+.st.k-reduced .rec, .st.k-reduced .photo .cam b, .st.k-reduced .radio .dot { animation: none; }
+.st.k-reduced .pulse { animation: none; transform: scale(1.7); opacity: .45; }
+.st.k-reduced .radio.talk .eq i { animation: none; height: 60%; }
+.st.k-reduced .radio.talk .eq i:nth-child(2n) { height: 90%; }
+.st.k-reduced .radio.talk .eq i:nth-child(3) { height: 35%; }
+.st.k-reduced .evp.on .flash { animation: k-flash-attenue .45s ease-out; }
+@keyframes k-flash-attenue { 0% { opacity: .3 } 100% { opacity: 0 } }
 /* ── fin du commun : atténué ── */
 
 /* ── commun : gel ── */

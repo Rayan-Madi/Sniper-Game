@@ -16,11 +16,14 @@
   .epi .hh { position: absolute; inset: 0; animation: epi-hh 7s ease-in-out infinite; }
   @keyframes epi-hh { 0%,100% { transform: translate(0,0) rotate(0) } 22% { transform: translate(.3cqw,-.18cqw) rotate(.22deg) }
       48% { transform: translate(-.12cqw,.24cqw) rotate(-.16deg) } 74% { transform: translate(-.3cqw,-.1cqw) rotate(.18deg) } }
+  /* effets atténués (k-reduced, posée par le kit sur #st) : caméra posée, à la pose de repos d'epi-hh */
+  .epi.k-reduced .hh { animation: none; }
 
   /* repère horaire (haut gauche), comme au prologue */
   .epi .hud { position: absolute; left: 2.4cqw; top: 1.6cqw; font-size: 1.3cqw; letter-spacing: .18em; color: var(--amb); z-index: 7; white-space: nowrap; opacity: 0; transition: opacity .4s; }
   .epi .hud.on { opacity: 1; }
   .epi .hud b { font-weight: normal; animation: k-blink 1.4s steps(2) infinite; }
+  .epi.k-reduced .hud b { animation: none; }   /* effets atténués : voyant allumé fixe */
 
   /* ════════ PLAN A — le tableau de chasse, vu par Viktor (même mur qu'au prologue) ════════ */
   .epi #povA { z-index: 1; background: #070707; transition: opacity 1.1s, transform 1.5s cubic-bezier(.65,0,.35,1), filter 1s; }
@@ -106,6 +109,7 @@
   /* ════════ le téléphone, dans la main (le même qu'au prologue) ════════ */
   .epi .rig { position: absolute; left: 41cqw; top: 4cqw; width: 34cqw; height: 62cqw; z-index: 4; pointer-events: none;
       animation: epi-hh 4.6s ease-in-out infinite; transition: left .9s cubic-bezier(.6,0,.2,1); }
+  .epi.k-reduced .rig { animation: none; }   /* effets atténués : la main ne bouge plus d'elle-même */
   .epi .rig.side { left: 1cqw; }
   .epi .rpose { position: absolute; inset: 0; transform-origin: 50% 70%; transition: transform .9s cubic-bezier(.2,.8,.2,1);
       transform: perspective(80cqw) translateY(56cqw) rotateX(16deg) rotateY(-20deg) rotateZ(-12deg); }
@@ -120,6 +124,8 @@
       box-shadow: inset 0 0 0 .16cqw #3b414d, inset 0 0 0 .34cqw #08090b, 0 1.4cqw 3cqw rgba(0,0,0,.7); }
   .epi .phone.ring { animation: epi-buzz 1.1s linear infinite; }
   @keyframes epi-buzz { 0%, 8%, 16%, 24%, 32% { transform: translate(.16cqw, 0) rotate(.4deg) } 4%, 12%, 20%, 28%, 36% { transform: translate(-.16cqw, .04cqw) rotate(-.4deg) } 40%, 100% { transform: none } }
+  /* effets atténués : le téléphone ne tremble pas ; la sonnerie, APPEL ENTRANT et les anneaux fixes disent l'appel */
+  .epi.k-reduced .phone.ring { animation: none; }
   .epi .scr { position: absolute; inset: .7cqw; border-radius: 2.1cqw; overflow: hidden; background: radial-gradient(ellipse at 50% 18%, #1c2637 0%, #0a0e16 60%, #05070b 100%); }
   .epi .scr::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 6;
       background: linear-gradient(118deg, rgba(255,255,255,.1) 0%, rgba(255,255,255,0) 36%, rgba(255,255,255,0) 72%, rgba(255,255,255,.05) 100%); }
@@ -143,6 +149,9 @@
   .epi .phone.ring .p-av s { animation: epi-ringc 1.2s ease-out infinite; }
   .epi .phone.ring .p-av s + s { animation-delay: .6s; }
   @keyframes epi-ringc { 0% { opacity: .9; transform: scale(1) } 100% { opacity: 0; transform: scale(1.7) } }
+  /* effets atténués : deux anneaux fixes autour de l'avatar, la pose de repos du prologue B */
+  .epi.k-reduced .phone.ring .p-av s { animation: none; opacity: .5; transform: scale(1.16); }
+  .epi.k-reduced .phone.ring .p-av s + s { opacity: .22; transform: scale(1.34); }
   .epi .p-nm { position: absolute; left: 0; right: 0; top: 15.2cqw; text-align: center; font-size: 1.7cqw; font-weight: bold; letter-spacing: .06em; color: var(--wh); min-height: 2.2cqw; transition: opacity .5s; }
   .epi .phone.ans .p-nm { color: var(--amb2); }
   .epi .p-in { position: absolute; left: 0; right: 0; top: 18.1cqw; text-align: center; font-size: 1.15cqw; letter-spacing: .15em; padding-left: .15em; color: rgba(215,220,207,.55); min-height: 1.5cqw; transition: opacity .5s; }
@@ -270,11 +279,13 @@
   .epi #povB.sun .rays { opacity: 1; }
   .epi #povB.sun .rays g { animation: epi-breathe 6s ease-in-out infinite; }
   @keyframes epi-breathe { 0%, 100% { opacity: .75 } 50% { opacity: 1 } }
+  .epi.k-reduced #povB.sun .rays g { animation: none; opacity: .75; }   /* effets atténués : rayons fixes, à la pose de repos */
   .epi .dust { position: absolute; inset: 0; opacity: 0; transition: opacity 4s 1s; }
   .epi #povB.sun .dust { opacity: 1; }
   .epi .dust i { position: absolute; width: var(--s); height: var(--s); border-radius: 50%; background: radial-gradient(circle, #fff1cf, rgba(255,226,170,0) 70%);
       animation: epi-dust var(--d) linear infinite; animation-delay: var(--dl); }
   @keyframes epi-dust { 0% { transform: translate(0, 0); opacity: 0 } 15% { opacity: .9 } 85% { opacity: .7 } 100% { transform: translate(-2.6cqw, 3.4cqw); opacity: 0 } }
+  .epi.k-reduced .dust i { animation: none; opacity: .6; }   /* effets atténués : poussière figée dans le soleil */
   .epi .mgrade { position: absolute; inset: 0; pointer-events: none; opacity: 0; mix-blend-mode: screen; transition: opacity 5s ease-in;
       background: radial-gradient(ellipse 70% 90% at 100% 0%, rgba(255,206,140,.42), rgba(255,180,110,.12) 45%, transparent 75%), linear-gradient(rgba(255,226,186,.05), rgba(255,226,186,.05)); }
   .epi #povB.sun .mgrade { opacity: 1; }
@@ -644,7 +655,7 @@
         <div class="mr">MSCU 220114-8 · CHARGÉ 05:42 · ROTTERDAM</div>
         <div class="mr">TGHU 873302-1 · CHARGÉ 05:55 · ANVERS</div>
         <div class="mr key" id="mkey"><i class="hlb"></i><span id="mkt" data-reset></span></div>
-        <div class="mr">CAIU 556021-0 · EN ATTENTE · —</div>
+        <div class="mr">CAIU 556021-0 · EN ATTENTE · N/D</div>
         <div class="ship" id="ship"><span class="shc">AU LARGE · 06:41</span>
           <svg viewBox="0 0 160 30" preserveAspectRatio="xMidYMid slice">
             <path d="M0 22 H160" stroke="rgba(60,70,76,.5)" stroke-width=".6"/>
@@ -809,7 +820,7 @@
 
   // ── bouton de variante dans la barre de contrôle ──
   const vb = document.createElement('button')
-  const vlabel = () => { vb.textContent = 'Variante : ' + (LIBRES ? 'port libéré' : 'port non libéré'); vb.title = 'Les 14 personnes du conteneur (mission 3) — cliquer pour basculer' }
+  const vlabel = () => { vb.textContent = 'Variante : ' + (LIBRES ? 'port libéré' : 'port non libéré'); vb.title = 'Les 14 personnes du conteneur (mission 3) : cliquer pour basculer' }
   vlabel()
   document.querySelector('.kctrl').insertBefore(vb, $('k-lbl'))
   vb.onclick = () => {
