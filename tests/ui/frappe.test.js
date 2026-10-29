@@ -146,6 +146,27 @@ describe('les mots masqués', () => {
     expect(f.texte).toBe('Il monte … droite.')
     expect(appels).toEqual([0, 1, 2, 3, 4])
   })
+
+  it('une erreur de masque remonte d\'update comme de toutAfficher, jamais avalée ; le mot n\'est pas décidé, il se redécide au prochain appel', () => {
+    let pannes, appels
+    const masque = (i, mot) => {
+      appels.push(mot)
+      if (mot === 'C' && pannes-- > 0) throw new Error('masque en panne')   // en panne une fois, sur le dernier mot
+      return mot === 'C'
+    }
+    const f = createFrappe()
+    for (const appel of [() => f.update(DT), () => f.toutAfficher()]) {
+      pannes = 1; appels = []
+      f.dire('A B C', 0, { masque })
+      expect(appel).toThrow('masque en panne')            // témoin : erreur avalée, « C » pris pour un mot en clair
+      expect(f.fini).toBe(false)                          // témoin : lettres comptées frappées avant la décision, « C » jamais décidé
+      expect(f.texte).toBe('A B')                         // témoin : mot compté commencé avant sa décision, « A B  » puis « A B C »
+      appel()                                             // la réplique reprend là où elle s'était arrêtée
+      expect(f.fini).toBe(true)
+      expect(f.texte).toBe('A B …')
+      expect(appels).toEqual(['A', 'B', 'C', 'C'])
+    }
+  })
 })
 
 describe('une réplique à la fois', () => {

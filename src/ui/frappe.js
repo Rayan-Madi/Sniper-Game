@@ -10,8 +10,10 @@
 // et fini devient vrai. Les mots sont les morceaux du texte entre deux blancs, ceux de decouper (src/bar/ecoute.js).
 // La fonction masque(i, mot) dit si le mot i est masqué : elle est appelée une seule fois par mot, dans l'ordre, quand sa
 // première lettre est frappée, et sa réponse ne change plus, même si ce qu'elle a lu change ensuite (absente ou fausse :
-// rien n'est masqué). Un mot masqué s'affiche « … » dès cette lettre ; des mots masqués voisins n'en font qu'un. Un texte
-// qui n'est pas une chaîne, ou une option masque qui n'est pas une fonction, est une erreur, et la réplique en cours
+// rien n'est masqué). Un mot masqué s'affiche « … » dès cette lettre ; des mots masqués voisins n'en font qu'un. Si masque
+// lève une erreur, elle remonte d'update ou de toutAfficher, jamais avalée : le mot n'est ni décidé ni frappé, et il se
+// redécide au prochain appel (rien n'est perdu ; tant que masque échoue, l'erreur revient à chaque appel). Un texte qui
+// n'est pas une chaîne, ou une option masque qui n'est pas une fonction, est une erreur, et la réplique en cours
 // continue. toutAfficher() frappe d'un coup ce qui reste (clic droit, ou Espace lue par e.code 'Space', branchés par
 // l'appelant) : les mots restants se décident à cet instant.
 //
@@ -21,7 +23,10 @@
 //
 // Au Bivouac (tâches B11 et B12) : masque retient l'I du moment, Is[i], et rend !affichage(Is, f)[i] ; le sous-titre
 // d'écoute est masquer(motsFrappes, Is, f), qui dit aussi « (murmures) » ; quand fini devient vrai, la réplique apprend
-// son renseignement si acquis(replique, affichage(Is, f)) (src/bar/ecoute.js, tests/ui/frappe.test.js).
+// son renseignement si acquis(replique, affichage(Is, f)) (src/bar/ecoute.js, tests/ui/frappe.test.js). masque ne fait
+// que lire : l'I de l'image, calculé avant update, et f = fragilites(replique), calculées avant dire (elles lèvent sur
+// une donnée fausse). toutAfficher ne sert qu'aux répliques sans masque (Viktor, dialogues, objets) : sur une réplique
+// écoutée, il ferait apprendre le renseignement avant la fin de la réplique (spec §3.4, « Réglé en B4 »).
 import { estimate } from '../briefing/kit.js'
 
 // La frappe prend les 8 dixièmes de la durée estimée d'une réplique (estimate, src/briefing/kit.js:10, en ms) : la voix
