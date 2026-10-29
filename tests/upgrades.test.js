@@ -85,3 +85,25 @@ describe('progression de la campagne', () => {
     expect(localStorage.getItem('sniper-save')).toBeNull()
   })
 })
+
+// Vélocité (spec du lot 3, §2 c ; plan du lot 3a, tâche A4) : la balle part à 800 m/s, 37,5 de plus par niveau, 950 au
+// niveau 4 ; cette vitesse remplace le délai fixe (bulletDelay : 0,45 s moins 0,08 par niveau, quelle que soit la
+// distance), et la culasse se raccourcit comme avant. Témoin : le getStats d'avant la tâche n'a que bulletDelay (vu
+// rouge).
+describe('Vélocité : la vitesse de la balle', () => {
+  it('800, 837,5, 875, 912,5 et 950 m/s du niveau 0 au niveau 4', () => {
+    const vus = [0, 1, 2, 3, 4].map(n => { U.state.levels.velocity = n; return U.getStats().v0 })
+    expect(vus).toEqual([800, 837.5, 875, 912.5, 950])
+  })
+
+  it('plus de délai fixe (bulletDelay) : la balle met le temps de son vol, et non 0,45 s à toute distance', () => {
+    expect('bulletDelay' in U.getStats()).toBe(false)
+  })
+
+  it('la culasse se raccourcit toujours avec la Vélocité (1,2 s à 0,9 s)', () => {
+    U.state.levels.velocity = 0
+    expect(U.getStats().boltS).toBe(1.2)
+    U.state.levels.velocity = 4
+    expect(U.getStats().boltS).toBe(0.9)
+  })
+})

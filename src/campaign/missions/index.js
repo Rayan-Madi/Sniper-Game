@@ -27,6 +27,11 @@
 //   zone         ancre de la zone des PNJ
 //   zoom         { depart, min, max } : zoom de la lunette au départ, le plus petit et le plus grand à la molette ; max
 //                est celui de base, que l'amélioration Lunette relève (getStats, src/upgrades.js : +2 par niveau)
+//   zero         le réglage de la lunette (m) : la distance qu'annonce Anton au briefing (décision 1 de la spec du lot 3),
+//                affichée « ZÉRO n m » ; la balle recroise la ligne de visée à cette distance (src/shot/ballistics.js).
+//                Déjà la vraie valeur, même pour M3, M4 et M5, que leurs sous-lots (3c, 3d) n'ont pas encore mises à
+//                leur distance : de 20 à 44 m de leur poste, la balle y passe au-dessus de la visée, de 2 à 4 cm en M3
+//                et M5, de 6 à 13 cm en M4 (réglée à 430 m)
 //   profil       profil de caméra (spec §2 b) : near et far (m) ; brume { type: 'lin', couleur, debut, fin } ou
 //                { type: 'exp2', couleur, densite } ; soleil { pos, cible } ; cadreOmbre, le demi-côté du cadre d'ombre
 //                du soleil (m). mountLevel l'applique après la carte (applyCameraProfile, src/gfx/cameraProfile.js),

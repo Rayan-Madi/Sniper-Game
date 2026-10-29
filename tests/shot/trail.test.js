@@ -1,13 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as THREE from 'three'
+import { trajectoire } from '../../src/shot/ballistics.js'
 
-// Sillage de la balle (spec du lot 2, §3.3 ; plan, tâche T3) : une traînée fine parcourt la trajectoire pendant le temps
-// de vol, visible dans la lunette, puis s'efface ; le trait d'impact (un traceur de 0,12 s dessiné seulement à
-// l'impact) est supprimé.
+// Sillage de la balle (spec du lot 2, §3.3 ; plan du lot 2, tâche T3 ; spec du lot 3, §2 c, tâche A4) : une traînée
+// fine parcourt la trajectoire pendant le temps de vol, visible dans la lunette, puis s'efface. Depuis la tâche A4, la
+// balle vole sur une courbe (elle monte au-dessus de la visée, la recroise à la distance de réglage, puis tombe) : la
+// tête du sillage est la balle elle-même, partie du canon (sous la lunette, un peu à droite), qui rejoint sa
+// trajectoire en arrivant au point d'impact ; sa queue la suit sur la même courbe.
 //
-// Témoin : avant le lot 2 (commit df6dd66), rien n'était dessiné pendant le vol (mesuré dans Chrome sans interface :
-// aucun objet hors carte pendant les 0,45 s), puis main.js posait spawnTracer(départ, impact) à la résolution. Sans
-// spawnTrail, le tir est rejoué ainsi (tirAvant) et les tests y échouent sur ce qui est dessiné.
+// Témoins : avant le lot 2 (commit df6dd66), rien n'était dessiné pendant le vol (vu rouge à la tâche T3). Avant la
+// tâche A4, le sillage était un trait droit du canon au point d'impact : appelé comme le main.js d'avant l'appelait (du
+// canon au point d'impact de la courbe, pour le temps du vol), sa tête passe jusqu'à 35,4 cm sous la balle d'un tir à
+// 430 m, la lunette réglée ou non : la flèche d'une parabole sur sa corde, g·t²/8, ne dépend que du temps de vol (vu
+// rouge à la tâche A4, avec le src/effects.js de 97336ed dans un témoin ponctuel, non versionné).
+
 vi.mock('../../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
@@ -21,139 +27,134 @@ beforeEach(async () => {
   scene.clear()
 })
 
-const FROM = new THREE.Vector3(0, 9.5, 28), TO = new THREE.Vector3(2, 1.2, -4)
-const VOL = 0.45
+const v = (x, y, z) => new THREE.Vector3(x, y, z)
+const OEIL = v(0, 9.5, 28)
+const CANON = OEIL.clone().add(v(0.15, -0.4, 0))   // départ du sillage : 0,4 m sous l'œil, 0,15 m à droite
+// Tir à 430 m sans réglage : la plus forte courbure (1,41 m de chute), un vol de 0,5375 s jusqu'au mur.
+const TRAJ = trajectoire({ origine: OEIL, dir: v(0, 0, -1), v0: 800, g: 9.81, zero: null })
+const VOL = 430 / 800
 
-// Un tir : le sillage au départ ; avant le lot 2, le traceur à la résolution. avance(dt) fait passer le temps du jeu
-// comme la boucle de main.js (résolution de la balle, puis updateEffects).
-function tirer(from = FROM, to = TO, vol = VOL) {
-  let t = 0, resolu = false
-  if (E.spawnTrail) E.spawnTrail(from, to, vol)
-  const tir = {
-    avance(dt) {
-      t += dt
-      if (!E.spawnTrail && !resolu && t >= vol - 1e-9) { resolu = true; E.spawnTracer(from, to) }
-      E.updateEffects(dt)
-    },
-    // Images de 1/60 s (la dernière plus courte) jusqu'au temps `fin` après le tir.
-    jusqua(fin) { while (fin - t > 1e-9) tir.avance(Math.min(1 / 60, fin - t)) },
-  }
-  return tir
-}
 const lignes = () => scene.children.filter(o => o.isLine)
-// Points du trait dessiné (dans l'ordre de la géométrie) et leur position sur le trajet, de 0 (départ) à 1 (impact).
-function trait(line) {
+// Les deux points du trait dessiné (queue, tête), dans le monde.
+function trait(line = lignes()[0]) {
   const p = line.geometry.attributes.position
-  const pts = []
-  for (let i = 0; i < p.count; i++) pts.push(new THREE.Vector3().fromBufferAttribute(p, i).applyMatrix4(line.matrixWorld))
-  const d = TO.clone().sub(FROM), L2 = d.lengthSq()
-  return pts.map(q => {
-    const s = q.clone().sub(FROM).dot(d) / L2
-    const ecart = q.distanceTo(FROM.clone().addScaledVector(d, s))   // distance au trajet
-    return { s, ecart }
-  })
+  return [0, 1].map(i => new THREE.Vector3().fromBufferAttribute(p, i).applyMatrix4(line.matrixWorld))
 }
+// Où doit être un point du sillage à τ secondes de vol, pour une fin de vol `fin` : sur la trajectoire, décalé du canon
+// d'autant moins qu'il approche de l'impact.
+const attendu = (tau, fin = VOL, traj = TRAJ, depart = CANON) =>
+  traj.pointA(tau).addScaledVector(depart.clone().sub(traj.origine), Math.max(0, 1 - tau / fin))
+// Images de 1/60 s (la dernière plus courte) jusqu'au temps `t` après le tir, en partant de `depuis`.
+function jusqua(t, depuis = 0) { for (let x = depuis; t - x > 1e-9; x += 1 / 60) E.updateEffects(Math.min(1 / 60, t - x)) }
 
-describe('sillage pendant le vol', () => {
-  it('dès le départ et jusqu\'à l\'impact, un trait fin parcourt la trajectoire, sa tête au rythme du vol', () => {
-    const tir = tirer()
-    for (const t of [0.05, 0.15, 0.3, 0.44]) {
-      tir.jusqua(t)
-      const l = lignes()
-      expect(l.length, `${t} s : un trait dans la scène`).toBe(1)
-      const pts = trait(l[0])
-      for (const p of pts) expect(p.ecart, `${t} s : sur la trajectoire`).toBeLessThan(1e-6)
-      const tete = Math.max(...pts.map(p => p.s)), queue = Math.min(...pts.map(p => p.s))
-      expect(tete, `${t} s : la tête`).toBeCloseTo(t / VOL, 6)
-      expect(queue, `${t} s : la queue suit la tête`).toBeLessThan(tete)
-      expect(queue).toBeGreaterThanOrEqual(0)
+describe('le sillage suit la balle sur sa trajectoire', () => {
+  it('sa tête est la balle : partie du canon, elle suit la courbe et arrive au point d\'impact', () => {
+    E.spawnTrail(CANON, TRAJ, VOL)
+    let t = 0
+    for (const tau of [0.05, 0.15, 0.27, 0.4, 0.5]) {
+      jusqua(tau, t); t = tau
+      const [, tete] = trait()
+      expect(tete.distanceTo(attendu(tau)), `${tau} s`).toBeLessThan(1e-4)
     }
+    jusqua(VOL, t)
+    expect(trait()[1].distanceTo(TRAJ.pointA(VOL)), 'à l\'impact').toBeLessThan(1e-4)
+  })
+
+  it('à mi-vol, la tête est bien sur la courbe, au-dessus de la corde du canon à l\'impact (la balle tombe ensuite)', () => {
+    E.spawnTrail(CANON, TRAJ, VOL)
+    jusqua(VOL / 2)
+    const [, tete] = trait()
+    const corde = CANON.clone().lerp(TRAJ.pointA(VOL), 0.5)
+    expect(tete.y - corde.y).toBeGreaterThan(0.3)   // la flèche d'un vol de 0,54 s : g·t²/8 = 35 cm
+  })
+
+  it('réglé à 430 m : il monte au-dessus de la visée et y redescend à l\'impact', () => {
+    const regle = trajectoire({ origine: OEIL, dir: v(0, 0, -1), v0: 800, g: 9.81, zero: 430 })
+    E.spawnTrail(CANON, regle, VOL)
+    jusqua(VOL / 2)
+    expect(trait()[1].distanceTo(attendu(VOL / 2, VOL, regle))).toBeLessThan(1e-4)
+    expect(trait()[1].y - OEIL.y, 'au-dessus de la ligne de visée à mi-vol').toBeGreaterThan(0.1)
+  })
+
+  it('sa queue la suit à 35 % du vol, sur la même courbe', () => {
+    E.spawnTrail(CANON, TRAJ, VOL)
+    jusqua(0.4)
+    const [queue] = trait()
+    expect(queue.distanceTo(attendu(0.4 - 0.35 * VOL))).toBeLessThan(1e-4)
   })
 
   it('un trait fin : une ligne, pas un volume, et jamais écarté de l\'image par une enveloppe périmée', () => {
-    const tir = tirer()
-    for (let i = 0; i < 20; i++) tir.avance(1 / 60)   // 0,33 s
+    E.spawnTrail(CANON, TRAJ, VOL)
+    jusqua(0.33)
     const [l] = lignes()
     expect(l?.isLine, 'une ligne pendant le vol').toBe(true)
     expect(l.material.isLineBasicMaterial).toBe(true)
-    // La lunette regarde l'impact, zoom ×12 (5°) : le trait, qui y monte, doit être rendu.
-    const cam = new THREE.PerspectiveCamera(5, 16 / 9, 0.1, 500)
-    cam.position.copy(FROM); cam.lookAt(TO); cam.updateMatrixWorld()
+    const cam = new THREE.PerspectiveCamera(5, 16 / 9, 0.1, 1000)
+    cam.position.copy(OEIL); cam.lookAt(TRAJ.pointA(VOL)); cam.updateMatrixWorld()
     const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse))
     expect(!l.frustumCulled || frustum.intersectsObject(l)).toBe(true)
   })
+})
 
-  it('après l\'impact, il s\'efface et quitte la scène', () => {
-    const tir = tirer()
-    for (let i = 0; i < 26; i++) tir.avance(1 / 60)   // 0,43 s : encore en vol
+describe('durée du sillage', () => {
+  it('le temps de vol vient du tir : un vol de 0,04 s (31 m) est parcouru en 0,04 s', () => {
+    const court = trajectoire({ origine: OEIL, dir: v(0, -0.2, -1), v0: 800, g: 9.81, zero: 31 })
+    E.spawnTrail(CANON, court, 0.04)
+    jusqua(0.03)
+    expect(trait()[1].distanceTo(attendu(0.03, 0.04, court))).toBeLessThan(1e-4)
+  })
+
+  it('après l\'impact, il s\'efface (0,25 s) et quitte la scène', () => {
+    E.spawnTrail(CANON, TRAJ, VOL)
+    jusqua(VOL - 0.01)
     const [l] = lignes()
-    expect(l, 'en vol').toBeDefined()
     const enVol = l.material.opacity
-    for (let i = 0; i < 6; i++) tir.avance(1 / 60)    // 0,53 s : arrivé
+    jusqua(VOL + 0.1, VOL - 0.01)
     expect(lignes()).toContain(l)
-    expect(l.material.opacity, 'il s\'efface après l\'impact').toBeLessThan(enVol)
-    for (let i = 0; i < 30; i++) tir.avance(1 / 60)   // 1,03 s
+    expect(l.material.opacity).toBeLessThan(enVol)
+    jusqua(VOL + 0.26, VOL + 0.1)
     expect(lignes()).toEqual([])
-  })
-
-  it('le temps de vol vient du tir : un vol de 0,13 s (Vélocité 4) est parcouru en 0,13 s', () => {
-    const tir = tirer(FROM, TO, 0.13)
-    for (let i = 0; i < 6; i++) tir.avance(1 / 60)    // 0,1 s
-    const [l] = lignes()
-    expect(l, 'en vol').toBeDefined()
-    expect(Math.max(...trait(l).map(p => p.s))).toBeCloseTo(0.1 / 0.13, 6)
   })
 })
 
-describe('trait d\'impact supprimé', () => {
-  it('effects.js n\'exporte plus spawnTracer', () => {
-    expect(E.spawnTracer).toBeUndefined()
-  })
-})
-
-// Relecture de T3, faite à la tâche T5 (spec du lot 2, §3.3) : au coup, le bout du sillage est ce que la balle rencontre
-// sur son rayon (resolveImpact : un PNJ qui marche, le décor, sinon un point au loin). À la fin du vol, la résolution
-// peut trouver autre chose (le PNJ est sorti de la ligne : le mur derrière lui) ; main.js recale alors le bout du
-// sillage sur le point résolu (retargetTrail), et la tête du sillage y arrive.
-// Témoin : sans retargetTrail, le sillage finissait là où le PNJ était au coup (vu rouge).
-describe('bout du sillage recalé à la résolution', () => {
-  const recaler = (trail, to) => { if (E.retargetTrail) E.retargetTrail(trail, to) }
-  // Le PNJ visé au coup était en TO ; à la fin du vol, la balle va plus loin sur le rayon du tir, jusqu'au mur. Ce rayon
-  // part de l'œil, 0,4 m au-dessus du canon (FROM, départ du sillage) : le mur n'est pas sur la ligne du canon à TO.
-  const OEIL = FROM.clone().add(new THREE.Vector3(-0.15, 0.4, 0))
-  const MUR = TO.clone().add(TO.clone().sub(OEIL).multiplyScalar(0.4))
-
-  it('la tête du sillage arrive au point résolu à la fin du vol, puis le sillage s\'efface', () => {
-    const trail = E.spawnTrail(FROM, TO, VOL)
-    for (let i = 0; i < 26; i++) E.updateEffects(1 / 60)   // 0,433 s : la balle vole encore
-    recaler(trail, MUR)                                   // image de la résolution (main.js : resolveBullet)
-    E.updateEffects(1 / 60)                               // 0,45 s : arrivée
-    const [l] = lignes()
-    const p = l.geometry.attributes.position
-    const tete = new THREE.Vector3().fromBufferAttribute(p, 1)
-    expect(tete.distanceTo(MUR), `tête en ${tete.toArray()}`).toBeLessThan(1e-4)
-    for (let i = 0; i < 30; i++) E.updateEffects(1 / 60)
+// Le bout du sillage, prévu au coup (src/shot/balle.js, predireImpact : le monde tel qu'il est au coup), est recalé à
+// l'arrivée de la balle sur l'instant de l'impact (main.js, resolveBullet) : un PNJ sorti de la ligne (la balle va
+// plus loin, jusqu'au mur), ou entré dedans (elle s'arrête plus tôt). La tête du sillage y arrive.
+// Témoin (tâche T5) : sans retargetTrail, le sillage finissait là où le PNJ était au coup (vu rouge).
+describe('bout du sillage recalé à l\'arrivée de la balle', () => {
+  it('la balle va plus loin que prévu : la tête continue sur la courbe jusqu\'au nouvel impact, puis s\'efface', () => {
+    const trail = E.spawnTrail(CANON, TRAJ, 0.3)   // prévu : un PNJ à 240 m
+    jusqua(0.29)
+    E.retargetTrail(trail, VOL)                     // il est sorti de la ligne : le mur à 430 m
+    jusqua(0.45, 0.29)
+    expect(trait()[1].distanceTo(attendu(0.45, VOL)), 'en vol, au-delà du point prévu').toBeLessThan(1e-4)
+    jusqua(VOL, 0.45)
+    expect(trait()[1].distanceTo(TRAJ.pointA(VOL)), 'au nouvel impact').toBeLessThan(1e-4)
+    jusqua(VOL + 0.26, VOL)
     expect(lignes()).toEqual([])
   })
 
-  it('pendant le vol, le sillage recalé reste sur la ligne du départ au point résolu', () => {
-    const trail = E.spawnTrail(FROM, TO, VOL)
-    recaler(trail, MUR)
-    E.updateEffects(0.2)
-    const [l] = lignes()
-    const p = l.geometry.attributes.position
-    const dir = MUR.clone().sub(FROM).normalize()
-    for (let i = 0; i < 2; i++) {
-      const q = new THREE.Vector3().fromBufferAttribute(p, i).sub(FROM)
-      expect(q.clone().addScaledVector(dir, -q.dot(dir)).length()).toBeLessThan(1e-4)
-    }
+  it('la balle s\'arrête plus tôt que prévu : la tête est au point d\'impact, le sillage s\'efface de là', () => {
+    const trail = E.spawnTrail(CANON, TRAJ, VOL)
+    jusqua(0.2)
+    E.retargetTrail(trail, 0.2)
+    E.updateEffects(1 / 60)
+    expect(trait()[1].distanceTo(TRAJ.pointA(0.2))).toBeLessThan(1e-4)
+    jusqua(0.2 + 0.26, 0.2 + 1 / 60)
+    expect(lignes()).toEqual([])
   })
 
   it('un sillage déjà effacé ou retiré (relance de la mission) : sans effet ni erreur', () => {
-    const trail = E.spawnTrail(FROM, TO, VOL)
+    const trail = E.spawnTrail(CANON, TRAJ, VOL)
     E.clearEffects()
-    expect(() => recaler(trail, MUR)).not.toThrow()
-    expect(() => recaler(null, MUR)).not.toThrow()
+    expect(() => E.retargetTrail(trail, VOL)).not.toThrow()
+    expect(() => E.retargetTrail(null, VOL)).not.toThrow()
     expect(lignes()).toEqual([])
+  })
+})
+
+describe('trait d\'impact supprimé (lot 2)', () => {
+  it('effects.js n\'exporte plus spawnTracer', () => {
+    expect(E.spawnTracer).toBeUndefined()
   })
 })

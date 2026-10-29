@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { MAIN_SRC, analyse, callsIn, callsInNode } from '../gfx/mainSource.js'
+import { resolve } from 'node:path'
+import { MAIN_SRC, analyse, callsIn, callsInNode, readSource } from '../gfx/mainSource.js'
 
 // Câblage de l'occlusion dans main.js (spec du lot 2, §3.3 et §3.4 ; plan, tâche T5). Les pièces ont leurs tests
 // (occlusion, maps.solid, impacts, trail) ; main.js ne s'importe pas sous jsdom, cette garde lit son source :
@@ -11,9 +12,16 @@ import { MAIN_SRC, analyse, callsIn, callsInNode } from '../gfx/mainSource.js'
 //   à un tir manqué ;
 // - développement : ?solides=1 teinte les solides ; __placer pose un PNJ, debout ou accroupi (parcours réel de
 //   verif-mission.mjs) ; __mission() dit ce que la dernière balle a touché.
+// Depuis la tâche A4 du lot 3 (spec du lot 3, §2 c), la balle vole sur une trajectoire en segments : la recherche se
+// fait segment par segment, à chaque image (toucherSegment, qui passe la mission à impactSurSegment de
+// src/shot/occlusion.js : npcHit, solidHit, resolveImpact), et le sillage part sur la trajectoire jusqu'à l'impact
+// prévu, recalé à l'arrivée sur l'instant de l'impact.
 //
-// Témoin : au commit ac004b6, aucune de ces gardes ne tient (vu rouge avant le branchement).
+// Témoins : au commit ac004b6, aucune de ces gardes ne tient (vu rouge avant le branchement). Les sept gardes réécrites
+// à la tâche A4 rougissent sur le main.js d'avant elle (97336ed : firstHit sur le rayon du coup, sillage vers le point
+// d'impact du coup ; vu rouge).
 
+const OCCLUSION_SRC = readSource(resolve(__dirname, '../../src/shot/occlusion.js'))
 const a = analyse(MAIN_SRC)
 const texte = n => a.source.slice(n.start, n.end)
 const appels = nom => (callsIn(a, nom) || []).map(c => c.callee)
@@ -27,25 +35,23 @@ const dev = a.program.body.find(n => n.type === 'IfStatement' && texte(n.test) =
 const texteDev = dev ? texte(dev) : ''
 
 describe('ce que la balle touche', () => {
-  it('solidHit et resolveImpact viennent de src/shot/occlusion.js, solidMeshes de src/maps/', () => {
-    expect(a.imports.get('solidHit')?.from).toBe('./shot/occlusion.js')
-    expect(a.imports.get('resolveImpact')?.from).toBe('./shot/occlusion.js')
+  it('impactSurSegment vient de src/shot/occlusion.js (solidHit puis resolveImpact sur le segment), solidMeshes de src/maps/', () => {
+    expect(a.imports.get('impactSurSegment')?.from).toBe('./shot/occlusion.js')
+    expect(OCCLUSION_SRC).toMatch(/export function impactSurSegment\([\s\S]*?solidHit\([\s\S]*?resolveImpact\(/)
     expect(a.imports.get('solidMeshes')?.from).toBe('./maps/index.js')
   })
 
-  it('firstHit cherche les PNJ, le décor et garde le premier', () => {
-    const c = appels('firstHit')
-    for (const f of ['npcHit', 'solidHit', 'resolveImpact']) expect(c, f).toContain(f)
-    const t = texteAppel('firstHit', 'resolveImpact')
-    expect(t).toMatch(/npcHits\s*:/)
-    expect(t).toMatch(/decorHit\s*:/)
+  it('toucherSegment cherche les PNJ, le décor et les vitres sur le segment ; impactSurSegment garde le premier', () => {
+    expect(appels('toucherSegment')).toContain('impactSurSegment')
+    const t = texteAppel('toucherSegment', 'impactSurSegment')
+    for (const champ of [/\.\.\.seg\b/, /\bnpcs\b/, /objets\s*:/, /boites\s*:/, /vitres\s*:/]) expect(t).toMatch(champ)
   })
 
   it('le décor de la mission : la carte, les jeeps du convoi et la boîte du cadenas', () => {
-    const t = texteAppel('firstHit', 'solidHit')
+    const t = texteAppel('toucherSegment', 'impactSurSegment')
     expect(t).toBeTruthy()
-    // Directement ou par une fonction de main.js : on suit les appels de premier niveau dans l'appel de solidHit
-    const suivi = [t, ...[...t.matchAll(/\b(\w+)\(/g)].map(m => m[1]).filter(n => n !== 'solidHit').map(texteDeclare)].join('\n')
+    // Directement ou par une fonction de main.js : on suit les appels de premier niveau dans l'appel d'impactSurSegment
+    const suivi = [t, ...[...t.matchAll(/\b(\w+)\(/g)].map(m => m[1]).filter(n => n !== 'impactSurSegment').map(texteDeclare)].join('\n')
     expect(suivi).toMatch(/solidMeshes\(\)/)
     expect(suivi).toMatch(/convoyCar[\s\S]*vehicles/)
     expect(suivi).toMatch(/moralLockBox/)
@@ -57,8 +63,9 @@ describe('ce que la balle touche', () => {
     expect(MAIN_SRC).not.toMatch(/\bmissImpact\s*\(/)
   })
 
-  it('la résolution passe par firstHit (le rayon du coup, la pose et les jeeps du moment)', () => {
-    expect(appels('resolveBullet')).toContain('firstHit')
+  it('chaque image, la balle cherche son segment par toucherSegment (la pose et les jeeps du moment), puis arrive', () => {
+    expect(texteAppel('loop', 'avancerBalle')).toMatch(/\btoucherSegment\b/)
+    expect(appels('loop')).toContain('resolveBullet')
   })
 })
 
@@ -73,24 +80,19 @@ function texteDeclare(nom) {
 }
 
 describe('sillage', () => {
-  it('le coup lance le sillage vers le point d\'impact du coup et le garde', () => {
-    const shoot = texteFn('shoot')
-    expect(shoot).toMatch(/(\w+)\s*=\s*spawnTrail\(/)
-    expect(texteAppel('shoot', 'spawnTrail')).toMatch(/firstHit\([^)]*\)\.point/)
+  it('le coup lance le sillage sur la trajectoire, jusqu\'à l\'impact prévu (le monde au coup), et la balle le garde', () => {
+    expect(texteFn('shoot')).toMatch(/balle\.sillage\s*=\s*spawnTrail\(/)
+    expect(texteAppel('shoot', 'spawnTrail')).toMatch(/balle\.traj\b[\s\S]*predireImpact\(balle,\s*toucherSegment\)/)
   })
 
-  it('la résolution recale le bout du sillage sur le point résolu', () => {
+  it('l\'arrivée recale le bout du sillage sur l\'instant de l\'impact', () => {
     expect(a.imports.get('retargetTrail')?.from).toBe('./effects.js')
-    const c = appels('resolveBullet')
-    expect(c).toContain('retargetTrail')
-    expect(c.indexOf('retargetTrail')).toBeGreaterThan(c.indexOf('firstHit'))
-    expect(texteAppel('resolveBullet', 'retargetTrail')).toMatch(/\.point\b/)
+    expect(appels('resolveBullet')).toContain('retargetTrail')
+    expect(texteAppel('resolveBullet', 'retargetTrail')).toMatch(/\.sillage,\s*arrivee\.t\s*-\s*\w+\.tTir\)$/)
   })
 
-  it('chaque mission repart sans sillage en attente', () => {
-    const v = texteFn('shoot').match(/(\w+)\s*=\s*spawnTrail\(/)?.[1]
-    expect(v).toBeTruthy()
-    expect(texteFn('startLevel')).toMatch(new RegExp(`\\b${v}\\s*=\\s*null`))
+  it('chaque mission repart sans balle en vol, ni son sillage', () => {
+    expect(texteFn('startLevel')).toMatch(/\bballe\s*=\s*null\b/)
   })
 })
 

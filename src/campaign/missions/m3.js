@@ -9,6 +9,7 @@ export default {
   poste: { oeil: 'oeil', regard: 'regard' },   // la pile de conteneurs, qui vise le quai en contrebas
   zone: 'zone',
   zoom: { depart: 4, min: 3, max: 6 },
+  zero: 155,  // réglage de la lunette (m) : la distance qu'annonce Anton au briefing
   profil: {
     near: 0.1, far: 200,
     brume: { type: 'lin', couleur: 0x0a1520, debut: 35, fin: 95 },

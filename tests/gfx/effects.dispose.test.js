@@ -13,6 +13,7 @@ vi.mock('../../src/scene.js', async () => {
 
 import { MAX_HOLES } from '../../src/effects.js'
 import { createFakeRenderer, drawnGeometries, trackDisposals } from './fakeRenderer.js'
+import { trajectoire } from '../../src/shot/ballistics.js'
 
 // Modules neufs à chaque test : effects.js garde sa géométrie de particule partagée et dispose.js l'ensemble des
 // ressources déjà libérées, qui ne doivent pas passer d'un test à l'autre. Sinon un test ne voit pas une ressource
@@ -30,12 +31,14 @@ beforeEach(async () => {
 })
 
 const FROM = new THREE.Vector3(0, 9.5, 28), AT = new THREE.Vector3(2, 1.2, -4)
+// Trajectoire droite de FROM à AT en 0,45 s : seule compte la libération du sillage, pas sa forme.
+const DROITE = trajectoire({ origine: FROM, dir: AT.clone().sub(FROM), v0: AT.distanceTo(FROM) / 0.45, g: 0 })
 // Tir touché : sillage pendant les 0,45 s du vol, puis éclaboussure de 16 particules (resolveBullet). Tir dans le
 // décor : sillage et gerbe de la matière touchée (la marque, partagée, est à part). Ils partent ensemble ici : seule
 // compte la libération.
 const NORMALE = new THREE.Vector3(0, 0, 1)
-const hit = () => { spawnTrail(FROM, AT, 0.45); spawnImpact(AT, 0xaa2222, 16) }
-const decor = surface => () => { spawnTrail(FROM, AT, 0.45); spawnSpray(AT, NORMALE, surface) }
+const hit = () => { spawnTrail(FROM, DROITE, 0.45); spawnImpact(AT, 0xaa2222, 16) }
+const decor = surface => () => { spawnTrail(FROM, DROITE, 0.45); spawnSpray(AT, NORMALE, surface) }
 const miss = decor('sol')
 const DECOR = ['metal', 'pierre', 'bois', 'sol'].map(s => [`tir dans le décor (${s})`, decor(s)])
 const expire = () => { for (let i = 0; i < 3; i++) updateEffects(1) }   // vol et effacement du sillage compris

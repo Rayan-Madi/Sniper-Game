@@ -9,6 +9,7 @@ export default {
   poste: { oeil: 'oeil', regard: null },   // 8 m au-dessus de la route ; la vue part à l'horizontale
   zone: 'zone',
   zoom: { depart: 4, min: 3, max: 6 },
+  zero: 31,   // réglage de la lunette (m) : la distance qu'annonce Anton au briefing (« Trente et un mètres. »)
   profil: {
     near: 0.1, far: 200,
     brume: { type: 'lin', couleur: 0x87a0b0, debut: 50, fin: 140 },

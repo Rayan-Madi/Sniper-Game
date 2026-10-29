@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { MAIN_SRC, analyse, callsIn } from '../gfx/mainSource.js'
+import { resolve } from 'node:path'
+import { MAIN_SRC, analyse, callsIn, readSource } from '../gfx/mainSource.js'
+
+const OCCLUSION_SRC = readSource(resolve(__dirname, '../../src/shot/occlusion.js'))
 
 // Câblage des zones touchées dans main.js (spec du lot 2, §3.4 ; plan, tâche T4). Les pièces ont leurs tests
 // (hitzones, score) ; main.js ne s'importe pas sous jsdom, cette garde lit son source :
@@ -18,14 +21,21 @@ const texteAppel = (nom, callee) => {
   return c ? a.source.slice(c.start, c.end) : null
 }
 
+// Depuis la tâche A4 du lot 3, la balle vole sur une trajectoire en segments : main.js passe les PNJ de la mission à
+// impactSurSegment (src/shot/occlusion.js), qui cherche leurs zones par npcHit sur chaque segment (tests/shot/
+// segment.test.js). Témoin de ces deux gardes réécrites : le main.js d'avant la tâche A4 (97336ed), qui cherchait les
+// PNJ lui-même (firstHit), les fait rougir (vu rouge).
 describe('ce que la balle touche sur un PNJ', () => {
-  it('npcHit vient de src/shot/hitzones.js', () => {
-    expect(a.imports.get('npcHit')?.from).toBe('./shot/hitzones.js')
+  it('npcHit (src/shot/hitzones.js) est cherché sur chaque segment par impactSurSegment (src/shot/occlusion.js)', () => {
+    expect(a.imports.get('impactSurSegment')?.from).toBe('./shot/occlusion.js')
+    expect(OCCLUSION_SRC).toMatch(/import \{ npcHit \} from '\.\/hitzones\.js'/)
+    expect(OCCLUSION_SRC).toMatch(/export function impactSurSegment\([\s\S]*?npcHit\(ray, npcs/)
   })
 
-  it('firstHit passe par npcHit, plus par la boîte de getBounds', () => {
-    expect(appels('firstHit')).toContain('npcHit')
-    expect(appels('firstHit')).not.toContain('n.getBounds')
+  it('toucherSegment passe les PNJ de la mission à impactSurSegment, plus par la boîte de getBounds', () => {
+    expect(appels('toucherSegment')).toContain('impactSurSegment')
+    expect(texteAppel('toucherSegment', 'impactSurSegment')).toMatch(/\bnpcs\b/)
+    expect(appels('toucherSegment')).not.toContain('n.getBounds')
   })
 
   it('la règle « tête au-dessus de 1,45 m » a disparu', () => {

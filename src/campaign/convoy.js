@@ -1,7 +1,22 @@
 // Convoi de la mission 5 : trois jeeps qui traversent la route, avec leurs occupants.
-// convoy = { baseX, z, groundY, dir, speed, vehicles: [{ mesh, offsetX, riders: [{ npc, dx, dy, dz }] }] } :
-// baseX avance le long de X, z est l'axe de la route, groundY le dessus de sa chaussée (src/maps/m5-convoi.js).
+// convoy = { baseX, depart, z, groundY, dir, speed, vehicles: [{ mesh, offsetX, riders: [{ npc, dx, dy, dz }] }] } :
+// baseX avance le long de X depuis depart (l'entrée de la route), dans le sens dir ; z est l'axe de la route, groundY
+// le dessus de sa chaussée (src/maps/m5-convoi.js).
 import { disposeObject } from '../gfx/dispose.js'
+
+// Abscisse du convoi (m) : la route parcourue depuis son entrée, dans son sens de marche.
+export function abscisseConvoi(convoy) {
+  return (convoy.baseX - convoy.depart) * convoy.dir
+}
+
+// Support d'une cible touchée à bord du convoi (dernierTirMortel.support, contrat du lot 4) : le véhicule qui la porte
+// (son entrée de convoy.vehicles), l'abscisse du convoi au coup (sTir) et à l'impact (sImpact : celle de l'image où la
+// balle l'a touchée, après que le convoi a roulé, la pose contre laquelle le segment a été cherché). null si le PNJ
+// n'est à bord d'aucun véhicule, ou sans convoi.
+export function supportDuTir(convoy, npc, sTir) {
+  const vehicule = convoy ? convoy.vehicles.find(v => v.riders.some(r => r.npc === npc)) : null
+  return vehicule ? { type: 'convoi', vehicule, sTir, sImpact: abscisseConvoi(convoy) } : null
+}
 
 // Au-delà, le convoi a quitté la zone de tir.
 export const CONVOY_END_X = 60

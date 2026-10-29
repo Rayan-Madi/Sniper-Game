@@ -25,6 +25,25 @@ export const CULASSE = {
   fermetureS: 0.9,      // instant du son de fermeture
 }
 
+// ─── Balle (src/shot/ballistics.js, src/shot/balle.js ; spec du lot 3, §2 c) ─
+// Trajectoire sans traînée : partie de l'œil, la balle recroise la ligne de visée à la distance de réglage de la
+// lunette (celle qu'annonce Anton, champ zero de la mission), puis passe dessous en tombant.
+export const BALLE = {
+  vitesse: 800,         // vitesse à la bouche (m/s), sans Vélocité : 0,04 s de vol à 31 m, 0,19 s à 155 m, 0,54 s à 430 m
+  vitesseParNiveau: 37.5,   // ajoutée par niveau de Vélocité (getStats().v0) : 950 m/s au niveau 4, 0,45 s à 430 m
+  gravite: 9.81,        // chute (m/s²) : sans réglage, 7,7 cm à 100 m et 1,41 m à 430 m ; la lunette réglée la rattrape
+  volMaxS: 0.6,         // une balle qui n'a rien rencontré au bout de ce temps (480 m, au-delà des 448 m de M4) est perdue :
+                        // rien à entendre, personne ne réagit, le sillage s'arrête là où elle est
+  segmentMaxS: 0.05,    // plus long bout de trajectoire cherché d'un coup (le pas plafonné de la boucle) : la corde s'écarte
+                        // de la courbe de 3 mm au plus
+}
+
+// ─── Télémètre de la lunette (src/shot/telemetre.js) ───────────────
+export const TELEMETRE = {
+  periodeS: 0.1,        // la distance au point visé est relevée 10 fois par seconde (un rayon contre le décor et les PNJ)
+  porteeM: 2000,        // au-delà, ou dans le ciel, il affiche « --- m »
+}
+
 // ─── Le coup de feu à l'écran ──────────────────────────────────────
 export const LUEUR = {
   tenueS: 0.04,         // temps où la lueur chaude des bords de la lunette reste pleine après le coup
@@ -100,7 +119,8 @@ export const ZONES = {
 // ─── Ce que la balle traverse (src/shot/occlusion.js) ──────────────
 export const OCCLUSION = {
   departM: 0.5,         // le décor à moins de 50 cm de l'œil n'arrête pas la balle : l'appui du poste (rebord, muret)
-  loinM: 1000,          // une balle qui ne rencontre rien part au loin : son point sur le rayon (bout du sillage), à 1 km
+  loinM: 1000,          // un rayon qui ne rencontre rien : son point au loin (resolveImpact) ; la balle, elle, est perdue
+                        // au bout de son vol (BALLE.volMaxS), là où elle est
 }
 
 // ─── Son ───────────────────────────────────────────────────────────

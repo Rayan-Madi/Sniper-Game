@@ -9,6 +9,7 @@ export default {
   poste: { oeil: 'oeil', regard: 'regard' },   // le toit de l'immeuble nord, qui plonge sur le centre de la place
   zone: 'zone',
   zoom: { depart: 4, min: 3, max: 6 },
+  zero: 42,   // réglage de la lunette (m) : la distance qu'annonce Anton au briefing
   profil: {
     near: 0.1, far: 200,
     brume: { type: 'lin', couleur: 0x0a0a18, debut: 40, fin: 100 },

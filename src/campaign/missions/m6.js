@@ -9,6 +9,7 @@ export default {
   poste: { oeil: 'oeil', regard: 'regard' },   // la fenêtre de l'immeuble d'en face, qui vise l'appartement
   zone: 'zone',
   zoom: { depart: 4, min: 3, max: 6 },
+  zero: 38,   // réglage de la lunette (m) : la distance qu'annonce Anton au briefing
   profil: {
     near: 0.1, far: 200,
     brume: { type: 'lin', couleur: 0x0a0a14, debut: 60, fin: 130 },

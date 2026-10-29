@@ -166,6 +166,7 @@ function defautsDeForme(m) {
   for (const k of ['sorties', 'abris']) exige(Array.isArray(m[k]) && m[k].every(nom), k)
   for (const k of ['fenetres', 'radio']) exige(Array.isArray(m[k]), k)
   exige(!!m.fin && fini(m.fin.calmeS) && m.fin.calmeS >= 0, 'fin')
+  exige(fini(m.zero) && m.zero > 0, 'zero')
   if (m.choixMoral !== undefined) {
     const x = m.choixMoral || {}
     exige(nom(x.cadenas) && !!x.indice && fini(x.indice.apresS) && nom(x.indice.texte) && Number.isInteger(x.points) &&
@@ -189,6 +190,26 @@ describe('chaque mission a tous ses champs, de la forme attendue', () => {
     expect(defautsDeForme({ ...MISSIONS[2], zoom: { depart: 2, min: 3, max: 6 } })).toEqual(['zoom'])
     expect(defautsDeForme({ ...MISSIONS[5], casting: { ...MISSIONS[5].casting, cibles: [{ routine: 'danse' }] } }))
       .toEqual(['casting.cibles'])
+  })
+})
+
+// Réglage de la lunette (spec du lot 3, décision 1 ; plan du lot 3a, tâche A4) : la distance qu'annonce Anton au
+// briefing, affichée « ZÉRO n m » dans la lunette ; la balle recroise la ligne de visée à cette distance. Le compteur de
+// distance de chaque briefing (docs/superpowers/maquettes/cinematiques/briefing-m<n>.html, K.counter) la dit, sauf
+// celui de M5, qui n'annonce aucun chiffre : 138 m y est lu sur l'échelle de la carte (spec §3 ; REPRISE.md, décisions
+// du 7 octobre 2026). Ce réglage est déjà le vrai, bien que M3, M4 et M5 se jouent encore de 20 à 44 m de leur poste
+// jusqu'aux sous-lots 3c et 3d : la balle y passe au-dessus de la visée, de 2 à 4 cm en M3 et M5, de 6 à 13 cm en M4.
+// Témoin : les missions d'avant la tâche n'ont pas de réglage (vu rouge).
+describe('le réglage de la lunette : la distance qu\'annonce le briefing (décision 1)', () => {
+  const ANNONCE = { 1: 31, 2: 42, 3: 155, 4: 430, 5: 138, 6: 38 }
+  it('M1 31 m, M2 42 m, M3 155 m, M4 430 m, M5 138 m, M6 38 m', () => {
+    expect(Object.fromEntries(MISSIONS.map(m => [m.numero, m.zero]))).toEqual(ANNONCE)
+  })
+
+  it.each([1, 2, 3, 4, 6])('M%i : le compteur de distance de son briefing va jusqu\'à ce réglage', n => {
+    const maquette = readFileSync(join(ROOT, 'docs', 'superpowers', 'maquettes', 'cinematiques', `briefing-m${n}.html`), 'utf8')
+    const comptes = [...maquette.matchAll(/counter\('[\w-]+', 0, (\d+), \d+, ' m'/g)].map(x => +x[1])
+    expect(comptes).toContain(missionFor(n).zero)
   })
 })
 

@@ -49,9 +49,14 @@ describe("l'arrivée de la balle", () => {
     expect(a.imports.get('playShotSounds')?.from).toBe('./audio.js')
   })
 
-  it('la résolution joue le calendrier de ce que la balle a touché, après firstHit', () => {
+  // Depuis la tâche A4 du lot 3, ce que la balle a touché vient de son arrivée (avancerBalle) : resolveBullet en tire le
+  // rôle (roleDe) avant de jouer le calendrier. Témoin : le main.js d'avant la tâche (97336ed), qui cherchait l'impact
+  // lui-même (firstHit) et prenait la distance sur le rayon du coup, fait rougir ces deux gardes réécrites (vu rouge).
+  it('la résolution joue le calendrier de ce que la balle a touché, une fois son arrivée lue (roleDe)', () => {
     const c = appels('resolveBullet')
-    expect(c.indexOf('planShotSounds')).toBeGreaterThan(c.indexOf('firstHit'))
+    expect(c.indexOf('roleDe'), 'resolveBullet lit l\'arrivée (roleDe)').toBeGreaterThan(-1)
+    expect(textesAppel('resolveBullet', 'roleDe')).toEqual(['roleDe(arrivee.impact)'])
+    expect(c.indexOf('planShotSounds')).toBeGreaterThan(c.indexOf('roleDe'))
     expect(c.indexOf('playShotSounds')).toBeGreaterThan(c.indexOf('planShotSounds'))
     // le calendrier joué est celui que planShotSounds vient de rendre (directement ou par une variable)
     const [joue] = textesAppel('resolveBullet', 'playShotSounds')
@@ -62,7 +67,7 @@ describe("l'arrivée de la balle", () => {
 
   it("le calendrier part de la distance du tireur au point d'impact, de la matière et de la zone touchées", () => {
     const [plan = ''] = textesAppel('resolveBullet', 'planShotSounds')
-    expect(plan).toMatch(/distance:\s*[\w.]+\.distanceTo\([\w.]*ray\.origin\)/)
+    expect(plan).toMatch(/distance:\s*[\w.]+\.distanceTo\([\w.]*traj\.origine\)/)   // l'œil du tireur, origine de la trajectoire
     expect(plan).toMatch(/surface:\s*hit\.surface/)
     expect(plan).toMatch(/\bpart\b/)
   })

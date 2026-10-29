@@ -11,6 +11,7 @@ let mapObjects = []
 let obstacles = []   // AABB XZ des objets solides : les PNJ ne les traversent pas
 let ambientFn = null // animation d'ambiance de la map (pluie, etc.)
 let solids = null    // maillages qui arrêtent la balle, relevés à la demande (solidMeshes), oubliés quand la carte change
+let glass = null     // vitres dont la balle laisse la trace (vitres), relevées de même
 
 // Retire la carte courante et libère ses ressources GPU (géométries, matériaux, carte d'ombre des lumières ; la
 // géométrie de la pluie du port est dans mapObjects comme le reste). Sans cela, chaque lancement de mission laissait
@@ -21,6 +22,7 @@ export function clear() {
   obstacles = []
   ambientFn = null
   solids = null
+  glass = null
 }
 
 // ─── Ce qui arrête une balle (spec du lot 2, §3.4) ──────────────────
@@ -37,15 +39,33 @@ export function solide(obj, surface = 'pierre') {
   obj.traverse(o => {
     if (o.isMesh && !o.material.isMeshBasicMaterial) { o.userData.solid = true; o.userData.surface = surface }
   })
-  solids = null
+  solids = null; glass = null
   return obj
 }
 
 // La balle traverse obj (vitre, verre, tissu) : ses maillages ne sont plus solides.
 export function traversable(obj) {
   obj.traverse(o => { if (o.isMesh) { delete o.userData.solid; delete o.userData.surface } })
-  solids = null
+  solids = null; glass = null
   return obj
+}
+
+// Vitre (spec du lot 3, §2 c) : la balle la traverse aussi, mais sa traversée est relevée sur la trajectoire
+// (dernierTirMortel.traversees : le rejeu de la kill-cam y fait ses éclats). Ses maillages ne sont plus solides, leur
+// matière est 'verre'. La baie de M6 et la cabine de la grue de M3 (sous-lots 3b et 3c).
+export function vitre(obj) {
+  obj.traverse(o => { if (o.isMesh) { delete o.userData.solid; o.userData.surface = 'verre' } })
+  solids = null; glass = null
+  return obj
+}
+
+// Vitres de la carte affichée, que la balle traverse en y laissant sa trace (vitre). Vide après clearMap().
+export function vitres() {
+  if (!glass) {
+    glass = []
+    for (const o of mapObjects) o.traverse(m => { if (m.isMesh && !m.userData.solid && m.userData.surface === 'verre') glass.push(m) })
+  }
+  return glass
 }
 
 // Maillages solides de la carte affichée (ni les jeeps du convoi, ni le cadenas du port : ils sont à la mission).
@@ -98,7 +118,7 @@ export function addObstacle(o) { obstacles.push(o) }
 export function add(obj) {
   scene.add(obj)
   mapObjects.push(obj)
-  solids = null
+  solids = null; glass = null
   return obj
 }
 

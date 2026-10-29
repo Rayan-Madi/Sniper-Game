@@ -9,6 +9,7 @@ export default {
   poste: { oeil: 'oeil', regard: 'regard' },   // le bord avant de la tour de garde, qui plonge vers la cour
   zone: 'zone',
   zoom: { depart: 4, min: 3, max: 6 },
+  zero: 430,  // réglage de la lunette (m) : la distance qu'annonce Anton au briefing
   profil: {
     near: 0.1, far: 200,
     brume: { type: 'lin', couleur: 0x9ab0c0, debut: 70, fin: 160 },

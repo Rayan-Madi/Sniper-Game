@@ -12,12 +12,15 @@ let effects = []
 let particleGeo = null
 const particleGeometry = () => particleGeo || (particleGeo = markShared(new THREE.SphereGeometry(1, 4, 4)))
 
-// Sillage de la balle (spec du lot 2, §3.3) : un trait fin parcourt la trajectoire pendant le temps de vol, sa tête au
-// rythme de la balle et sa queue qui s'estompe derrière elle, puis s'efface une fois la balle arrivée. Il remplace le
-// traceur dessiné à l'impact seulement. Géométrie (deux points réécrits à chaque image, la queue transparente) et
-// matériau à lui, libérés en fin de vie. Réglages : SILLAGE (src/shot/tuning.js). Renvoie le sillage, que
-// retargetTrail recale si la balle, à la fin de son vol, touche autre chose que ce qu'on voyait au coup.
-export function spawnTrail(from, to, flightS) {
+// Sillage de la balle (spec du lot 2, §3.3 ; spec du lot 3, §2 c) : un trait fin parcourt la trajectoire pendant le
+// temps de vol, sa tête au rythme de la balle et sa queue qui s'estompe derrière elle, puis s'efface une fois la balle
+// arrivée. Il remplace le traceur dessiné à l'impact seulement. La balle vole sur une courbe (src/shot/ballistics.js) :
+// la tête du sillage est la balle elle-même, partie du canon (`depart`, sous la lunette, alors que la trajectoire part
+// de l'œil), qui rejoint sa trajectoire en arrivant au point d'impact, à `finS` secondes de vol. Géométrie (deux points
+// sur la courbe, réécrits à chaque image, la queue transparente) et matériau à lui, libérés en fin de vie. Réglages :
+// SILLAGE (src/shot/tuning.js). Renvoie le sillage, que retargetTrail recale si la balle, à l'arrivée, touche autre
+// chose que ce qu'on prévoyait au coup.
+export function spawnTrail(depart, trajectoire, finS) {
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3))
   // Queue transparente, tête d'un blanc chaud : le trait s'estompe derrière la balle
@@ -27,32 +30,47 @@ export function spawnTrail(from, to, flightS) {
   const line = new THREE.Line(geo, mat)
   line.frustumCulled = false   // les points bougent à chaque image : l'enveloppe calculée une fois serait périmée
   scene.add(line)
-  const vol = Math.max(1e-3, flightS)
-  const e = { obj: line, type: 'trail', from: from.clone(), to: to.clone(), vol, age: 0,
-    life: vol + SILLAGE.fonduS, maxLife: vol + SILLAGE.fonduS }
+  const e = { obj: line, type: 'trail', traj: trajectoire, decalage: depart.clone().sub(trajectoire.origine), age: 0 }
+  finDuSillage(e, finS)
   placeTrail(e)
   effects.push(e)
   return e
 }
 
-// Le bout du sillage passe à `to` (le point d'impact résolu à la fin du vol : le PNJ est sorti de la ligne, ou y est
-// entré) ; sa tête et sa queue gardent leur place dans le vol. Sans effet sur un sillage déjà effacé ou retiré.
-export function retargetTrail(trail, to) {
+// Fin du vol du sillage (s) : sa durée de vie en découle (le vol, puis l'effacement).
+function finDuSillage(e, finS) {
+  e.fin = Math.max(1e-3, finS)
+  e.maxLife = e.fin + SILLAGE.fonduS
+  e.life = e.maxLife - e.age
+}
+
+// Le bout du sillage passe à `finS` secondes de vol (l'instant de l'impact résolu à l'arrivée de la balle : le PNJ
+// est sorti de la ligne, ou y est entré) ; sa tête continue sur la trajectoire jusque-là, ou s'y arrête. Sans effet
+// sur un sillage déjà effacé ou retiré.
+export function retargetTrail(trail, finS) {
   if (!trail || !effects.includes(trail)) return
-  trail.to.copy(to)
+  finDuSillage(trail, finS)
   placeTrail(trail)
+}
+
+// Point du sillage à tau secondes de vol : sur la trajectoire, décalé vers le canon d'autant moins qu'il approche de
+// la fin du vol (au point d'impact, il est sur la trajectoire).
+function pointDuSillage(e, tau, out) {
+  return e.traj.pointA(tau, out).addScaledVector(e.decalage, Math.max(0, 1 - tau / e.fin))
 }
 
 // Points du sillage à son âge : tête au rythme du vol, queue en retard d'une part fixe du trajet, puis effacement.
 const _p = new THREE.Vector3()
 function placeTrail(e) {
   const pos = e.obj.geometry.attributes.position
-  const tete = Math.min(1, e.age / e.vol)
-  const queue = Math.max(0, Math.min(1, (e.age - SILLAGE.longueur * e.vol) / e.vol))
-  pos.setXYZ(0, ...(_p.lerpVectors(e.from, e.to, queue).toArray()))
-  pos.setXYZ(1, ...(_p.lerpVectors(e.from, e.to, tete).toArray()))
+  const tete = Math.min(e.fin, e.age)
+  const queue = Math.max(0, Math.min(e.fin, e.age - SILLAGE.longueur * e.fin))
+  pointDuSillage(e, queue, _p)
+  pos.setXYZ(0, _p.x, _p.y, _p.z)
+  pointDuSillage(e, tete, _p)
+  pos.setXYZ(1, _p.x, _p.y, _p.z)
   pos.needsUpdate = true
-  e.obj.material.opacity = SILLAGE.opacite * Math.max(0, Math.min(1, 1 - (e.age - e.vol) / SILLAGE.fonduS))
+  e.obj.material.opacity = SILLAGE.opacite * Math.max(0, Math.min(1, 1 - (e.age - e.fin) / SILLAGE.fonduS))
 }
 
 // Impact : éclaboussure de particules au point touché

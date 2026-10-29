@@ -9,6 +9,7 @@ export default {
   poste: { oeil: 'oeil', regard: 'regard' },   // le promontoire, qui vise la route
   zone: 'zone',
   zoom: { depart: 4, min: 3, max: 6 },
+  zero: 138,  // réglage de la lunette (m) : la distance du briefing, lue sur l'échelle de sa carte (Anton ne la chiffre pas)
   profil: {
     near: 0.1, far: 200,
     brume: { type: 'lin', couleur: 0xb0a088, debut: 80, fin: 180 },
