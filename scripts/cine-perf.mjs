@@ -15,7 +15,9 @@
 //   --annexe=nom   ajoute la mesure (sans ses relevés bruts) à docs/superpowers/specs/annexes/<nom>, créée au besoin ;
 //                  les mesures déjà présentes sont gardées, chacune numérotée (passe) par cas et par ralenti
 // Variables : CHROME (chemin de Chrome), BASE_URL (défaut http://localhost:5173/), SWIFTSHADER=1 (rendu logiciel au lieu
-// de la carte graphique).
+// de la carte graphique). Sans SWIFTSHADER, une mesure que Chrome a faite hors de la carte graphique (repli silencieux
+// sur un rendu logiciel quand elle n'est pas disponible) est signalée : avertissement à l'écran, champ avertissement
+// dans l'annexe et dans les relevés bruts.
 // Code de sortie : 0 ; 1 si la mesure a échoué (scène jamais montée ou jamais finie, aucune image, erreur dans la
 // console de la page : rien n'est alors ajouté à l'annexe) ; 2 pour une option fausse.
 // Conditions de mesure, toujours les mêmes :
@@ -185,6 +187,22 @@ export function avecDelai(promesse, ms, message) {
   return Promise.race([promesse, new Promise((_, ko) => { h = setTimeout(() => ko(new Error(message)), ms) })]).finally(() => clearTimeout(h))
 }
 
+// Rendu relevé en fin de mesure → avertissement (texte), ou null. La carte graphique est demandée (drapeaux GPU), mais
+// Chrome se replie en silence sur un rendu logiciel quand elle n'est pas disponible (pilote absent, bureau à distance,
+// machine virtuelle) : WebGL sur SwiftShader (son repli) ou sur WARP (« Microsoft Basic Render Driver », celui de
+// Windows), composition des calques hors de la carte. Les durées d'image ne valent alors rien face aux plafonds de la
+// spec (§3.6) ni face à la v1, mesurée sur la carte. Rien à signaler quand le rendu logiciel est demandé (SWIFTSHADER=1).
+// moteur : renderer WebGL (UNMASKED_RENDERER_WEBGL) ; composition : gpu_compositing de SystemInfo.getInfo.
+export function avertissementRendu({ moteur, composition, logiciel }) {
+  if (logiciel) return null
+  const raisons = []
+  if (/swiftshader|basic render driver/i.test(moteur)) raisons.push(`WebGL en rendu logiciel (${moteur})`)
+  if (composition !== 'enabled') raisons.push(`composition ${composition}`)
+  return raisons.length
+    ? `mesure faite hors de la carte graphique (SWIFTSHADER non posé) : ${raisons.join(', ')} ; durées d'image sans valeur face aux plafonds (spec §3.6) et à la v1`
+    : null
+}
+
 // Connexion DevTools minimale (comme scripts/memtest.mjs) ; surEvenement reçoit les événements (sans id). Connexion
 // fermée (Chrome tombé) : les demandes en cours échouent aussitôt au lieu d'attendre leur délai.
 function connect(url, surEvenement = () => {}) {
@@ -226,7 +244,8 @@ const texteConsole = m => m.method === 'Runtime.exceptionThrown'
   : `console.error : ${m.params.args.map(a => a.value ?? a.description ?? '').join(' ')}`
 
 // Une mesure : Chrome lancé, page ?cine= ouverte sous la sonde, attente du démontage de la scène, relevés lus, Chrome
-// fermé. → { brut (window.__cinePerf), erreurs (console.error et exceptions de la page), rendu, modelesBloques }.
+// fermé. → { brut (window.__cinePerf), erreurs (console.error et exceptions de la page), rendu, avertissement (rendu
+// hors de la carte graphique, ou null), modelesBloques }.
 async function mesurer({ url, ralenti, logiciel }) {
   const profil = mkdtempSync(join(tmpdir(), 'cine-perf-'))
   const proc = spawn(CHROME, ['--headless=new', ...(logiciel ? SWIFTSHADER : GPU), '--hide-scrollbars', '--mute-audio',
@@ -273,8 +292,9 @@ async function mesurer({ url, ralenti, logiciel }) {
     const brut = JSON.parse(await evaluer(page, 'JSON.stringify(window.__cinePerf)'))
     const angle = await evaluer(page, `(() => { const g = document.createElement('canvas').getContext('webgl')
       const x = g && g.getExtension('WEBGL_debug_renderer_info'); return g ? g.getParameter(x ? x.UNMASKED_RENDERER_WEBGL : g.RENDERER) : 'sans WebGL' })()`)
-    const rendu = `${angle}, composition ${gpu.featureStatus?.gpu_compositing ?? 'inconnue'}`
-    return { brut, erreurs, rendu, modelesBloques }
+    const composition = gpu.featureStatus?.gpu_compositing ?? 'inconnue'
+    const avertissement = avertissementRendu({ moteur: angle, composition, logiciel })
+    return { brut, erreurs, rendu: `${angle}, composition ${composition}`, avertissement, modelesBloques }
   } finally {
     const fermer = navigateur || page
     if (fermer) { try { await Promise.race([fermer.send('Browser.close'), sleep(2000)]) } catch { /* déjà fermé */ } }
@@ -314,13 +334,13 @@ async function main(argv) {
   const url = urlCine(base, o.id, o.params), cas = cleDuCas(o.id, o.params)
   console.log(`cine-perf : ${cas}, processeur ${o.ralenti > 1 ? `ralenti ×${o.ralenti}` : 'à sa vitesse'} (${url})`)
   // Garde-fou de toute la mesure : une page qui ne répond plus (évaluation sans réponse) ne bloque jamais le script.
-  const { brut, erreurs, rendu, modelesBloques } = await avecDelai(mesurer({ url, ralenti: o.ralenti, logiciel: !!process.env.SWIFTSHADER }),
+  const { brut, erreurs, rendu, avertissement, modelesBloques } = await avecDelai(mesurer({ url, ralenti: o.ralenti, logiciel: !!process.env.SWIFTSHADER }),
     MONTAGE_MS + SCENE_MS + 60000, `mesure arrêtée au bout de ${(MONTAGE_MS + SCENE_MS + 60000) / 60000} minutes : Chrome ne répond plus`)
   const s = synthese(brut)
   const processeurs = cpus()
   let mesure = {
     cas, scene: o.id, params: o.params, ralenti: o.ralenti, passe: null,
-    date: new Date().toISOString(), commit: gitState(repo), url, rendu,
+    date: new Date().toISOString(), commit: gitState(repo), url, rendu, ...(avertissement ? { avertissement } : {}),
     machine: `${processeurs[0]?.model.trim() ?? 'processeur inconnu'}, ${processeurs.length} fils`,
     ecran: brut.ecran, visibilite: brut.visibilite, etalonMs: brut.etalonMs, modelesBloques, ...s,
   }
@@ -341,6 +361,7 @@ async function main(argv) {
     `${s.lentes} image(s) au-delà de ${BUDGET_MS} ms ; animations en cours au plus ${s.animationsMax}` +
     `${s.animationsMaxA === null ? '' : ` (à ${sec(s.animationsMaxA)} s)`}, ${s.animationsTotalMax} avec les finies`)
   console.log(`rendu : ${rendu} ; page ${brut.ecran}, ${brut.visibilite} ; étalon ${nombre(brut.etalonMs, 1)} ms ; ${modelesBloques} modèle(s) bloqué(s)`)
+  if (avertissement) console.warn(`attention : ${avertissement}`)
   console.log(`relevés : ${brutFichier}`)
   if (echec) { console.error(`mesure en échec : ${echec}`); return 1 }
   return 0

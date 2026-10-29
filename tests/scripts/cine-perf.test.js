@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { statsImages, statsAnimations, sonde, synthese, ajouterMesure, lireOptions, urlCine, cleDuCas, avecDelai, BUDGET_MS } from '../../scripts/cine-perf.mjs'
+import { statsImages, statsAnimations, sonde, synthese, ajouterMesure, lireOptions, urlCine, cleDuCas, avecDelai, avertissementRendu, BUDGET_MS } from '../../scripts/cine-perf.mjs'
 import { frameStats } from '../../src/gfx/stats.js'
 
 // Coût de rendu des cinématiques (spec cinématiques v2 §3.6, tâche C3) : partie pure de scripts/cine-perf.mjs (durées
@@ -198,5 +198,35 @@ describe('adresse et nom du cas', () => {
   it('nom du cas : la scène, et ses paramètres comme dans tests/briefing/montage.test.js', () => {
     expect(cleDuCas('epilogue', { port: 'enfermes' })).toBe('epilogue?port=enfermes')
     expect(cleDuCas('m3', {})).toBe('m3')
+  })
+})
+
+// La carte graphique est demandée (drapeaux de memtest --gpu), mais Chrome se replie en silence sur un rendu logiciel
+// quand elle n'est pas disponible : la mesure le signale, sauf si le rendu logiciel est demandé (SWIFTSHADER=1).
+describe('avertissementRendu (mesure faite hors de la carte graphique)', () => {
+  const CARTE = 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3080 (0x00002206) Direct3D11 vs_5_0 ps_5_0, D3D11)'   // annexe de la v1
+  const SWIFTSHADER = 'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)'
+  const WARP = 'ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)'
+
+  it('carte graphique et composition sur la carte (rendu des 40 mesures de la v1) : rien à signaler', () => {
+    expect(avertissementRendu({ moteur: CARTE, composition: 'enabled', logiciel: false })).toBeNull()
+  })
+
+  it('WebGL en rendu logiciel (SwiftShader, repli de Chrome ; WARP, celui de Windows) : signalé, moteur nommé', () => {
+    for (const moteur of [SWIFTSHADER, WARP]) {
+      expect(avertissementRendu({ moteur, composition: 'enabled', logiciel: false })).toEqual(expect.stringContaining(moteur))
+    }
+  })
+
+  it('composition hors de la carte graphique, ou inconnue : signalée, état nommé', () => {
+    for (const composition of ['disabled_software', 'unavailable_software', 'inconnue']) {
+      expect(avertissementRendu({ moteur: CARTE, composition, logiciel: false })).toEqual(expect.stringContaining(`composition ${composition}`))
+    }
+    expect(avertissementRendu({ moteur: SWIFTSHADER, composition: 'disabled_software', logiciel: false }))
+      .toEqual(expect.stringMatching(/SwiftShader driver.*composition disabled_software|composition disabled_software.*SwiftShader driver/))
+  })
+
+  it('rendu logiciel demandé (SWIFTSHADER=1) : rien à signaler', () => {
+    expect(avertissementRendu({ moteur: SWIFTSHADER, composition: 'disabled_software', logiciel: true })).toBeNull()
   })
 })
