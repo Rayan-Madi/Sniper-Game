@@ -928,7 +928,10 @@ function shoot() {
   stats.silenced ? playSilencedShot() : playShot()
   stress = Math.min(1, stress + STRESS.parTir)
 
-  // CAPTURER la visée MAINTENANT (le réticule visible au clic), sinon le tremblement a dérivé pendant le vol
+  // CAPTURER la visée MAINTENANT (le réticule visible au clic), sinon le tremblement a dérivé pendant le vol. La caméra
+  // est d'abord recadrée sur le regard du clic : la souris a pu bouger depuis l'image, et le rayon du tir comme la vue
+  // gardée pour le rejeu (balle.vue, plus bas) partent de ce même regard.
+  aimMissionCamera()
   const ray = rayonDuReticule()
   // La balle (spec du lot 3, §2 c) : de l'œil, le long du réticule, relevée pour recroiser la visée à la distance de
   // réglage de la mission (décision 1), à la vitesse de la Vélocité ; elle vole sur l'horloge de la mission
@@ -1049,9 +1052,10 @@ function resolveBullet(arrivee) {
   }
 
   // Tir raté : la balle s'arrête dans le décor (gerbe de sa matière, marque persistante sur la surface, qui roule avec
-  // une jeep touchée), ou se perd au bout de son vol (BALLE.volMaxS). Les PNJ proches du point d'impact réagissent
-  // (personne pour une balle perdue : elle l'est à 480 m de l'œil, loin de tout PNJ) ; le fil ne parle de fuite que si
-  // des PNJ fuient.
+  // une jeep touchée), ou se perd au bout de son vol (BALLE.volMaxS). Sans silencieux, le stress du tir manqué monte, et
+  // les PNJ proches du point d'impact réagissent. Une balle perdue ne fait réagir personne (spec du lot 3, §2 c : ni son
+  // ni réaction), où qu'elle se perde : en M4 à 430 m, une balle passée au-dessus des PNJ du fond de la zone se perd à
+  // une trentaine de mètres d'eux. Le fil ne parle de fuite que si des PNJ fuient.
   if (role === 'decor' || role === 'rien') {
     const shotPos = closestPt
     if (role === 'decor') {
@@ -1062,9 +1066,11 @@ function resolveBullet(arrivee) {
     let fuyards = 0
     if (!stats.silenced) {
       stress = Math.min(1, stress + STRESS.tirManque)
-      fuyards = fleeNearby(shotPos, 20)
-      reactNearby(shotPos, 28)
-      checkGuardAlert(shotPos, stats)
+      if (role === 'decor') {
+        fuyards = fleeNearby(shotPos, 20)
+        reactNearby(shotPos, 28)
+        checkGuardAlert(shotPos, stats)
+      }
     }
     addKillFeed(missFeed(fuyards))
   }
