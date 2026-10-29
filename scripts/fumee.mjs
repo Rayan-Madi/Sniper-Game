@@ -4,15 +4,15 @@
 // Usage : node scripts/fumee.mjs [--exe=release/win-unpacked/Sniper.exe], par le verrou Chrome sur la machine partagée
 //   sans --exe : « electron . --fumee » avec l'Electron de node_modules, sur dist/ (prérequis : npx vite build)
 //   --exe=…    : l'exécutable empaqueté (tâche E2, prérequis : npm run dist), lancé avec --fumee
-// Refus avant tout lancement (code 2, aucun profil créé) : argument autre que --exe=<chemin non vide>, dist/index.html
-// absent, paquet sans mode --fumee (la chaîne absente de son code : construit avant E1), build périmé (un fichier dont
-// il est fait plus récent que lui), exécutable introuvable.
-// Sortie : le build vérifié (date, commit, état de la copie), le JSON du scénario ({ echecs, requetesBloquees, modeles,
-// images, sauvegarde, … }), puis le verdict ; code 0 (vert), 1 (rouge), 2 (refus, ou aucun résultat : Electron arrêté
-// avant d'écrire, sans « [fumee] debut » au bout de 30 s, ou tué au délai de garde), 130 (interrompu). Profil jetable
-// vide, supprimé à la fin ou sur interruption ; Electron et ses processus fils arrêtés au délai de garde ou sur
-// interruption. Aucune fenêtre, aucun port de débogage, aucun téléchargement (binaire Electron absent : le script le dit
-// et s'arrête).
+// Refus avant tout lancement (code 2, aucun profil créé), dans cet ordre : argument autre qu'un seul --exe=<chemin non
+// vide>, exécutable introuvable, paquet sans mode --fumee (la chaîne absente de son code : construit avant E1),
+// dist/index.html absent, build périmé (un fichier ou un dossier dont il est fait plus récent que lui).
+// Sortie : le build vérifié (date, commit, nombre de lignes de git status --porcelain), une fois ces refus passés, le
+// JSON du scénario ({ echecs, requetesBloquees, modeles, images, sauvegarde, … }, lu à la fermeture des flux
+// d'Electron), puis le verdict ; code 0 (vert), 1 (rouge), 2 (refus, ou aucun résultat : Electron arrêté avant
+// d'écrire, sans « [fumee] debut » au bout de 30 s, ou tué au délai de garde), 130 (interrompu). Profil jetable vide,
+// supprimé à la fin ou sur interruption ; Electron et ses processus fils arrêtés au délai de garde ou sur interruption.
+// Aucune fenêtre, aucun port de débogage, aucun téléchargement (binaire Electron absent : le script le dit et s'arrête).
 // Machine partagée : un seul Electron ou Chrome sans interface à la fois (verrou Chrome des chantiers parallèles).
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -22,9 +22,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const MARQUE = '[fumee] '
 const LIGNE_DEBUT = '[fumee] debut'           // écrite par electron/main.js dès son départ en mode --fumee
-const DELAI_DEBUT_MS = 30 * 1000              // sans elle au-delà : l'exécutable ignore --fumee
+const DELAI_DEBUT_MS = 30 * 1000              // sans elle au-delà : Electron bloqué au lancement (ou paquet trop ancien)
 const DELAI_GARDE_MS = 5 * 60 * 1000          // au-delà du délai du processus principal (3 min) : Electron bloqué
-const SIGNAUX = ['SIGINT', 'SIGTERM', 'SIGBREAK']
+const DELAI_FLUX_MS = 2000                    // après la sortie d'Electron, attente de la fermeture de ses flux
+// Ctrl+C, Ctrl+Pause, console fermée ; SIGTERM n'arrive que sous POSIX (Windows ne le délivre jamais à node)
+const SIGNAUX = ['SIGINT', 'SIGBREAK', 'SIGHUP', 'SIGTERM']
 const USAGE = 'usage : node scripts/fumee.mjs [--exe=<exécutable empaqueté, par exemple release/win-unpacked/Sniper.exe>]'
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -100,25 +102,30 @@ export function codeEmpaquete(exe) {
   return { reference: code === asar ? asar : join(resources, 'app') }
 }
 
-// Fichiers dont le build est fait : src/, public/, index.html, vite.config.js ; avec --exe, electron/ aussi (le
-// processus principal est dans le paquet). Chemins relatifs à la racine, en « / », et dates de modification (ms).
+// Ce dont le build est fait, fichiers et dossiers : src/ et public/ entiers, index.html, vite.config.js, package.json
+// et package-lock.json (versions des dépendances, three compris) ; avec --exe, electron/ aussi (le processus principal
+// est dans le paquet). Un dossier compte par sa propre date, qui change quand une entrée y est ajoutée, retirée ou
+// renommée : une suppression, un déplacement ou une copie qui garde sa date n'y laissent aucun fichier plus récent.
+// Chemins relatifs à la racine, en « / » (« / » final pour un dossier), et dates de modification (ms).
 export function fichiersDuBuild(racine, { exe = null } = {}) {
-  return ['src', 'public', 'index.html', 'vite.config.js', ...(exe ? ['electron'] : [])].flatMap(entree => {
+  const entrees = ['src', 'public', 'index.html', 'vite.config.js', 'package.json', 'package-lock.json', ...(exe ? ['electron'] : [])]
+  return entrees.flatMap(entree => {
     const chemin = join(racine, entree)
     if (!existsSync(chemin)) return []
-    const tous = statSync(chemin).isDirectory() ? readdirSync(chemin, { recursive: true }).map(f => join(chemin, f)) : [chemin]
-    return tous.map(f => ({ f, s: statSync(f) })).filter(({ s }) => s.isFile())
-      .map(({ f, s }) => ({ chemin: relative(racine, f).split(sep).join('/'), date: s.mtimeMs }))
+    const tous = statSync(chemin).isDirectory() ? [chemin, ...readdirSync(chemin, { recursive: true }).map(f => join(chemin, f))] : [chemin]
+    return tous.map(f => ({ f, s: statSync(f) })).filter(({ s }) => s.isFile() || s.isDirectory())
+      .map(({ f, s }) => ({ chemin: relative(racine, f).split(sep).join('/') + (s.isDirectory() ? '/' : ''), date: s.mtimeMs }))
   })
 }
 
-// Pur : les fichiers plus récents que la référence du build (ils n'y sont pas), du plus récent au plus ancien.
+// Pur : les entrées (fichiers et dossiers) plus récentes que la référence du build, du plus récent au plus ancien.
 export function plusRecents(dateReference, fichiers) {
   return fichiers.filter(f => f.date > dateReference).sort((a, b) => b.date - a.date)
 }
 
-// Ce que la fumée vérifie, imprimé avant le verdict : la date du build (dist/index.html, ou le paquet avec --exe), le
-// commit et le nombre de lignes de git status --porcelain (0 : copie propre). git(racine, args) rend sa sortie, ou null.
+// Ce que la fumée vérifie, imprimé une fois les refus passés : la date du build (dist/index.html, ou le paquet avec
+// --exe), le commit et le nombre de lignes de git status --porcelain (0 : copie propre). git(racine, args) rend sa
+// sortie, ou null.
 export function identiteBuild({ racine, git }, reference) {
   const deux = n => String(n).padStart(2, '0')
   const d = new Date(statSync(reference).mtimeMs)
@@ -140,9 +147,11 @@ export function supprimerProfil(profil, { supprimer, attendre }) {
 }
 const profilRestant = profil => `profil jetable non supprimé : ${profil} (à supprimer à la main ; le verdict du jeu n'en dépend pas)`
 
-// Interruption (Ctrl+C, Ctrl+Pause, arrêt demandé) une fois Electron lancé : son arbre arrêté (taskkill /T), le profil
-// supprimé, sortie 130. Tout est synchrone : rien ne s'intercale avant la sortie. Rend la fonction qui retire ces
-// gestionnaires (fin normale).
+// Interruption dans la console une fois Electron lancé : Ctrl+C (SIGINT), Ctrl+Pause (SIGBREAK), console fermée
+// (SIGHUP : Windows laisse quelques secondes avant d'arrêter node) ; SIGTERM sous POSIX seulement (sous Windows, un
+// arrêt demandé par un autre processus tue node sans passer par ici). L'arbre d'Electron arrêté d'abord (Chromium tient
+// les fichiers du profil tant qu'il tourne), puis le profil supprimé, sortie 130. Tout est synchrone : rien ne
+// s'intercale avant la sortie. Rend la fonction qui retire ces gestionnaires (fin normale).
 export function surveillerInterruptions({ processus, pid, profil, tuer, supprimer, attendre }) {
   let pris = false
   const interrompre = () => {
@@ -156,10 +165,17 @@ export function surveillerInterruptions({ processus, pid, profil, tuer, supprime
   return () => { for (const s of SIGNAUX) processus.removeListener(s, interrompre) }
 }
 
+// Electron et tous ses processus fils (Chromium en lance plusieurs) : taskkill /F (forcé) /T (l'arbre), sans fenêtre de
+// console. lancerSync : spawnSync, remplacé par les tests.
+export function tuerArbre(pid, lancerSync = spawnSync) {
+  return lancerSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true })
+}
+const estFichier = chemin => { try { return statSync(chemin).isFile() } catch { return false } }
+
 // Outils du système, remplacés par les tests (aucun processus lancé)
 const OUTILS = {
   lancer: (commande, args, options) => spawn(commande, args, options),
-  tuer: pid => spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true }),
+  tuer: pid => tuerArbre(pid),
   git: (racine, args) => {
     const r = spawnSync('git', args, { cwd: racine, encoding: 'utf8', windowsHide: true })
     return r.status === 0 ? r.stdout : null
@@ -173,41 +189,59 @@ export async function main(argv, outils = {}) {
   const args = lireArguments(argv)
   if (args.erreur) { console.error(args.erreur); return 2 }
   const exe = args.exe && resolve(o.racine, args.exe)
+  // L'exécutable d'abord : un chemin mal tapé (ou un dossier) n'est pas un paquet à reconstruire
+  if (exe && !estFichier(exe)) { console.error(`exécutable introuvable : ${exe}`); return 2 }
   const build = exe ? codeEmpaquete(exe) : { reference: join(o.racine, 'dist', 'index.html') }
   if (build.erreur) { console.error(build.erreur); return 2 }
   if (!existsSync(build.reference)) {
     console.error('dist/index.html introuvable : lancer « npx vite build » avant la fumée')
     return 2
   }
-  console.log(identiteBuild(o, build.reference))
   const perimes = plusRecents(statSync(build.reference).mtimeMs, fichiersDuBuild(o.racine, { exe }))
   if (perimes.length) {
-    const liste = perimes.slice(0, 5).map(f => f.chemin).join(', ') + (perimes.length > 5 ? `, … (${perimes.length} en tout)` : '')
-    console.error(`build périmé : relancer ${exe ? 'npm run dist' : 'npx vite build'} (plus récents que lui : ${liste})`)
+    const vus = perimes.slice(0, 5)
+    const liste = vus.map(f => f.chemin).join(', ') + (perimes.length > 5 ? `, … (${perimes.length} en tout)` : '')
+    const dossier = vus.some(f => f.chemin.endsWith('/')) ? ' ; dossier plus récent : une entrée y a été ajoutée, retirée ou renommée' : ''
+    console.error(`build périmé : relancer ${exe ? 'npm run dist' : 'npx vite build'} (plus récents que lui : ${liste})${dossier}`)
     return 2
   }
-  if (exe && !existsSync(exe)) { console.error(`exécutable introuvable : ${exe}`); return 2 }
+  console.log(identiteBuild(o, build.reference))   // tous les refus passés : c'est ce build-là que la fumée vérifie
   // Profil jetable vide, supprimé à la fin, lancement impossible compris, ou sur interruption (pas si node est tué de
-  // force : console fermée, taskkill sur node)
+  // force : taskkill ou process.kill sur node, outil qui coupe la commande)
   const profil = mkdtempSync(join(o.temp, 'sniper-fumee-'))
   const t0 = Date.now()
-  let code = null, sortie = '', erreurs = '', tue = null, retirer = () => {}
+  let code = null, sortie = '', erreurs = '', tue = null, sorti = false, retirer = () => {}
   try {
     const { commande, args: argsElectron } = commandeFumee({ racine: o.racine, exe, profil, electron: () => binaireElectron(o.racine) })
     const env = { ...process.env }
     delete env.ELECTRON_RUN_AS_NODE   // sinon electron.exe se comporte comme node
     console.log(`fumée : ${exe ? args.exe : 'electron .'} --fumee (fenêtre cachée, réseau bloqué, profil jetable)`)
     const proc = o.lancer(commande, argsElectron, { cwd: o.racine, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
-    retirer = surveillerInterruptions({ processus: o.processus, pid: proc.pid, profil, tuer: o.tuer, supprimer: o.supprimer, attendre: o.attendre })
-    // Electron et tous ses processus fils arrêtés : sans « [fumee] debut » au bout de 30 s, ou au délai de garde
-    const arreter = raison => { if (!tue) { tue = raison; o.tuer(proc.pid) } }
+    // Electron et tous ses processus fils arrêtés (sur interruption, sans « [fumee] debut » au bout de 30 s, ou au délai
+    // de garde), jamais après sa sortie : son PID a pu être repris par un autre processus
+    const tuer = pid => { if (!sorti) o.tuer(pid) }
+    retirer = surveillerInterruptions({ processus: o.processus, pid: proc.pid, profil, tuer, supprimer: o.supprimer, attendre: o.attendre })
+    const arreter = raison => { if (!tue) { tue = raison; tuer(proc.pid) } }
     const debut = setTimeout(() => arreter('debut'), DELAI_DEBUT_MS)
     const garde = setTimeout(() => arreter('garde'), DELAI_GARDE_MS)
     proc.stdout.setEncoding('utf8')
     proc.stderr.setEncoding('utf8')
     proc.stdout.on('data', d => { sortie += d; if (sortie.includes(LIGNE_DEBUT)) clearTimeout(debut) })
     proc.stderr.on('data', d => { erreurs += d })
-    code = await new Promise(r => { proc.once('exit', c => r(c)); proc.once('error', e => { erreurs += String(e); r(null) }) })
+    // Code de sortie lu à « exit », résultat à « close » : à « exit », les flux d'Electron peuvent encore retenir la
+    // ligne de résultat. DELAI_FLUX_MS au plus, un processus fils de Chromium pouvant garder le tube ouvert.
+    code = await new Promise(r => {
+      let codeSortie = null, borne = null
+      proc.once('exit', c => {
+        sorti = true
+        clearTimeout(debut)
+        clearTimeout(garde)
+        codeSortie = c
+        borne = setTimeout(() => r(c), DELAI_FLUX_MS)
+      })
+      proc.once('close', () => { clearTimeout(borne); r(codeSortie) })
+      proc.once('error', e => { erreurs += String(e); r(null) })
+    })
     clearTimeout(debut)
     clearTimeout(garde)
   } catch (e) {
@@ -219,7 +253,10 @@ export async function main(argv, outils = {}) {
   }
   const duree = Math.round((Date.now() - t0) / 1000)
   if (tue === 'debut') {
-    console.error(`aucune ligne « ${LIGNE_DEBUT} » au bout de ${DELAI_DEBUT_MS / 1000} s : ${exe ? `${args.exe} ne connaît pas le mode --fumee (relancer npm run dist)` : 'electron/main.js ne connaît pas le mode --fumee'} ; arrêté avec ses processus fils`)
+    // Le main.js du dépôt écrit cette ligne dès son départ (tests/electron.fumee.test.js) ; un paquet peut être plus ancien
+    const cause = exe ? `${args.exe} n'a pas démarré la fumée (bloqué au lancement, ou paquet trop ancien : relancer npm run dist)`
+      : 'Electron n\'a pas démarré la fumée (bloqué au lancement ?)'
+    console.error(`aucune ligne « ${LIGNE_DEBUT} » au bout de ${DELAI_DEBUT_MS / 1000} s : ${cause} ; arrêté avec ses processus fils`)
     console.log(`FUMÉE ROUGE (${duree} s) : aucun résultat`)
     return 2
   }

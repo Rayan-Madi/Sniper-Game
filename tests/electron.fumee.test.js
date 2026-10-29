@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll, afterEach } from 'vitest'
 import { EventEmitter } from 'node:events'
 import { spawnSync } from 'node:child_process'
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, copyFileSync, utimesSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, copyFileSync, utimesSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve, join, dirname, relative } from 'node:path'
 import { createRequire } from 'node:module'
@@ -14,10 +14,12 @@ import { pathToFileURL } from 'node:url'
 //   executeJavaScript évalue), une ligne « [fumee] {json} » puis un code de sortie. Sans --fumee, rien de tout cela ;
 // - src/characters.js publie la fin du chargement des modèles sur <html> (data-modeles), seule trace lisible dans un
 //   build, qui n'a pas les accroches de développement (__mission) ;
-// - scripts/fumee.mjs : lecture du résultat dans la sortie d'Electron, verdict, commande lancée ; refus avant tout
-//   lancement (arguments, build périmé, paquet sans mode --fumee), le script lancé pour de vrai dans un bac à sable sans
-//   Electron ; pendant la fumée (« [fumee] debut » attendu, délai de garde, interruption, profil), main() du script avec
-//   un lancement factice (aucun processus).
+// - scripts/fumee.mjs : lecture du résultat dans la sortie d'Electron, verdict, commande lancée, arrêt de l'arbre
+//   d'Electron (taskkill /F /T) ; refus avant tout lancement (arguments, build périmé par un fichier ou par un dossier),
+//   le script lancé pour de vrai dans un bac à sable sans Electron ni exécutable ; avec --exe (exécutable introuvable,
+//   paquet sans mode --fumee ou périmé, paquet à jour lancé) et pendant la fumée (« [fumee] debut » attendu, résultat lu
+//   à la fermeture des flux, délai de garde, interruption, profil), main() du script avec un lancement factice (aucun
+//   processus : le faux exécutable n'est qu'un fichier texte).
 
 const ROOT = resolve(__dirname, '..')
 const ELECTRON_DIR = join(ROOT, 'electron')
@@ -627,9 +629,11 @@ const VERT = {
 }
 
 // Bac à sable : un dossier temporaire tenu pour la racine du dépôt, avec une copie de scripts/fumee.mjs et ce que le
-// test y pose (build, paquet factice, sources datées). Jamais de binaire Electron ni d'exécutable : un script qui irait
-// jusqu'au lancement s'y arrêterait sur leur absence. temp/ lui sert de dossier temporaire (TEMP, TMP) : on y voit les
-// profils jetables qu'il crée.
+// test y pose (build, paquet factice, sources datées). Lancé pour de vrai (executer), le script n'y trouve jamais de
+// binaire Electron ni d'exécutable : s'il allait jusqu'au lancement, il s'arrêterait sur leur absence (les faux de
+// bacPret ne servent qu'au lancement factice de main()). temp/ lui sert de dossier temporaire (TEMP, TMP) : on y voit
+// les profils jetables qu'il crée. poser() date le fichier et ses dossiers : un dossier compte pour le build périmé (sa
+// date change quand une entrée y est ajoutée, retirée ou renommée).
 function bacASable() {
   const racine = mkdtempSync(join(tmpdir(), 'fumee-test-bac-'))
   const temp = join(racine, 'temp')
@@ -642,9 +646,10 @@ function bacASable() {
       const f = join(racine, chemin)
       mkdirSync(dirname(f), { recursive: true })
       writeFileSync(f, contenu)
-      if (date !== null) utimesSync(f, date, date)
+      if (date !== null) for (let p = f; p.length > racine.length; p = dirname(p)) utimesSync(p, date, date)
       return f
     },
+    dater(chemin, date) { utimesSync(join(racine, chemin.replace(/\/$/, '')), date, date) },   // un dossier peut finir par « / »
     executer: (...args) => spawnSync(process.execPath, [join(racine, 'scripts', 'fumee.mjs'), ...args], {
       cwd: racine, encoding: 'utf8', timeout: 60000, windowsHide: true, env: { ...process.env, TEMP: temp, TMP: temp },
     }),
@@ -752,15 +757,17 @@ describe('scripts/fumee.mjs : lecture du résultat, verdict, commande, arguments
     expect(S.plusRecents(300, fichiers)).toEqual([])
   })
 
-  it('fichiers dont le build est fait : src/ et public/ entiers, index.html, vite.config.js ; electron/ en plus avec --exe', () => {
+  it('ce dont le build est fait : src/ et public/ entiers, leurs dossiers compris (« / » final), index.html, vite.config.js, package.json et package-lock.json ; electron/ en plus avec --exe', () => {
     const bac = bacASable()
     try {
-      for (const f of ['src/a.js', 'src/gfx/b.js', 'public/models/c.glb', 'index.html', 'vite.config.js', 'electron/main.js', 'tests/d.test.js', 'docs/e.md'])
+      for (const f of ['src/a.js', 'src/gfx/b.js', 'public/models/c.glb', 'index.html', 'vite.config.js', 'package.json', 'package-lock.json',
+        'electron/main.js', 'tests/d.test.js', 'docs/e.md'])
         bac.poser(f, 'x', 1000)
       const chemins = options => S.fichiersDuBuild(bac.racine, options).map(f => f.chemin).sort()
-      expect(chemins()).toEqual(['index.html', 'public/models/c.glb', 'src/a.js', 'src/gfx/b.js', 'vite.config.js'])
-      expect(chemins({ exe: 'release/win-unpacked/Sniper.exe' }))
-        .toEqual(['electron/main.js', 'index.html', 'public/models/c.glb', 'src/a.js', 'src/gfx/b.js', 'vite.config.js'])
+      const sources = ['src/', 'src/a.js', 'src/gfx/', 'src/gfx/b.js', 'public/', 'public/models/', 'public/models/c.glb', 'index.html',
+        'vite.config.js', 'package.json', 'package-lock.json']
+      expect(chemins()).toEqual([...sources].sort())
+      expect(chemins({ exe: 'release/win-unpacked/Sniper.exe' })).toEqual(['electron/', 'electron/main.js', ...sources].sort())
       expect(S.fichiersDuBuild(bac.racine).every(f => f.date === 1000 * 1000)).toBe(true)
     } finally {
       bac.fermer()
@@ -787,33 +794,18 @@ describe('scripts/fumee.mjs lancé dans un bac à sable : refus avant tout lance
     }
   })
 
-  it('--exe vers un paquet sans mode --fumee (construit avant E1 : « --fumee » absent de resources/app.asar, ou de resources/app/electron/main.js sans asar) : refusé, rien lancé', () => {
-    const bac = bacASable()
-    try {
-      bac.poser('dist/index.html', '<!doctype html>')
-      bac.poser('release/win-unpacked/resources/app.asar', "electron/main.js : const isDev = process.argv.includes('--dev')")
-      bac.poser('release/sans-asar/resources/app/electron/main.js', "const isDev = process.argv.includes('--dev')")
-      for (const exe of ['release/win-unpacked/Sniper.exe', 'release/sans-asar/Sniper.exe']) {
-        const r = bac.executer(`--exe=${exe}`)
-        expect(r.stderr, exe).toContain('exécutable sans mode --fumee : relancer npm run dist')
-        expect(r.status, exe).toBe(2)
-        expect(bac.profils(), exe).toEqual([])
-      }
-    } finally {
-      bac.fermer()
-    }
-  })
-
-  it('build périmé (un fichier de src/, de public/, index.html ou vite.config.js plus récent que dist/index.html) : refusé, rien lancé ; à jour, la fumée part', () => {
+  // package.json et package-lock.json d'abord : les versions des dépendances (three) font aussi le build
+  it('build périmé (un fichier de src/, de public/, index.html, vite.config.js, package.json ou package-lock.json plus récent que dist/index.html) : refusé, rien lancé ni imprimé comme vérifié ; à jour, la fumée part', () => {
     const bac = bacASable()
     try {
       const t = maintenant()
       bac.poser('dist/index.html', '<!doctype html>', t - 3600)
-      for (const f of ['src/main.js', 'public/models/a.glb', 'index.html', 'vite.config.js']) {
+      for (const f of ['package.json', 'package-lock.json', 'src/main.js', 'public/models/a.glb', 'index.html', 'vite.config.js']) {
         bac.poser(f, 'x', t)   // modifié après le build
         const r = bac.executer()
         expect(r.stderr, f).toContain('build périmé : relancer npx vite build')
         expect(r.stderr, f).toContain(f)
+        expect(r.stdout, f).not.toContain('build vérifié')
         expect(r.status, f).toBe(2)
         expect(bac.profils(), f).toEqual([])
         bac.poser(f, 'x', t - 7200)   // remis avant le build
@@ -830,24 +822,36 @@ describe('scripts/fumee.mjs lancé dans un bac à sable : refus avant tout lance
     }
   })
 
-  it('--exe : paquet plus ancien qu\'un fichier de src/ ou d\'electron/ (le processus principal est dans le paquet) : build périmé, relancer npm run dist', () => {
+  // Aucun fichier plus récent que le build dans ces trois cas : seule la date du dossier change
+  it('build périmé par un dossier : une entrée retirée de public/, déplacée dans src/ (elle garde sa date) ou copiée avec sa date dans public/ : refusé, le dossier nommé', () => {
     const bac = bacASable()
     try {
       const t = maintenant()
-      bac.poser('release/win-unpacked/resources/app.asar', "const fumee = process.argv.includes('--fumee')", t - 3600)
-      for (const f of ['src/main.js', 'electron/main.js']) {
-        bac.poser(f, 'x', t)
-        const r = bac.executer('--exe=release/win-unpacked/Sniper.exe')
-        expect(r.stdout, f).toMatch(/build vérifié : release\/win-unpacked\/resources\/app\.asar du /)
-        expect(r.stderr, f).toContain('build périmé : relancer npm run dist')
-        expect(r.stderr, f).toContain(f)
-        expect(r.status, f).toBe(2)
-        expect(bac.profils(), f).toEqual([])
-        bac.poser(f, 'x', t - 7200)
+      const avant = t - 7200   // sources d'avant le build
+      bac.poser('dist/index.html', '<!doctype html>', t - 3600)
+      for (const f of ['public/briefing/img/portrait.jpg', 'public/models/a.glb', 'src/briefing/scenes/m3.js', 'src/gfx/b.js', 'modeles/sources/c.glb'])
+        bac.poser(f, 'x', avant)   // modeles/ : hors du build
+      const racine = chemin => join(bac.racine, chemin)
+      const cas = [
+        ['entrée retirée de public/', () => rmSync(racine('public/briefing/img/portrait.jpg')), ['public/briefing/img/']],
+        ['entrée déplacée dans src/', () => renameSync(racine('src/briefing/scenes/m3.js'), racine('src/gfx/m3.js')), ['src/briefing/scenes/', 'src/gfx/']],
+        ['entrée copiée avec sa date dans public/', () => copyFileSync(racine('modeles/sources/c.glb'), racine('public/models/c.glb')), ['public/models/']],
+      ]
+      for (const [quoi, faire, dossiers] of cas) {
+        faire()
+        const r = bac.executer()
+        expect(r.stderr, quoi).toContain('build périmé : relancer npx vite build')
+        for (const d of dossiers) expect(r.stderr, quoi).toContain(d)
+        expect(r.stderr, quoi).toContain('une entrée y a été ajoutée, retirée ou renommée')
+        expect(r.stdout, quoi).not.toContain('build vérifié')
+        expect(r.status, quoi).toBe(2)
+        expect(bac.profils(), quoi).toEqual([])
+        for (const d of dossiers) bac.dater(d, avant)   // dossier remis à sa date d'avant le build
       }
-      // à jour, mais l'exécutable n'existe pas (ici, jamais d'exécutable) : refusé avant tout lancement
-      const r = bac.executer('--exe=release/win-unpacked/Sniper.exe')
-      expect(r.stderr).toContain('exécutable introuvable')
+      // fichiers déplacés et copiés plus anciens que le build, dossiers remis : à jour, la fumée part
+      const r = bac.executer()
+      expect(r.stdout).toContain('build vérifié : dist/index.html du ')
+      expect(r.stderr).toContain('binaire Electron absent')
       expect(r.status).toBe(2)
       expect(bac.profils()).toEqual([])
     } finally {
@@ -858,13 +862,16 @@ describe('scripts/fumee.mjs lancé dans un bac à sable : refus avant tout lance
 
 // main() du script avec ses outils remplacés : aucun processus lancé (Electron factice), taskkill et git factices,
 // processus factice pour les signaux et la sortie, aucune attente entre deux essais de suppression. Le bac à sable a un
-// build à jour et un binaire Electron factice qui n'est pas un exécutable.
-describe('scripts/fumee.mjs pendant la fumée (lancement factice)', () => {
+// build à jour et un binaire Electron factice qui n'est pas un exécutable ; avec --exe, un faux exécutable (un fichier
+// texte) que seul ce lancement factice « lance ». Le faux Electron sort comme un processus fils de Node : « exit » (son
+// code), puis « close » (ses flux fermés). Le vrai tuer (taskkill /F /T) est vérifié à part, spawnSync remplacé.
+describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la fumée', () => {
   let S
   beforeAll(async () => { S = await chargerScript() })
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
-  const SIGNAUX = ['SIGINT', 'SIGTERM', 'SIGBREAK']
+  const SIGNAUX = ['SIGINT', 'SIGBREAK', 'SIGHUP', 'SIGTERM']
+  const EXE = 'release/win-unpacked/Sniper.exe'
   const flux = () => Object.assign(new EventEmitter(), { setEncoding() {} })
   function bacPret() {
     const bac = bacASable()
@@ -873,26 +880,34 @@ describe('scripts/fumee.mjs pendant la fumée (lancement factice)', () => {
     bac.poser('node_modules/electron/dist/electron-factice.txt', '')
     return bac
   }
-  function lancerScript(bac, outils = {}) {
+  // Paquet factice : resources/app.asar (contenu donné) à côté du faux exécutable
+  function paquet(bac, asar, date = null) {
+    bac.poser(EXE, 'faux exécutable : un fichier texte, jamais lancé')
+    bac.poser('release/win-unpacked/resources/app.asar', asar, date)
+  }
+  const AVEC_FUMEE = "const fumee = process.argv.includes('--fumee')"
+  // outils : des outils remplacés en plus, ou une fonction qui les rend à partir de l'état du test (s)
+  function lancerScript(bac, outils = {}, argv = []) {
     const s = { lances: [], tues: [], sorties: [], journal: [] }
     s.proc = Object.assign(new EventEmitter(), { pid: 4242, stdout: flux(), stderr: flux() })
     s.processus = Object.assign(new EventEmitter(), { exit: code => { s.sorties.push(code) } })
+    s.sortir = code => { s.proc.emit('exit', code, null); s.proc.emit('close', code, null) }
     vi.spyOn(console, 'log').mockImplementation(m => { s.journal.push(['log', String(m)]) })
     vi.spyOn(console, 'error').mockImplementation(m => { s.journal.push(['erreur', String(m)]) })
-    s.fin = S.main([], {
+    s.fin = S.main(argv, {
       racine: bac.racine, temp: bac.temp, processus: s.processus,
       lancer: (commande, args) => { s.lances.push({ commande, args }); return s.proc },
-      tuer: pid => { s.tues.push(pid); s.proc.emit('exit', 1) },
+      tuer: pid => { s.tues.push(pid); s.sortir(1) },
       git: (racine, args) => (args[0] === 'rev-parse' ? 'abc1234\n' : ' M src/main.js\n?? notes.txt\n'),
       attendre: () => {},
-      ...outils,
+      ...(typeof outils === 'function' ? outils(s) : outils),
     })
     s.profil = () => s.lances[0].args.find(a => a.startsWith('--profil=')).slice('--profil='.length)
     s.texte = genre => s.journal.filter(([g]) => !genre || g === genre).map(([, m]) => m).join('\n')
     s.vert = () => {
       s.proc.stdout.emit('data', '[fumee] debut\n')
       s.proc.stdout.emit('data', `[fumee] ${JSON.stringify(VERT)}\n`)
-      s.proc.emit('exit', 0)
+      s.sortir(0)
     }
     return s
   }
@@ -918,7 +933,7 @@ describe('scripts/fumee.mjs pendant la fumée (lancement factice)', () => {
     }
   })
 
-  it('avant le verdict : le commit, les lignes de git status --porcelain et la date du build vérifié', async () => {
+  it('avant le verdict : le commit, le nombre de lignes de git status --porcelain et la date du build vérifié', async () => {
     const bac = bacPret()
     try {
       const s = lancerScript(bac)
@@ -933,18 +948,107 @@ describe('scripts/fumee.mjs pendant la fumée (lancement factice)', () => {
     }
   })
 
-  it('sans « [fumee] debut » au bout de 30 s (un exécutable qui ignore --fumee tournerait en jeu normal) : arbre tué (taskkill /T), code 2, profil supprimé', async () => {
+  it('arrêt d\'Electron : taskkill /F /T sur son PID, l\'arbre entier (Chromium lance plusieurs processus), sans fenêtre de console', () => {
+    const appels = []
+    S.tuerArbre(4242, (commande, args, options) => { appels.push({ commande, args, options }) })
+    expect(appels).toEqual([{ commande: 'taskkill', args: ['/F', '/T', '/PID', '4242'], options: { stdio: 'ignore', windowsHide: true } }])
+  })
+
+  it('--exe vers un exécutable introuvable (chemin mal tapé, ou le dossier du paquet) : « exécutable introuvable », jamais « relancer npm run dist » ; rien lancé', async () => {
+    const bac = bacPret()
+    try {
+      paquet(bac, AVEC_FUMEE)
+      for (const exe of ['release/win-unpaked/Sniper.exe', 'release/win-unpacked']) {
+        const s = lancerScript(bac, {}, [`--exe=${exe}`])
+        expect(await s.fin, exe).toBe(2)
+        expect(s.lances, exe).toEqual([])
+        expect(s.texte('erreur'), exe).toBe(`exécutable introuvable : ${join(bac.racine, exe)}`)
+        expect(bac.profils(), exe).toEqual([])
+        vi.restoreAllMocks()
+      }
+    } finally {
+      bac.fermer()
+    }
+  })
+
+  it('--exe vers un paquet sans mode --fumee (construit avant E1 : « --fumee » absent de resources/app.asar, ou de resources/app/electron/main.js sans asar) : refusé, rien lancé', async () => {
+    const bac = bacPret()
+    try {
+      paquet(bac, "electron/main.js : const isDev = process.argv.includes('--dev')")
+      bac.poser('release/sans-asar/Sniper.exe', 'faux exécutable : un fichier texte, jamais lancé')
+      bac.poser('release/sans-asar/resources/app/electron/main.js', "const isDev = process.argv.includes('--dev')")
+      for (const exe of [EXE, 'release/sans-asar/Sniper.exe']) {
+        const s = lancerScript(bac, {}, [`--exe=${exe}`])
+        expect(await s.fin, exe).toBe(2)
+        expect(s.lances, exe).toEqual([])
+        expect(s.texte('erreur'), exe).toContain('exécutable sans mode --fumee : relancer npm run dist')
+        expect(bac.profils(), exe).toEqual([])
+        vi.restoreAllMocks()
+      }
+    } finally {
+      bac.fermer()
+    }
+  })
+
+  it('--exe : paquet plus ancien qu\'un fichier de src/ ou d\'electron/ (le processus principal est dans le paquet) : build périmé, relancer npm run dist ; rien lancé ni imprimé comme vérifié', async () => {
+    const bac = bacPret()
+    try {
+      const t = maintenant()
+      paquet(bac, AVEC_FUMEE, t - 3600)
+      for (const f of ['src/main.js', 'electron/main.js']) {
+        bac.poser(f, 'x', t)
+        const s = lancerScript(bac, {}, [`--exe=${EXE}`])
+        expect(await s.fin, f).toBe(2)
+        expect(s.lances, f).toEqual([])
+        expect(s.texte('erreur'), f).toContain('build périmé : relancer npm run dist')
+        expect(s.texte('erreur'), f).toContain(f)
+        expect(s.texte(), f).not.toContain('build vérifié')
+        expect(bac.profils(), f).toEqual([])
+        bac.poser(f, 'x', t - 7200)
+        vi.restoreAllMocks()
+      }
+    } finally {
+      bac.fermer()
+    }
+  })
+
+  it('--exe, paquet à jour : la date de resources/app.asar imprimée comme build vérifié, puis l\'exécutable lancé en --fumee avec le profil jetable', async () => {
+    const bac = bacPret()
+    try {
+      paquet(bac, AVEC_FUMEE)
+      const s = lancerScript(bac, {}, [`--exe=${EXE}`])
+      expect(s.lances).toEqual([{ commande: join(bac.racine, EXE), args: ['--fumee', `--profil=${s.profil()}`] }])
+      expect(s.texte('log')).toMatch(/^build vérifié : release\/win-unpacked\/resources\/app\.asar du \d\d\/\d\d\/\d{4} \d\d:\d\d:\d\d ; commit abc1234, 2 lignes dans git status --porcelain$/m)
+      s.vert()
+      expect(await s.fin).toBe(0)
+      expect(bac.profils()).toEqual([])
+    } finally {
+      bac.fermer()
+    }
+  })
+
+  // Le main.js du dépôt écrit « [fumee] debut » dès son départ (testé plus haut) : sans --exe, la ligne absente dit un
+  // Electron bloqué au lancement ; avec --exe, aussi un paquet d'avant cette ligne (la chaîne --fumee y est déjà)
+  it('sans « [fumee] debut » au bout de 30 s : arbre tué, code 2, profil supprimé, et la cause probable dite', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const bac = bacPret()
     try {
-      const s = lancerScript(bac)
-      await vi.advanceTimersByTimeAsync(29999)
-      expect(s.tues).toEqual([])
-      await vi.advanceTimersByTimeAsync(1)
-      expect(s.tues).toEqual([4242])
-      expect(await s.fin).toBe(2)
-      expect(s.texte('erreur')).toMatch(/aucune ligne « \[fumee\] debut » au bout de 30 s/)
-      expect(bac.profils()).toEqual([])
+      paquet(bac, AVEC_FUMEE)
+      const cas = [
+        [[], 'Electron n\'a pas démarré la fumée (bloqué au lancement ?)'],
+        [[`--exe=${EXE}`], `${EXE} n'a pas démarré la fumée (bloqué au lancement, ou paquet trop ancien : relancer npm run dist)`],
+      ]
+      for (const [argv, cause] of cas) {
+        const s = lancerScript(bac, {}, argv)
+        await vi.advanceTimersByTimeAsync(29999)
+        expect(s.tues, cause).toEqual([])
+        await vi.advanceTimersByTimeAsync(1)
+        expect(s.tues, cause).toEqual([4242])
+        expect(await s.fin, cause).toBe(2)
+        expect(s.texte('erreur'), cause).toContain(`aucune ligne « [fumee] debut » au bout de 30 s : ${cause} ; arrêté avec ses processus fils`)
+        expect(bac.profils(), cause).toEqual([])
+        vi.restoreAllMocks()
+      }
     } finally {
       bac.fermer()
     }
@@ -969,11 +1073,68 @@ describe('scripts/fumee.mjs pendant la fumée (lancement factice)', () => {
     }
   })
 
-  it('interrompu une fois Electron lancé (SIGINT, SIGTERM, SIGBREAK) : arbre tué, profil supprimé, puis sortie 130', async () => {
+  // Node ne promet pas que les flux d'un processus fils soient vidés à « exit » : la ligne de résultat peut arriver après
+  it('ligne de résultat arrivée après la sortie d\'Electron (flux encore ouverts à « exit ») : lue à la fermeture des flux, vert', async () => {
+    const bac = bacPret()
+    try {
+      const s = lancerScript(bac)
+      s.proc.stdout.emit('data', '[fumee] debut\n')
+      s.proc.emit('exit', 0, null)
+      await new Promise(r => setTimeout(r, 20))   // le script a vu la sortie, la fin du tube arrive ensuite
+      s.proc.stdout.emit('data', `[fumee] ${JSON.stringify(VERT)}\n`)
+      s.proc.emit('close', 0, null)
+      expect(await s.fin).toBe(0)
+      expect(s.texte('log')).toMatch(/FUMÉE VERTE/)
+      expect(bac.profils()).toEqual([])
+    } finally {
+      bac.fermer()
+    }
+  })
+
+  it('flux jamais fermés après la sortie d\'Electron (un processus fils qui garderait le tube) : résultat lu 2 s après, pas plus tard', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const bac = bacPret()
+    try {
+      const s = lancerScript(bac)
+      let fin = null
+      s.fin.then(c => { fin = c })
+      s.proc.stdout.emit('data', '[fumee] debut\n')
+      s.proc.stdout.emit('data', `[fumee] ${JSON.stringify(VERT)}\n`)
+      s.proc.emit('exit', 0, null)
+      await vi.advanceTimersByTimeAsync(1999)
+      expect(fin).toBeNull()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(fin).toBe(0)
+      expect(bac.profils()).toEqual([])
+    } finally {
+      bac.fermer()
+    }
+  })
+
+  it('Electron sorti seul sans « [fumee] debut », ses flux pas encore fermés au délai de 30 s : rien tué après sa sortie (son PID a pu être repris), aucun résultat', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const bac = bacPret()
+    try {
+      const s = lancerScript(bac)
+      await vi.advanceTimersByTimeAsync(29000)
+      s.proc.emit('exit', 1, null)   // flux fermés plus tard : 2 s au plus
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(s.tues).toEqual([])
+      expect(await s.fin).toBe(2)
+      expect(s.texte('log')).toMatch(/FUMÉE ROUGE .* : aucun résultat \(Electron sorti avec le code 1\)/)
+      expect(s.texte('erreur')).not.toContain('aucune ligne « [fumee] debut »')
+    } finally {
+      bac.fermer()
+    }
+  })
+
+  it('interrompu une fois Electron lancé (Ctrl+C, Ctrl+Pause, console fermée : SIGINT, SIGBREAK, SIGHUP ; SIGTERM sous POSIX) : arbre tué d\'abord, profil supprimé ensuite, puis sortie 130', async () => {
+    // Chromium tient les fichiers du profil tant que son arbre tourne : supprimer avant de tuer échouerait
+    const occupe = () => Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' })
     for (const signal of SIGNAUX) {
       const bac = bacPret()
       try {
-        const s = lancerScript(bac)
+        const s = lancerScript(bac, s => ({ supprimer: chemin => { if (!s.tues.length) throw occupe(); rmSync(chemin, { recursive: true, force: true }) } }))
         const profil = s.profil()
         s.processus.exit = code => { s.sorties.push({ code, profilEncoreLa: existsSync(profil), tues: [...s.tues] }) }
         s.processus.emit(signal)
@@ -985,6 +1146,25 @@ describe('scripts/fumee.mjs pendant la fumée (lancement factice)', () => {
         vi.restoreAllMocks()
         bac.fermer()
       }
+    }
+  })
+
+  it('interrompu entre la sortie d\'Electron et la fermeture de ses flux : rien tué (son PID a pu être repris), profil supprimé, sortie 130', async () => {
+    const bac = bacPret()
+    try {
+      const s = lancerScript(bac)
+      const profil = s.profil()
+      s.processus.exit = code => { s.sorties.push({ code, profilEncoreLa: existsSync(profil) }) }
+      s.proc.emit('exit', 0, null)
+      await new Promise(r => setTimeout(r, 20))   // le script attend les flux (2 s au plus)
+      s.processus.emit('SIGINT')
+      expect(s.sorties).toEqual([{ code: 130, profilEncoreLa: false }])
+      expect(s.tues).toEqual([])
+      s.proc.emit('close', 0, null)
+      await s.fin
+      expect(bac.profils()).toEqual([])
+    } finally {
+      bac.fermer()
     }
   })
 
