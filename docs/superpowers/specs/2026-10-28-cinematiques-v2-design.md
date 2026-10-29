@@ -56,6 +56,7 @@ Rayan, le 28 octobre 2026 : « pour les cinématiques que tu as faites, si tu po
 - Aucun rendu WebGL pendant une cinématique (`main.js:1432`) ; la boucle tourne quand même et nourrit le panneau de performances (`main.js:1413-1418`), qui signale une p95 au-delà de 22 ms (`src/gfx/stats.js:28`). Tout le coût d'une cinématique est donc DOM, CSS et SVG.
 - Le CSS d'une scène est global : posé dans `<head>` (`index.js:90-91`), retiré au démontage (`index.js:63`). Préfixer règles et `@keyframes` (`pro-`, `epi-`, `m1-`…).
 - Le glitch pose un filtre SVG sur tout `#scene` toutes les 45 ms (`kit.js:94-95`) : chaque calque ajouté renchérit chaque glitch.
+- Mesuré en C3 (28 octobre 2026, `scripts/cine-perf.mjs`, 10 cas de la v1, deux passes à processeur normal et deux à ×4 ; annexe `docs/superpowers/specs/annexes/2026-10-28-cine-v1.json`, README des annexes, « Cinématiques v2 ») : sur la machine de Rayan (RTX 3080, écran à 180 Hz), les durées d'image sont des multiples de 5,56 ms ; à ×4, la p95 de la v1 va de 5,7 à 16,6 ms ; l'image la plus longue est presque toujours celle du montage de la scène (0,2 à 1,7 s après, jusqu'à 1 011 ms en m5) ; les animations en cours dépassent 40 dès la v1 en m6 (70), m1 (63), m3 (47) et dans l'épilogue (46), m5 est à 40. Conséquences pour les plafonds : §3.6, « Mesuré en C3 », et décision D8 (§4).
 
 **Poids [V]**
 - Budget : « Poids ajouté au téléchargement : moins de 1,5 Mo au total (images recompressées, chargées à la demande) » (`docs/superpowers/specs/2026-10-02-cinematiques-design.md:151`).
@@ -226,7 +227,7 @@ Le libellé « ZÉRO n m » reprend celui du télémètre du lot 3 (décision 1 
 - Total du budget de la spec des cinématiques (§8) : images + chunks des scènes ≤ 1 500 000 octets après `vite build`, mesuré par `scripts/poids.mjs --check` (tâche C0), avec `--avec-enquete` quand l'enquête compte. La question de compter l'enquête est la décision D1 ; avec la conversion WebP des six portraits (≈ 0,8 Mo libérés [D-L4]), la v2 tient le budget même enquête comprise.
 - **Propriétaire unique (intégrateur)** : C0 est la seule tâche, tous chantiers confondus, qui convertit les portraits en WebP (la tâche K9 du lot 4 est retirée) ; objectif repris du lot 4 : ≤ 350 ko pour les six. C0 **crée** `scripts/poids.mjs` et `tests/scripts/poids.test.js` ; la tâche E0 du lot 5 les étendra (build en mémoire, JS de démarrage, `scripts/budgets.js`) sans changer les options publiées ici (`--check`, `--avec-enquete`) ni le seuil de 1 500 000 octets.
 
-**Rendu** (mesuré par `scripts/cine-perf.mjs`, tâche C3 ; aucune cible n'est mesurée aujourd'hui [V-L1])
+**Rendu** (mesuré par `scripts/cine-perf.mjs`, tâche C3 ; référence de la v1 : `docs/superpowers/specs/annexes/2026-10-28-cine-v1.json`, README des annexes, « Cinématiques v2 »)
 
 | Plafond, par scène | Valeur |
 |---|---|
@@ -237,6 +238,11 @@ Le libellé « ZÉRO n m » reprend celui du télémètre du lot 3 (décision 1 
 | p95 de la durée d'image en Chrome réel, 1280 × 720, processeur ralenti ×4 | ≤ 22 ms (`BUDGET_MS`), et ≤ 1,15 × la p95 de la v1 de la même scène |
 
 Le processeur ralenti ×4 est l'approximation d'un PC de milieu de gamme déjà employée par le dépôt (`RALENTI=4`, `scripts/verif-mission.mjs`) ; la carte graphique ne se simule pas (risque 2).
+
+**Mesuré en C3** (28 octobre 2026 ; v1, 10 cas, deux passes à processeur normal et deux à ×4, machine de Rayan partagée avec trois autres chantiers ; tableaux et détail : README des annexes, « Cinématiques v2 ») :
+- **Mesure** : `node scripts/cine-perf.mjs <id> --ralenti=4` (conditions dans son en-tête : modèles des personnages bloqués, page de 1280 × 720 posée par émulation). « Animations en cours » : celles de `getAnimations()` dans l'état `running`, animations et transitions CSS ; une transition compte dès sa création, son délai compris (des fondus échelonnés par `transition-delay` comptent tous ensemble).
+- **p95** : de 5,7 à 16,6 ms à ×4 dans la v1, le plafond de 22 ms tient partout. Sans écran, Chrome cale ses images sur celui de la machine (180 Hz chez Rayan) : la p95 ne bouge que par pas de 5,56 ms, et elle a sauté d'un pas entre deux passes du même code dans 3 cas sur 10 à ×4 (m3, m4, prologue A). « ≤ 1,15 × la v1 » (1,15 × 11,1 = 12,8 ms, sous le pas suivant) échouerait donc sur le seul bruit. [D] Lecture proposée, à confirmer par Rayan (décision D8, §4) : comparer à la plus grande p95 des passes de la v1, et ne retenir un dépassement que s'il se répète sur deux passes de la v2 ; images lentes et images par seconde (annexe) disent le sens d'un écart.
+- **Animations** : la v1 dépasse déjà 40 en m6 (70), m1 (63), m3 (47) et dans l'épilogue (46) ; m5 est à 40. En m1 et m6, 55 à 56 d'entre elles sont les transitions `height` des barres de l'onde du kit (`.st .wave i`, `transition: height .09s`, hauteurs tirées à nouveau toutes les 90 ms par `K.wave`), le temps de l'écoute du téléphone : à elles seules au-delà du plafond, et une mise en page à chaque image. Sans elles, m1 ne dépasse pas 19, mais m6 reste au-delà de 40 au début de la fête : 57 à 60 à 24,7 s (les 24 fondus échelonnés des invités, `#guests.on .gst`, avec les 10 danseurs et la radio), 42 et 43 à 26,2 s (les danseurs qui s'éteignent). m3 dépasse 40 en trois pointes brèves : vers 16,0 s et (deux passes sur quatre) vers 20,8 s, les caméras réduites en vignette (`top`, `left`, `width`, `height` en transition, de la mise en page elles aussi), et de 32,2 à 33,4 s, le plan qui se dessine ; 21 à 36 le reste du temps. L'épilogue doit les siennes aux 26 grains de poussière (`epi-dust`). Détail : diagnostic du 29 octobre, README des annexes. [D] Lecture proposée, à confirmer par Rayan (décision D8, §4) : plafond de 40 pour les scènes dont la v1 le tient ; pour m1, m3, m6 et l'épilogue, pas plus que le maximum de la v1 (63, 47, 70, 46). Piste pour C5 (même image, moins de repeints) : l'onde du kit en `transform: scaleY` (composition au lieu de mise en page), ou sans transition (56 animations en cours de moins en m1 et m6 : m1 repasserait sous 40, pas m6).
 
 ### 3.7 Effets atténués (règles)
 
@@ -275,7 +281,7 @@ Les vérifications réelles (captures, mesure de rendu, poids) sont au plan, tâ
 1. G1 : les 10 durées du §1 au ms près ; G2 et G3 verts (au plus une réplique changée, celle de M6, si D2 = B).
 2. G4 : 0 animation infinie sans jumelle hors liste blanche ; G6 : 0 tiret cadratin visible dans les 9 scènes (M5 compris après le bar).
 3. Chaque scène a son ★ et au moins 5 ajouts du §3.4 ; aucune image neuve.
-4. Rendu, par scène : ≤ 40 animations simultanées ; p95 ≤ 22 ms et ≤ 1,15 × la v1 à processeur ralenti ×4 ; mesures avant et après dans l'annexe `docs/superpowers/specs/annexes/` (README, « Cinématiques v2 »).
+4. Rendu, par scène : ≤ 40 animations simultanées ; p95 ≤ 22 ms et ≤ 1,15 × la v1 à processeur ralenti ×4 (lus selon la décision D8, §4, détaillée au §3.6, « Mesuré en C3 » : la v1 dépasse déjà 40 dans quatre scènes, et la p95 saute d'un pas d'une passe à l'autre) ; mesures avant et après dans l'annexe `docs/superpowers/specs/annexes/` (README, « Cinématiques v2 »).
 5. Poids : `node scripts/poids.mjs --check --avec-enquete` vert (≤ 1 500 000 octets enquête comprise) tant que D1 = A, recommandation appliquée ; `--check` seul ne compte que les images et les scènes : il ne vaut que si Rayan tranche D1 = B.
 6. Captures gelées, maquette et jeu, aux instants du plan, en normal et en atténué, regardées par l'agent et envoyées à Rayan ; deux captures du même instant identiques à l'octet (pas encore le cas de m2 et m3 sur la v1 : §1, « Gel des captures »).
 7. `npx vitest run --maxWorkers=2` vert ; `npx vite build` sans erreur ; aucun tiret cadratin neuf (maquettes, specs, commits).
@@ -283,7 +289,7 @@ Les vérifications réelles (captures, mesure de rendu, poids) sont au plan, tâ
 ### 3.10 Risques
 
 1. **Le montage dérive sans qu'on le voie.** Parade : G1 à G3 écrits avant toute retouche, sur la v1.
-2. **Coût sur un vrai milieu de gamme** : aucune mesure de cinématique n'existe ; la carte graphique n'est pas simulée. Parades : règles du §3.3, plafonds du §3.6, mesure v1 contre v2 ; si une scène dépasse, on retire des couches (décision écrite) ; en dernier recours, un palier Bas (`k-bas` posé selon `settings.graphics`), hors de ce chantier.
+2. **Coût sur un vrai milieu de gamme** : la v1 n'est mesurée que sur la machine de Rayan (C3, §3.6, « Mesuré en C3 ») ; la carte graphique d'un milieu de gamme n'est pas simulée. Parades : règles du §3.3, plafonds du §3.6, mesure v1 contre v2 ; si une scène dépasse, on retire des couches (décision écrite) ; en dernier recours, un palier Bas (`k-bas` posé selon `settings.graphics`), hors de ce chantier.
 3. **Poids** : sans WebP, la marge est de l'ordre de 10 à 20 ko si l'enquête compte. Parade : C0 en premier (D1).
 4. **Deux kits** : un outil commun corrigé d'un seul côté. Parade : G7.
 5. **Captures fausses** pour le neuf si `.k-vrai` ne marche pas en temps virtuel. Parade : `K.anim` pour tout mouvement long, vérifié par une capture de contrôle en C2. Constaté en C2 : `.k-vrai` ne marche pas en temps virtuel, l'essai est écarté et `K.anim` tombe juste (§1, « Gel des captures »).
@@ -319,3 +325,6 @@ Les vérifications réelles (captures, mesure de rendu, poids) sont au plan, tâ
 7. **D7, la pièce d'Anton.**
    - A (reco) : on montre son matériel et sa lumière (CAM 2 de M4, lampe du liège qui baisse au désaveu), jamais de reflet sur la vitre de l'écran.
    - B : en plus, un reflet de lampe de bureau à 3 ou 4 % sur la vitre de l'écran des briefings, sans aucune forme humaine.
+8. **D8, la lecture des plafonds de rendu** (ouverte par la mesure de la v1, C3 ; §3.6, « Mesuré en C3 »). Lus à la lettre, les plafonds du §3.6 échouent sur la v1 elle-même : m1, m3, m6 et l'épilogue dépassent 40 animations en cours, et la p95 saute d'une synchro de l'écran (5,56 ms) d'une passe à l'autre du même code, au-delà de 1,15 fois la v1.
+   - A (reco) : animations, au plus 40 pour les scènes dont la v1 tient ce plafond, au plus le maximum de la v1 pour m1, m3, m6 et l'épilogue (63, 47, 70, 46) ; p95, au plus 22 ms et au plus 1,15 fois la plus grande p95 des passes de la v1, un dépassement n'étant retenu que s'il se répète sur deux passes de la v2.
+   - B : animations au plus 40 partout : la v2 ramène d'abord m1, m3, m6 et l'épilogue sous 40 (onde du kit, fondus des invités de M6, vignettes des caméras de M3, poussière de l'épilogue), travail que le plan ne prévoit pas ; p95 lue comme en A (à la lettre, le bruit seul la ferait échouer).

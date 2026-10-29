@@ -326,3 +326,85 @@ Avant : `main` à `7a39416` (la fin du lot 1 et celle de l'enquête, dont aucune
 - **Lunette ouverte** (15 images après le clic droit) : 0,3 à 0,4 % des pixels diffèrent, tous sur le réticule et au bout de la barre de stress du HUD. La scène, la vignette et le reste du HUD sont identiques au pixel près : le réticule est déplacé par le tremblement, réglé en milliradians depuis T1, et le stress monte moins vite (0,07 par seconde au lieu de 0,48).
 - **Après un tir** : avant le lot, rien ne dit le coup à 200 ms (la cible au centre du réticule, la balle en vol invisible) ; après, la vue est relevée par le recul (0,94° encore, sur les 2,5° du coup), le sillage monte du bas de l'image vers le point visé, et la jauge de la culasse (17 %) barre le trait vertical du réticule sous son centre : c'est le point de la relecture de T3, à juger par Rayan. Personnages, textures, décor et ombres sont intacts dans les quatre missions.
 - **Retour au menu** (`retour3`, après trois tirs manqués au port, marques, gerbes et sillage encore en vie) : 16 objets hors de la carte avant le retour (les PNJ, le cadenas, les trois marques et le sillage), aucun au menu (`{"fond":"87a0b0","horsCarte":[]}`).
+
+## Cinématiques v2 : coût de rendu (`scripts/cine-perf.mjs`, `2026-10-28-cine-*.json`)
+
+### Ce que c'est
+
+`scripts/cine-perf.mjs` (tâche C3 du plan `docs/superpowers/plans/2026-10-28-cinematiques-v2.md`) joue une cinématique dans le jeu par la route de développement `?cine=<id>`, dans Chrome sans interface en temps réel, rendu sur la carte graphique, page de 1280 × 720. Une sonde injectée avant les scripts de la page relève, du montage de la scène (`#st`) à son démontage :
+
+- la durée de chaque image, l'écart entre deux rappels de `requestAnimationFrame`, comme le panneau de performances du jeu : p50 et p95 au rang le plus proche (comme `frameStats`, `src/gfx/stats.js`), la plus longue et l'instant où elle finit, les images lentes (au-delà de 22 ms, le `BUDGET_MS` du panneau), les images par seconde en moyenne ;
+- toutes les 250 ms, les animations en cours : `document.getAnimations()` dans l'état `running` (animations et transitions CSS ; une transition dès sa création, son délai compris) ; le maximum sur la scène et son instant, et le maximum de toutes les animations rendues (finies et en pause comprises).
+
+Plafonds de la spec des cinématiques v2 (§3.6), à processeur ralenti 4 fois : au plus 40 animations en cours, p95 au plus 22 ms et au plus 1,15 fois celle de la v1 de la même scène. Lecture de ces plafonds d'après la référence ci-dessous : spec, §3.6, « Mesuré en C3 », et décision D8 (§4), à trancher par Rayan.
+
+Conditions de mesure, toujours les mêmes (en-tête du script) :
+
+- **modèles des personnages bloqués** (`Network.setBlockedURLs`, `*.glb`) : sur la route `?cine=`, le jeu lance au démarrage le chargement de ses sept modèles, en même temps que la scène, alors qu'en partie un briefing se joue modèles chargés. Leur lecture chargerait les premières secondes de la mesure ; bloqués, ils échouent aussitôt (sept avertissements « [characters] échec » dans la console, attendus) ;
+- **page de 1280 × 720** posée par `Emulation.setDeviceMetricsOverride` : sans interface, `--window-size=1280,720` seul donne une page de 1264 × 625 (la fenêtre compte son cadre) ;
+- **cadence de l'écran de la machine** : sans écran, Chrome cale ses images sur la synchro de l'écran principal. Sur la machine de Rayan (écran à 180 Hz), les durées d'image sont des multiples de 5,56 ms : une image à l'heure dure 5,6 ms, une image en retard d'une synchro 11,1 ms. La p95 ne bouge donc que par pas de 5,56 ms, et une mesure ne se compare qu'à une mesure de la même machine ;
+- **étalon** : la sonde chronomètre une boucle de calcul fixe avant tout script de la page ; sous `--ralenti=4`, elle dure environ quatre fois plus (preuve que le ralenti s'applique à la page) ;
+- relevés bruts (chaque durée d'image, chaque relevé d'animations) dans `shots/cine-perf-<cas>-x<ralenti>-<horodatage>.json`, non versionné ; l'annexe ne garde que la synthèse.
+
+### Relancer la mesure
+
+Le serveur de développement du jeu doit tourner (`npm run dev`, port 5173 ; une autre copie : `BASE_URL=http://localhost:<port>/`). Un seul Chrome sans interface à la fois sur la machine, et rien de lourd pendant la mesure (tests, build, partie) : tout ce qui occupe le processeur se lit dans les durées d'image.
+
+```bash
+node scripts/cine-perf.mjs m3                         # une mesure : résumé à l'écran, relevés bruts dans shots/
+node scripts/cine-perf.mjs m3 --ralenti=4             # processeur de la page ralenti 4 fois (PC de milieu de gamme, spec §3.6)
+node scripts/cine-perf.mjs epilogue --params=port=libres --ralenti=4 --annexe=2026-10-28-cine-v2.json   # ajoutée à une annexe (créée au besoin)
+node scripts/cine-perf.mjs prologue-b --params=attenue=1   # version atténuée (route ?cine=…&attenue=1)
+```
+
+`--annexe=<nom>.json` ajoute la mesure à `docs/superpowers/specs/annexes/<nom>` (créée au besoin) sans retirer les précédentes ; `passe` numérote les mesures d'un même cas au même ralenti. L'annexe de la v1 (`2026-10-28-cine-v1.json`) est close : une autre version, ou la v1 remesurée pour une comparaison, s'écrit dans une autre annexe (celle de la v2 en C17 : `2026-10-28-cine-v2.json`), où le champ `commit` dit la version de chaque mesure. Une mesure en échec (scène jamais montée ou jamais finie, aucune image, erreur dans la console de la page) n'y est pas ajoutée et sort en code 1 ; une option fausse (faute de frappe, scène inconnue, `freeze` dans `--params`) sort en code 2 sans rien lancer. Variables : `CHROME`, `BASE_URL`, `SWIFTSHADER=1` (rendu logiciel, durées sans valeur pour ces plafonds).
+
+### Référence de la v1 (`2026-10-28-cine-v1.json`)
+
+Mesures du 28 octobre 2026, de 21 h 18 à 21 h 50, sur `aa121c9` (scènes de la v1, kit d'après la tâche C2), servies par le Vite de la copie `Sniper-Game-cine` : les 10 cas (les neuf scènes, l'épilogue dans ses deux variantes), à processeur normal puis ralenti 4 fois, deux passes de chaque, dans l'ordre ×1, ×4, ×1, ×4 (`--annexe=2026-10-28-cine-v1.json`). 40 mesures, toutes finies sans erreur, toutes dans les mêmes conditions (page de 1280 × 720 visible, composition sur la carte graphique, sept modèles bloqués). Machine de Rayan (Intel Core i7-10700K, 16 fils ; RTX 3080 ; écran à 180 Hz), partagée avec trois autres chantiers : charge du processeur relevée avant chaque cas de 29 à 99 %, et une suite de tests d'une autre copie déjà en cours au départ de 9 des 40 mesures (les trois premiers cas de chaque passe à ×4, les trois derniers de la seconde passe à ×1).
+
+Durées en ms, « passe 1 / passe 2 » ; max : l'image la plus longue et l'instant où elle finit, en s depuis le montage de la scène ; images lentes : au-delà de 22 ms.
+
+Processeur à sa vitesse :
+
+| Cas | p50 | p95 | max (à s) | images lentes | images par seconde | animations en cours au plus (à s) |
+|---|---|---|---|---|---|---|
+| m1 | 5,6 | 5,7 / 5,6 | 139 (0,2) / 139 (0,2) | 6 / 6 | 178 / 178 | 62 (1,0) / 63 (4,6) |
+| m2 | 5,6 | 5,7 / 5,6 | 172 (0,2) / 183 (0,3) | 18 / 18 | 176 / 175 | 28 (16,1) / 28 (16,1) |
+| m3 | 5,6 | 5,6 / 5,7 | 189 (0,3) / 150 (0,2) | 14 / 13 | 176 / 176 | 45 (32,2) / 43 (33,0) |
+| m4 | 5,6 | 5,7 / 5,7 | 222 (18,0) / 228 (18,0) | 18 / 28 | 174 / 172 | 22 (9,7) / 23 (10,7) |
+| m5 | 5,6 | 5,7 / 5,7 | 217 (0,2) / 300 (0,3) | 11 / 14 | 177 / 175 | 40 (17,6) / 40 (17,7) |
+| m6 | 5,6 | 5,7 / 5,7 | 139 (0,2) / 145 (0,2) | 13 / 11 | 177 / 177 | 69 (1,1) / 69 (1,1) |
+| épilogue, libres | 5,6 | 5,7 / 5,7 | 683 (1,2) / 617 (1,1) | 42 / 38 | 169 / 170 | 45 (25,7) / 45 (25,6) |
+| épilogue, enfermés | 5,6 | 5,7 / 5,7 | 733 (1,3) / 778 (1,4) | 42 / 51 | 168 / 166 | 46 (26,1) / 46 (26,2) |
+| prologue A | 5,6 | 11,2 / 11,2 | 350 (0,4) / 472 (0,5) | 18 / 30 | 143 / 133 | 13 (13,0) / 13 (13,3) |
+| prologue B | 5,6 | 11,2 / 16,1 | 439 (0,5) / 461 (38,6) | 59 / 122 | 140 / 126 | 20 (14,6) / 22 (45,4) |
+
+Processeur ralenti 4 fois (`--ralenti=4`, l'approximation d'un PC de milieu de gamme) :
+
+| Cas | p50 | p95 | max (à s) | images lentes | images par seconde | animations en cours au plus (à s) |
+|---|---|---|---|---|---|---|
+| m1 | 5,6 | 11,1 / 11,1 | 200 (0,2) / 172 (0,2) | 15 / 15 | 165 / 164 | 62 (1,1) / 62 (1,1) |
+| m2 | 5,6 | 11,1 / 11,2 | 356 (0,4) / 400 (0,4) | 22 / 51 | 164 / 148 | 28 (16,1) / 26 (16,4) |
+| m3 | 5,6 | 16,6 / 11,3 | 478 (0,5) / 545 (0,5) | 84 / 57 | 116 / 121 | 47 (32,3) / 45 (32,4) |
+| m4 | 5,6 | 11,0 / 5,7 | 333 (0,3) / 306 (0,3) | 28 / 30 | 164 / 167 | 21 (9,8) / 21 (13,6) |
+| m5 | 5,6 | 11,2 / 11,1 | 994 (1,0) / 1 011 (1,0) | 28 / 14 | 148 / 154 | 40 (18,4) / 40 (18,4) |
+| m6 | 5,6 | 11,1 / 11,2 | 311 (0,3) / 300 (0,3) | 26 / 54 | 158 / 143 | 70 (5,0) / 70 (4,9) |
+| épilogue, libres | 5,6 | 11,1 / 11,2 | 561 (1,6) / 622 (1,7) | 42 / 70 | 158 / 132 | 45 (26,0) / 45 (26,2) |
+| épilogue, enfermés | 5,6 | 11,1 / 11,1 | 578 (1,6) / 678 (1,7) | 56 / 73 | 152 / 143 | 46 (26,5) / 46 (26,5) |
+| prologue A | 5,6 | 16,6 / 11,2 | 356 (3,1) / 345 (0,5) | 47 / 32 | 127 / 131 | 13 (13,3) / 13 (13,2) |
+| prologue B | 5,6 | 11,2 / 11,2 | 400 (38,6) / 433 (38,7) | 90 / 80 | 129 / 130 | 23 (45,5) / 23 (45,5) |
+
+Ce qu'on y lit :
+
+- **Plafond de 22 ms : tenu partout, avec de la marge.** p50 de 5,6 ms dans les 40 mesures (une image par synchro de l'écran) ; à ×4, p95 de 5,7 à 16,6 ms, soit une à trois synchros. m3 est la scène la plus lourde (116 à 121 images par seconde à ×4, 57 à 84 images lentes), puis les prologues (127 à 131) et l'épilogue (132 à 158).
+- **Bruit d'une passe à l'autre** : la p95 saute d'une synchro entre deux passes du même code dans 3 cas sur 10 à ×4 (m3 16,6 puis 11,3 ; m4 11,0 puis 5,7 ; prologue A 16,6 puis 11,2) et dans 1 cas sur 10 à ×1 (prologue B, 11,2 puis 16,1, la seconde fois avec une suite de tests d'une autre copie en cours) ; images lentes et images par seconde varient jusqu'à du simple au double (m2 à ×4 : 22 puis 51 images lentes). « p95 au plus 1,15 fois la v1 » ne se lit donc pas sur une seule passe : 1,15 × 11,1 = 12,8 ms, sous la synchro suivante (16,7 ms), et un saut d'une synchro, que le bruit seul produit, le ferait échouer. Pour comparer une version à cette référence : même machine, passes des deux versions alternées dans la même séance, un écart retenu seulement s'il se répète.
+- **L'image la plus longue est celle du montage de la scène** dans 34 mesures sur 40 (0,2 à 1,7 s après l'apparition de `#st` : toute la scène posée dans la page, ses images décodées) : 139 à 778 ms à ×1, 172 à 1 011 ms à ×4 (m5 : une seconde à ×4 ; épilogue : 0,56 à 0,78 s). Ailleurs : m4 à 18,0 s à ×1 (222 et 228 ms, juste après le repère de 17 692 ms qui fait apparaître `#print` et ses tickets), prologue B à 38,6 s (400 à 461 ms) et prologue A une fois à 3,1 s.
+- **Animations en cours : au-delà de 40 dès la v1 dans quatre scènes**, les mêmes d'une passe à l'autre à 2 près (rien d'aléatoire n'en décide) : m6 (69 et 70), m1 (62 et 63), m3 (43 à 47), l'épilogue (45 et 46) ; m5 est à 40 tout juste. Une transition compte dès sa création, son délai compris : des fondus échelonnés par `transition-delay` comptent tous ensemble dès que la classe qui les lance est posée. Un relevé toutes les 250 ms peut manquer de quelques unités le sommet d'une pointe brève (m3 : 43 vers 15,8 s au relevé de 100 ms du diagnostic, 41 dans les quatre passes). Détail relevé par deux passes de diagnostic (une sonde non versionnée qui groupe les animations en cours par sorte, nom et élément ; la seconde, le 29 octobre, toutes les 100 ms, sur les pointes de m6 et de m3), puis dans les relevés bruts :
+  - m1 et m6 : 55 à 56 transitions `height` des barres de l'onde du kit (`.st .wave i`, `transition: height .09s` dans `kit.css`, hauteurs tirées à nouveau toutes les 90 ms par `K.wave`), pendant l'écoute du téléphone (de 1,0 à 4,6 s en m1, de 1,1 à 7,8 s en m6). Ce sont des transitions de mise en page, pas de composition. Sans elles, m1 ne dépasse pas 19 ;
+  - m6 garde, hors de l'écoute, deux pointes au-delà de 40 : 57 à 60 à 24,7 s, au début de la fête, quand les 24 invités apparaissent en fondu (`#guests.on .gst`, `transition: opacity .2s` et 28 ms de délai de plus par invité : 24 transitions en cours ensemble) pendant que 10 danseurs dansent (`m6-dance`) et que la radio parle (5 `k-eq`) ; puis 42 et 43 à 26,2 s, quand les 10 danseurs s'éteignent (`#guests.dim .dn`, 10 transitions `opacity`, la danse continue). Sans l'onde, m6 reste donc au-delà de 40 ;
+  - m3 : un fond de 21 animations en continu (pluie, grain, voile, balayage, voyants qui clignotent, ondes `.pulse`, barres qui défilent sur les caméras), 26 quand la radio parle, et trois pointes brèves où plusieurs transitions partent ensemble : 41 vers 16,0 s et 37 à 42 vers 20,8 s, quand les caméras A puis B se réduisent en vignette (`#camA.mini`, `#camB.mini` : `top`, `left`, `width` et `height` en transition, de la mise en page elles aussi, avec les fondus de leurs repères ; vers 16 s, le cadre « ZOOM ×8 » de la caméra B se resserre aussi, `inset` en transition) ; 41 à 47 de 32,2 à 33,4 s, quand tracés (`.draw`), fondus et déplacements du plan et des caméras partent ensemble. Hors de ces pointes : 21 à 36, de 26 à 30 deux relevés sur trois ;
+  - épilogue : les 26 grains de poussière (`#dust i`, `epi-dust`) le tiennent entre 34 et 46 tout du long.
+  Avec les animations finies et en pause (`getAnimations()` entier) : 14 à 71.
+- **Étalon** : 10,8 à 12,3 ms à ×1, 33,9 à 50,3 ms à ×4, sauf une fois 14,8 ms (m2, première passe à ×4) : le ralenti de Chrome suspend le fil principal par tranches, et une boucle de 11 ms peut tomber presque entière dans une tranche active. Cette mesure-là est bien ralentie : image du montage de 356 ms, contre 172 ms à ×1.
+- **Durée réelle** : chaque scène dure un peu plus que la formule du séquenceur (tableau « Durée » du §1 de la spec, gardé par G1) : de 27 à 165 ms de plus à ×1, de 77 à 615 ms à ×4, sauf m5 (341 et 396 ms à ×1, 1,1 et 1,2 s à ×4). Les repères partent sur des minuteurs, que les images longues retardent (celle du montage de m5 surtout).
