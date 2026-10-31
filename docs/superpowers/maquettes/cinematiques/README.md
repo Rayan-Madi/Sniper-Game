@@ -26,8 +26,10 @@ musique (son 100 % procédural).
 cinématiques v2 (gel exact de `K.anim`, encre et papier), à ouvrir avec `?freeze=1000`.
 
 Règles gardées par les tests sur les scènes régénérées (spec cinématiques v2, §3.1 et §3.3) : toute animation
-`infinite` a sa règle jumelle, même sélecteur avec `.k-reduced` sur la classe de scène (`.pro.k-reduced .hh`), qui
-met `animation: none` ou une autre animation (`tests/briefing/attenue.test.js`) ; un `@keyframes` n'anime que
+répétée (`infinite`, ou plus d'un tour) a sa règle jumelle, même sélecteur avec `.k-reduced` sur la classe de scène
+(`.pro.k-reduced .hh`), qui met `animation: none` ou une autre animation, jouée une fois ; en effets atténués, rien ne
+se répète hors liste blanche, et aucune animation ne se pose hors des feuilles, ni par un attribut `style` ni par le
+script (`tests/briefing/attenue.test.js`) ; un `@keyframes` n'anime que
 `transform`, `opacity` ou `stroke-dashoffset`, et le script n'a ni `setInterval`, ni `element.animate`, ni SMIL, ni
 `Math.random` : tout tirage passe par `K.graine` (`tests/briefing/rendu.test.js`) ; aucun tiret cadratin dans ce que
 le joueur voit (`tests/briefing/textes-scenes.test.js`).

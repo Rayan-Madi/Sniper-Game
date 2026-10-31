@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { createKit } from '../../src/briefing/kit.js'
 
 // Les deux kits des cinématiques (spec cinématiques v2 §3.2) : celui du jeu (src/briefing/kit.js, kit.css) et celui
 // des maquettes (docs/superpowers/maquettes/cinematiques/kit.js, kit.css), où l'on juge une scène avant de la porter.
@@ -82,9 +83,9 @@ afterEach(() => {
 
 // Une maquette minimale chargée comme la page le fait (<script src="kit.js"> avant le script de la scène) : le kit lit
 // l'adresse (?attenue=1, ?freeze=…) et pose son habillage. Rend le K global des maquettes.
-function maquette(search = '') {
+function maquette(search = '', inner = '') {
   history.replaceState(null, '', '/' + search)
-  document.body.innerHTML = `<div class="wrap"><div class="st" id="st"><div class="scene" id="scene">
+  document.body.innerHTML = `<div class="wrap"><div class="st" id="st"><div class="scene" id="scene">${inner}
     <div class="radio" id="radio"></div><div class="sub" id="sub"></div><div class="title" id="title"></div></div></div></div>`
   new Function(KIT_MQ)()
   return window.K
@@ -215,6 +216,39 @@ describe('kit des maquettes, ?attenue=1 : les effets atténués du jeu, visibles
     }
     expect(await effet('')).toEqual([0.5 * 70 * 0.9, [1000, 0.9]].map((v, i) => i ? v : expect.closeTo(v, 1)))
     expect(await effet('?attenue=1')).toEqual([0.5 * 70 * 0.3, [1000, 0.9]].map((v, i) => i ? v : expect.closeTo(v, 1)))
+  })
+
+  // Onde de l'écoute (#wave de m1 et m6), menée par K.wave : pendant la ligne, une hauteur tirée par barre toutes les
+  // 90 ms ; en effets atténués, la pose fixe du jeu (spec cinématiques v2 §3.7), à plat après la ligne dans les deux cas.
+  it('l\'onde de l\'écoute garde la pose fixe du jeu tant que la ligne parle (sans l\'option, elle s\'agite : garde-fou)', async () => {
+    const ECOUTE = '<div class="trans" id="trans"></div><div class="wave" id="wave"></div>'
+    const LIGNE = { who: 'PHONE', say: '« Une ligne assez longue pour durer trois secondes. »' }
+    const onde = () => [...document.getElementById('wave').children].map(b => b.style.height).join(' ')
+    const lire = async demarrer => {
+      demarrer()
+      const pendant = []
+      for (let i = 0; i < 8; i++) { await vi.advanceTimersByTimeAsync(250); pendant.push(onde()) }
+      await vi.advanceTimersByTimeAsync(4000); await flush()
+      return { poses: new Set(pendant), apres: onde() }
+    }
+    const aPlat = Array(56).fill('6%').join(' ')
+    // le jeu d'abord : les parasites au repos d'une maquette déjà lancée chercheraient sa barre de contrôle
+    let kitDuJeu = null
+    const jeu = await lire(() => {
+      document.body.innerHTML = `<div id="root"><div class="st" id="st"><div class="scene" id="scene">${ECOUTE}</div></div></div>`
+      kitDuJeu = createKit({ root: document.getElementById('root'), reducedMotion: true })
+      kitDuJeu.run({ beats: [LIGNE] })
+    })
+    kitDuJeu.destroy()
+    expect(jeu.poses.size).toBe(1)
+    expect([...jeu.poses][0]).not.toBe(aPlat)
+    expect(jeu.apres).toBe(aPlat)
+    const normale = await lire(() => maquette('', ECOUTE).run({ loop: false, beats: [LIGNE] }))
+    expect(normale.poses.size).toBeGreaterThan(5)
+    expect(normale.apres).toBe(aPlat)
+    const attenuee = await lire(() => maquette('?attenue=1', ECOUTE).run({ loop: false, beats: [LIGNE] }))
+    expect([...attenuee.poses]).toEqual([...jeu.poses])
+    expect(attenuee.apres).toBe(aPlat)
   })
 
   it('jamais d\'image noire, même sur un glitch de pleine puissance (K.lost) ; sans l\'option, si : garde-fou', async () => {

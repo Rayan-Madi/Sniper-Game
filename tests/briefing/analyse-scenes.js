@@ -60,6 +60,17 @@ export function lireScene(id) {
   return scene
 }
 
+// Les deux scripts du kit, en arbre syntaxique (programme entier).
+export const SCRIPTS_DU_KIT = [
+  ['kit du jeu', join(RACINE, 'src/briefing/kit.js')],
+  ['kit des maquettes', join(RACINE, 'docs/superpowers/maquettes/cinematiques/kit.js')],
+].map(([nom, chemin]) => {
+  const source = readFileSync(chemin, 'utf8')
+  const { program, errors } = parseSync('kit.js', source)
+  if (errors.length) throw new Error(`${chemin} : analyse impossible (${errors[0].message})`)
+  return { nom, chemin, source, programme: program }
+})
+
 const ligneDe = (texte, position) => texte.slice(0, position).split('\n').length
 
 // Chaînes littérales d'un nœud ('…', "…" et morceaux fixes des `…`), avec leur ligne dans source ; les commentaires,
@@ -234,26 +245,65 @@ export function lireCss(css) {
 const MOTS_CLES = new Set(['infinite', 'normal', 'reverse', 'alternate', 'alternate-reverse', 'forwards', 'backwards', 'both',
   'running', 'paused', 'linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end', 'initial', 'inherit', 'unset'])
 const estNomDAnimation = jeton => !MOTS_CLES.has(jeton) && !/^[-+]?[\d.]/.test(jeton) && !/\(/.test(jeton)
+// Nombre de tours d'un jeton : infinite, ou nombre sans unité (le seul du raccourci `animation`, les durées en ont une).
+const toursDe = jeton => (jeton === 'infinite' ? Infinity : /^(?:\d+\.?\d*|\.\d+)$/.test(jeton) ? parseFloat(jeton) : null)
+const uneAnimation = (nom, tours) => ({ nom, tours, infinie: tours === Infinity })
 
 // Animations posées par une liste de déclarations (dans l'ordre : `animation`, puis `animation-name` et
-// `animation-iteration-count` qui la retouchent) : [{ nom, infinie }] ; `none` n'en pose aucune.
+// `animation-iteration-count` qui la retouchent ; aussi sous leur préfixe -webkit-, que Chrome lit) :
+// [{ nom, tours, infinie }], tours valant Infinity pour infinite, 1 par défaut ; `none` n'en pose aucune.
 export function animationsDe(decls) {
   let liste = null
-  for (const [prop, valeur] of decls) {
+  for (const [brute, valeur] of decls) {
+    const prop = brute.replace(/^-webkit-/, '')
     if (prop === 'animation') {
       liste = decouper(valeur, ',').map(item => {
         const jetons = decouper(item.trim(), ' ').map(j => j.trim()).filter(Boolean)
-        return { nom: jetons.find(estNomDAnimation) || 'none', infinie: jetons.includes('infinite') }
+        return uneAnimation(jetons.find(estNomDAnimation) || 'none', jetons.map(toursDe).find(n => n !== null) ?? 1)
       })
     } else if (prop === 'animation-name') {
       const noms = decouper(valeur, ',').map(n => n.trim())
-      liste = noms.map((nom, i) => ({ nom, infinie: !!(liste && liste[i] && liste[i].infinie) }))
+      liste = noms.map((nom, i) => uneAnimation(nom, liste && liste[i] ? liste[i].tours : 1))
     } else if (prop === 'animation-iteration-count') {
-      const comptes = decouper(valeur, ',').map(n => n.trim())
-      liste = (liste || [{ nom: '?', infinie: false }]).map((a, i) => ({ ...a, infinie: comptes[i % comptes.length] === 'infinite' }))
+      const comptes = decouper(valeur, ',').map(n => toursDe(n.trim()) ?? 1)
+      liste = (liste || [uneAnimation('?', 1)]).map((a, i) => uneAnimation(a.nom, comptes[i % comptes.length]))
     }
   }
   return liste === null ? null : liste.filter(a => a.nom !== 'none')
+}
+
+// ── animations hors des feuilles (G4) ──
+
+// G4 lit les feuilles règle par règle : une animation posée ailleurs lui échapperait. On relève donc, préfixe -webkit-
+// compris, tout réglage d'animation dans l'attribut style du HTML ; et dans un script, toute propriété de style
+// (style.animation, style.animationName, style['animation-name']…), clé d'objet ({ animation: … } passé à
+// Object.assign), nom de propriété en chaîne (setProperty('animation', …)) ou déclaration dans une chaîne (cssText,
+// setAttribute('style', …), innerHTML, feuille écrite par le script).
+const PROPRIETE_ANIMATION = /^(?:-webkit-)?animation(?:-[a-z]+)*$/i
+const MEMBRE_ANIMATION = /^(?:webkit|Webkit)?[aA]nimation(?:[A-Z][a-zA-Z]*)?$/
+const DECLARATION_ANIMATION = /(?:^|[^\w-])(?:-webkit-)?animation(?:-[a-z]+)*\s*:/i
+
+// Éléments du HTML de #st dont l'attribut style règle une animation.
+export function animationsDuHtml(html) {
+  const doc = new DOMParser().parseFromString(`<!DOCTYPE html><html><body>${html}</body></html>`, 'text/html')
+  return [...doc.body.querySelectorAll('[style]')].filter(el => DECLARATION_ANIMATION.test(el.getAttribute('style')))
+    .map(el => `attribut style de <${el.localName}${el.id ? ` id="${el.id}"` : ''}> : ${el.getAttribute('style')}`)
+}
+
+// Lignes d'un script (nœud et sa source) qui règlent une animation : « ligne n : <la ligne> », une fois par ligne.
+export function animationsDuScript(noeud, source) {
+  const lignes = new Set()
+  const nomDe = p => p && (p.type === 'Identifier' ? p.name : p.type === 'Literal' && typeof p.value === 'string' ? p.value : null)
+  const regleUneAnimation = nom => typeof nom === 'string' && (MEMBRE_ANIMATION.test(nom) || PROPRIETE_ANIMATION.test(nom))
+  parcourir(noeud, n => {
+    const cle = n.type === 'MemberExpression' ? n.property : n.type === 'Property' ? n.key : null
+    if (cle && regleUneAnimation(nomDe(cle))) lignes.add(ligneDe(source, n.start))
+  })
+  for (const c of chainesDe(noeud, source)) {
+    if (DECLARATION_ANIMATION.test(c.texte) || PROPRIETE_ANIMATION.test(c.texte.trim())) lignes.add(c.ligne)
+  }
+  const texte = source.split('\n')
+  return [...lignes].sort((a, b) => a - b).map(l => `ligne ${l} : ${texte[l - 1].trim().slice(0, 120)}`)
 }
 
 // ── sélecteurs ──

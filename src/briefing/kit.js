@@ -138,6 +138,13 @@ export function createKit({ root, audio = null, freeze = null, reducedMotion = f
   K.wave = on => {
     waveOn = on
     const bars = wave ? [...wave.children] : []
+    // effets atténués (k-reduced sur #st) : l'onde ne s'agite plus ; tant que la ligne parle, une seule pose, tirée une
+    // fois pour toutes sous la même enveloppe (graine fixe), à plat sinon (spec cinématiques v2 §3.7)
+    if (st.classList.contains('k-reduced')) {
+      const g = K.graine(1998)
+      bars.forEach((b, i) => { b.style.height = (on && !K.frozen ? 8 + g() * 88 * Math.sin((i / bars.length) * Math.PI) : 6) + '%' })
+      return
+    }
     const tick = () => {
       if (!waveOn || K.frozen) { bars.forEach(b => { b.style.height = '6%' }); return }
       bars.forEach((b, i) => { const env = Math.sin((i / bars.length) * Math.PI); b.style.height = (8 + Math.random() * 88 * env) + '%' })

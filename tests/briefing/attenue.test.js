@@ -1,20 +1,24 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 import { playCinematic } from '../../src/briefing/index.js'
-import { SCENES, KITS, lireScene, lireCss, animationsDe, cleDeJumelle, pseudoElement } from './analyse-scenes.js'
+import { SCENES, KITS, SCRIPTS_DU_KIT, lireScene, lireModule, lireCss, animationsDe, animationsDuHtml, animationsDuScript, cleDeJumelle, pseudoElement } from './analyse-scenes.js'
 
-// G4 (spec cinématiques v2, §3.1 et §3.7) : effets atténués complets. Toute règle qui pose une animation infinie a sa
-// règle jumelle : même sélecteur, .k-reduced ajoutée à la classe de scène (.pro.k-reduced …), ou à .st pour le kit
-// (.st.k-reduced …), dans la même feuille, qui met `animation: none` ou une autre animation (pose de repos, anneau
-// fixe, voyant allumé fixe…). Le kit pose k-reduced sur #st avant le script de la scène (réglage « Effets atténués »
-// du jeu, ?attenue=1 des maquettes et de la route ?cine=).
-// - Statique : chaque feuille (les deux kit.css et le CSS de chaque scène de SCENES) est lue règle par règle.
+// G4 (spec cinématiques v2, §3.1 et §3.7) : effets atténués complets. Toute règle qui pose une animation répétée
+// (infinite, ou de plus d'un tour) a sa règle jumelle : même sélecteur, .k-reduced ajoutée à la classe de scène
+// (.pro.k-reduced …), ou à .st pour le kit (.st.k-reduced …), dans la même feuille, qui met `animation: none` ou une
+// autre animation, jouée une fois (pose de repos, anneau fixe, voyant allumé fixe, flash plafonné…) : en effets
+// atténués, rien ne se répète hors liste blanche. Le kit pose k-reduced sur #st avant le script de la scène (réglage
+// « Effets atténués » du jeu, ?attenue=1 des maquettes et de la route ?cine=).
+// - Statique : chaque feuille (les deux kit.css et le CSS de chaque scène de SCENES) est lue règle par règle ; aucune
+//   animation n'est posée hors des feuilles (attribut style du HTML, script de la scène ou du kit), où cette lecture ne
+//   la verrait pas.
 // - Dynamique : chaque cas est joué en entier, sans puis avec l'option ; chaque élément qu'une de ces règles désigne
 //   est relevé la première fois qu'il apparaît, et l'animation calculée par jsdom dit s'il la joue. Sans l'option, il
-//   doit la jouer (témoin : la garde voit ce qu'elle garde) ; avec, plus jamais. Une famille par effet (§3.7).
+//   doit la jouer (témoin : la garde voit ce qu'elle garde) ; avec, plus jamais. Une famille par effet (§3.7). Plus
+//   l'onde de l'écoute, que le script du kit mène (K.wave).
 // - Flashs : plafonnés à 0,3 d'opacité en effets atténués (spec du lot 1 §4.5 et §3.7 ici).
 
-// Liste blanche : animations infinies gardées telles quelles en effets atténués, chacune justifiée. N'y ajouter une
-// entrée que par une décision écrite dans la spec (§3.1, G4).
+// Liste blanche : animations répétées qui jouent en effets atténués (règle sans jumelle, ou règle .k-reduced qui en
+// pose une), chacune justifiée. N'y ajouter une entrée que par une décision écrite dans la spec (§3.1, G4).
 const LISTE_BLANCHE = [
   { source: 'kit', selecteur: '.st .grain', animation: 'k-grain', raison: 'grain du signal, réglé par le lot 1 (monté au tiers pendant un glitch atténué)' },
   { source: 'kit', selecteur: '.st .flick', animation: 'k-flick', raison: 'voile lent : deux baisses de lumière de 0,11 au plus toutes les 5 s' },
@@ -22,7 +26,7 @@ const LISTE_BLANCHE = [
 ]
 // En attente : animations de la v1 de m5, dont le chantier du bar possède la maquette (briefing-m5.html, interdite à ce
 // chantier jusqu'à sa fusion). Le bar y pose les jumelles (B14 : m5-sm, clignotement de 4 Hz, et les autres) ; chaque
-// entrée tombe alors (la garde le demande, voir plus bas), au plus tard en C16. Une animation infinie neuve de m5 n'est
+// entrée tombe alors (la garde le demande, voir plus bas), au plus tard en C16. Une animation répétée neuve de m5 n'est
 // pas en attente : elle a sa jumelle comme partout.
 const EN_ATTENTE = [
   { source: 'm5', selecteur: '.m5 .scn.rx .lcd .rxl', animation: 'k-blink' },
@@ -55,7 +59,9 @@ const familleDe = nom => Object.keys(FAMILLES).find(f => FAMILLES[f].includes(no
 
 // ── analyse statique ──
 
-// Animations infinies d'une feuille (hors règles atténuées elles-mêmes), chacune avec sa jumelle trouvée ou non.
+// Animations répétées (infinite, ou plus d'un tour) d'une feuille : celles des règles ordinaires, chacune avec sa
+// jumelle trouvée ou non (repetees), et celles que posent les règles atténuées elles-mêmes (attenueesRepetees : une
+// jumelle qui remplacerait un clignotement par un autre).
 // source : { nom, cle (kit ou id de scène), classe (st, pro, m1…), css }
 function analyser(source, exemptions = [...LISTE_BLANCHE, ...EN_ATTENTE]) {
   const { regles, keyframes } = lireCss(source.css)
@@ -64,27 +70,31 @@ function analyser(source, exemptions = [...LISTE_BLANCHE, ...EN_ATTENTE]) {
     const j = cleDeJumelle(selecteur)
     if (j.reduite) attenuees.set(j.cle, [...(attenuees.get(j.cle) || []), { regle: r, selecteur }])
   }
-  const infinies = []
+  const repetees = [], attenueesRepetees = []
   for (const r of regles) {
-    for (const a of (animationsDe(r.declarations) || []).filter(x => x.infinie)) for (const selecteur of r.selecteurs) {
-      if (selecteur.includes('k-reduced')) continue
-      const j = cleDeJumelle(selecteur)
-      const e = { source: source.cle, nom: source.nom, selecteur, animation: a.nom, ligne: r.ligne }
+    for (const a of (animationsDe(r.declarations) || []).filter(x => x.tours > 1)) for (const selecteur of r.selecteurs) {
+      const e = { source: source.cle, nom: source.nom, selecteur, animation: a.nom, tours: a.tours, ligne: r.ligne }
       e.exemption = exemptions.find(x => x.source === source.cle && x.selecteur === selecteur && x.animation === a.nom) || null
+      if (selecteur.includes('k-reduced')) { attenueesRepetees.push(e); continue }
+      const j = cleDeJumelle(selecteur)
       if (!j.premiers.includes('.' + source.classe)) e.erreur = `son premier composé ne porte pas .${source.classe} (k-reduced, posée sur #st, ne peut s'y ajouter)`
       const candidates = attenuees.get(j.cle) || []
       const bonne = candidates.find(c => { const t = animationsDe(c.regle.declarations); return t !== null && !t.some(x => x.nom === a.nom) })
       e.jumelle = bonne ? bonne.selecteur : null
       e.jumelleAnimations = bonne ? animationsDe(bonne.regle.declarations).map(x => x.nom) : null
       e.jumelleMuette = !bonne && candidates.length > 0
-      infinies.push(e)
+      repetees.push(e)
     }
   }
-  return { regles, keyframes, infinies, attenuees }
+  return { regles, keyframes, repetees, attenueesRepetees, attenuees }
 }
-const manquantes = analyse => analyse.infinies.filter(e => !e.exemption && (e.erreur || !e.jumelle)).map(e =>
-  `${e.nom}, ligne ${e.ligne} : ${e.selecteur} { animation: ${e.animation} … infinite } : ` +
-  (e.erreur || (e.jumelleMuette ? 'sa règle atténuée ne met ni animation: none ni une autre animation' : 'aucune règle jumelle .k-reduced')))
+const enTours = e => (e.tours === Infinity ? 'infinite' : `${e.tours} tours`)
+const manquantes = analyse => [
+  ...analyse.repetees.filter(e => !e.exemption && (e.erreur || !e.jumelle)).map(e => [e, e.erreur ||
+    (e.jumelleMuette ? 'sa règle atténuée ne met ni animation: none ni une autre animation' : 'aucune règle jumelle .k-reduced')]),
+  ...analyse.attenueesRepetees.filter(e => !e.exemption).map(e => [e, 'animation répétée en effets atténués, hors liste blanche']),
+].sort(([a], [b]) => a.ligne - b.ligne)
+  .map(([e, raison]) => `${e.nom}, ligne ${e.ligne} : ${e.selecteur} { animation: ${e.animation} … ${enTours(e)} } : ${raison}`)
 
 const SOURCES = [
   ...KITS.map(k => ({ nom: k.nom, cle: 'kit', classe: 'st', css: k.css })),
@@ -112,6 +122,7 @@ describe('outils de la garde (témoins sur des feuilles écrites ici)', () => {
     expect(manquantes(analyser(feuille(css)))).toEqual([
       'essai, ligne 1 : .m9 .a { animation: m9-x … infinite } : sa règle atténuée ne met ni animation: none ni une autre animation',
       'essai, ligne 3 : .m9 .b { animation: m9-y … infinite } : sa règle atténuée ne met ni animation: none ni une autre animation',
+      'essai, ligne 4 : .m9.k-reduced .b { animation: m9-y … infinite } : animation répétée en effets atténués, hors liste blanche',
     ])
   })
 
@@ -120,22 +131,81 @@ describe('outils de la garde (témoins sur des feuilles écrites ici)', () => {
     const blanche = [{ source: 'm9', selecteur: '.m9 .b::after', animation: 'm9-spin' }]
     expect(manquantes(analyser(feuille(css), blanche))).toEqual(['essai, ligne 1 : .shot .a { animation: m9-x … infinite } : son premier composé ne porte pas .m9 (k-reduced, posée sur #st, ne peut s\'y ajouter)'])
   })
+
+  it('une animation de plus d\'un tour demande sa jumelle comme une infinie ; -webkit-animation se lit comme animation', () => {
+    const css = '.m9 .a { animation: m9-x .5s steps(2) 40 }\n.m9 .b { animation-name: m9-y; animation-iteration-count: 3 }\n' +
+      '.m9 .c { -webkit-animation: m9-z 1s infinite }\n.m9 .d { animation: m9-w .4s 1 }'
+    expect(manquantes(analyser(feuille(css)))).toEqual([
+      'essai, ligne 1 : .m9 .a { animation: m9-x … 40 tours } : aucune règle jumelle .k-reduced',
+      'essai, ligne 2 : .m9 .b { animation: m9-y … 3 tours } : aucune règle jumelle .k-reduced',
+      'essai, ligne 3 : .m9 .c { animation: m9-z … infinite } : aucune règle jumelle .k-reduced',
+    ])
+  })
+
+  it('en effets atténués, rien ne se répète : une règle .k-reduced qui pose une animation répétée ne vaut que par la liste blanche', () => {
+    const css = '.m9 .a { animation: m9-x 1s steps(2) infinite }\n.m9.k-reduced .a { animation: m9-y 2s steps(2) infinite }\n' +
+      '.m9 .b { animation: m9-x 1s infinite }\n.m9.k-reduced .b { animation: m9-y .5s steps(2) 40 }\n' +
+      '.m9 .c { animation: m9-x 1s infinite }\n.m9.k-reduced .c { animation: m9-y .3s ease-out }\n' +
+      '.m9.k-reduced .d { animation: m9-z 1s infinite }'
+    expect(manquantes(analyser(feuille(css)))).toEqual([
+      'essai, ligne 2 : .m9.k-reduced .a { animation: m9-y … infinite } : animation répétée en effets atténués, hors liste blanche',
+      'essai, ligne 4 : .m9.k-reduced .b { animation: m9-y … 40 tours } : animation répétée en effets atténués, hors liste blanche',
+      'essai, ligne 7 : .m9.k-reduced .d { animation: m9-z … infinite } : animation répétée en effets atténués, hors liste blanche',
+    ])
+    const blanche = ['.a', '.b'].map(c => ({ source: 'm9', selecteur: '.m9.k-reduced ' + c, animation: 'm9-y' }))
+    expect(manquantes(analyser(feuille(css), [...blanche, { source: 'm9', selecteur: '.m9.k-reduced .d', animation: 'm9-z' }]))).toEqual([])
+  })
+
+  it('animations hors des feuilles : attribut style du HTML, script (propriété de style, clé d\'objet, setProperty, chaîne CSS)', () => {
+    expect(animationsDuHtml('<div style="opacity:.5; --i: 2"></div><svg><text id="t" style="fill:red;animation: m9-x 1s infinite">x</text></svg>' +
+      '<p style="-webkit-animation-name: m9-y">y</p>')).toEqual([
+      'attribut style de <text id="t"> : fill:red;animation: m9-x 1s infinite',
+      'attribut style de <p> : -webkit-animation-name: m9-y',
+    ])
+    const source = 'export function start(K) {\n' +
+      '  K.$("a").style.animation = "m9-x 1s infinite"\n' +
+      '  K.$("b").style.animationIterationCount = "infinite"\n' +
+      '  K.$("c").style.setProperty("animation-name", "m9-y")\n' +
+      '  Object.assign(K.$("d").style, { animation: "m9-z 1s" })\n' +
+      '  K.$("e").style.cssText = `left:2px; animation: m9-w ${3}s infinite`\n' +
+      '  K.$("f").innerHTML = \'<i style="animation:m9-v 1s infinite"></i>\'\n' +
+      '  K.$("g").style.setProperty("--i", 2); K.$("g").addEventListener("animationend", () => {}); K.anim(k => {}, 300)\n' +
+      '}\n'
+    const { corps } = lireModule(source)
+    expect(animationsDuScript(corps, source).map(r => r.split(' : ')[0])).toEqual(['ligne 2', 'ligne 3', 'ligne 4', 'ligne 5', 'ligne 6', 'ligne 7'])
+  })
 })
 
 describe.each(SOURCES.map(s => [s.nom, s]))('G4 : %s', (nom, source) => {
-  it('toute animation infinie a sa règle jumelle atténuée (hors liste blanche et attente)', () => {
+  it('toute animation répétée a sa règle jumelle atténuée, et rien ne se répète en effets atténués (hors liste blanche et attente)', () => {
     expect(manquantes(analyser(source))).toEqual([])
   })
 })
 
+// Hors des feuilles, la lecture règle par règle ne verrait rien : aucune animation posée par le HTML ou le script d'une
+// scène, ni par le script des deux kits.
+describe.each(Object.keys(SCENES))('G4 : %s, hors des feuilles', id => {
+  it('aucune animation posée par un attribut style du HTML ni par le script', () => {
+    const scene = lireScene(id)
+    expect([...animationsDuHtml(scene.html), ...animationsDuScript(scene.corps, scene.source)]).toEqual([])
+  })
+})
+
+describe.each(SCRIPTS_DU_KIT.map(k => [k.nom, k]))('G4 : script du %s, hors des feuilles', (nom, kit) => {
+  it('aucune animation posée par le script du kit', () => {
+    expect(animationsDuScript(kit.programme, kit.source)).toEqual([])
+  })
+})
+
 describe.each([['liste blanche', LISTE_BLANCHE], ['attente de m5', EN_ATTENTE]])('G4 : %s', (nom, liste) => {
-  it('chaque entrée désigne encore une animation infinie de sa source, sans jumelle (sinon la retirer de la liste)', () => {
+  it('chaque entrée désigne encore une animation répétée de sa source, sans jumelle (sinon la retirer de la liste)', () => {
     const inutiles = []
     for (const e of liste) {
       const sources = SOURCES.filter(s => s.cle === e.source)
       if (!sources.length) { inutiles.push(`${e.source} : source inconnue`); continue }
       for (const s of sources) {
-        const vue = analyser(s).infinies.find(x => x.exemption === e)
+        const a = analyser(s)
+        const vue = [...a.repetees, ...a.attenueesRepetees].find(x => x.exemption === e)
         if (!vue) inutiles.push(`${s.nom} : ${e.selecteur} { animation: ${e.animation} } n'existe plus`)
         else if (vue.jumelle) inutiles.push(`${s.nom} : ${e.selecteur} a maintenant sa jumelle ${vue.jumelle}`)
       }
@@ -176,7 +246,7 @@ const VARIANTES = { epilogue: [{ port: 'libres' }, { port: 'enfermes' }] }
 const CAS = Object.keys(SCENES).flatMap(id => (VARIANTES[id] || [{}]).map(params => [id, params]))
 const nomDuCas = (id, params) => id + (Object.keys(params).length ? '?' + new URLSearchParams(params) : '')
 
-// Règles à observer dans une scène : animations infinies du kit du jeu (la feuille que playCinematic pose) et de la
+// Règles à observer dans une scène : animations répétées du kit du jeu (la feuille que playCinematic pose) et de la
 // scène, hors liste blanche et attente, et flashs. Un pseudo-élément (::before…), que jsdom ne calcule pas, est vu
 // par l'élément qui le porte : sa jumelle doit le désigner avec l'option, et pas sans.
 function reglesAObserver(id) {
@@ -185,7 +255,7 @@ function reglesAObserver(id) {
   const regles = []
   for (const source of sources) {
     const a = analyser(source)
-    for (const e of a.infinies.filter(x => !x.exemption)) {
+    for (const e of a.repetees.filter(x => !x.exemption)) {
       const pseudo = pseudoElement(e.selecteur)
       regles.push({ ...e, famille: familleDe(e.animation), pseudo,
         cible: pseudo ? e.selecteur.slice(0, -pseudo.length) : e.selecteur,
@@ -209,7 +279,7 @@ function animationsCalculees(el) {
 }
 
 // Une lecture complète d'un cas : pour chaque règle, chaque élément qu'elle désigne, relevé à sa première apparition
-// (pas de 250 ms : chaque état observé tient bien plus longtemps), avec les animations infinies que toutes les règles
+// (pas de 250 ms : chaque état observé tient bien plus longtemps), avec les animations répétées que toutes les règles
 // observées lui destinent à cet instant (une règle plus précise peut l'emporter : .rain.r2 sur .rain).
 // Sous Vitest, l'import `kit.css?raw` de src/briefing/index.js rend une feuille vide (le CSS n'est pas traité) : la
 // feuille du kit du jeu est posée à sa place, sous le même id, avant le montage (playCinematic la garde alors).
@@ -218,7 +288,7 @@ async function lecture(id, params, reducedMotion, regles) {
   document.body.innerHTML = '<div id="briefing-root" hidden></div>'
   const kit = document.createElement('style'); kit.id = 'k-kit-css'; kit.textContent = KITS[0].css
   document.head.appendChild(kit)
-  const constats = []
+  const constats = [], poses = []
   try {
     const handle = await playCinematic(id, { params, reducedMotion })
     const root = document.getElementById('briefing-root')
@@ -232,17 +302,20 @@ async function lecture(id, params, reducedMotion, regles) {
           animations: animationsCalculees(el), jumelleSApplique: r.cibleJumelle ? el.matches(r.cibleJumelle) : false })
       }
     })
-    relever(0)
+    // onde de l'écoute (#wave de m1 et m6) : ses barres sont menées par le script du kit (K.wave), hors de toute
+    // feuille ; leurs hauteurs sont relevées à chaque pas
+    const releverOnde = () => { const w = root.querySelector('#wave'); if (w) poses.push([...w.children].map(b => b.style.height).join(' ')) }
+    relever(0); releverOnde()
     for (let t = 250; t <= 120000 && root.querySelector('#st'); t += 250) {
       await vi.advanceTimersByTimeAsync(250)
-      if (root.querySelector('#st')) relever(t)
+      if (root.querySelector('#st')) { relever(t); releverOnde() }
     }
     await flush()
     if (handle.kit.errors.length) throw new Error(handle.kit.errors.join('\n'))
   } finally {
     vi.useRealTimers(); document.body.innerHTML = ''; document.head.innerHTML = ''
   }
-  return constats
+  return { constats, poses }
 }
 
 // L'élément joue-t-il l'effet de la règle ? Une animation que lui destine l'une des règles observées (la plus précise
@@ -254,11 +327,11 @@ const decrire = c => `${c.regle.nom} : ${c.regle.selecteur} (${c.regle.animation
 
 // Les lectures (20 : chaque cas, sans puis avec l'option) se font une fois, avant les seuls tests dynamiques.
 describe('G4 dynamique : chaque cas joué en entier, sans puis avec l\'option', () => {
-  const lectures = []   // { cas, reduit, constats }
+  const lectures = []   // { cas, reduit, constats, poses }
   beforeAll(async () => {
     for (const [id, params] of CAS) {
       const regles = reglesAObserver(id)
-      for (const reduit of [false, true]) lectures.push({ cas: nomDuCas(id, params), reduit, constats: await lecture(id, params, reduit, regles) })
+      for (const reduit of [false, true]) lectures.push({ cas: nomDuCas(id, params), reduit, ...await lecture(id, params, reduit, regles) })
     }
   }, 600000)
 
@@ -292,5 +365,19 @@ describe('G4 dynamique : chaque cas joué en entier, sans puis avec l\'option', 
       for (const r of avec) if (!sans.has(r)) ecarts.push(`${nomDuCas(id, params)} : ${r} vue avec l'option seulement`)
     }
     expect(ecarts).toEqual([])
+  })
+
+  // Onde de l'écoute (#wave de m1 et m6), que l'analyse des feuilles ne voit pas : pendant qu'une ligne de l'écoute
+  // parle, K.wave tire une hauteur par barre toutes les 90 ms (témoin : sans l'option, l'onde s'agite) ; en effets
+  // atténués, une seule pose, fixe, à plat entre les lignes (spec §3.7 : arrêtée dans sa pose de repos, comme
+  // l'égaliseur de la radio).
+  it('onde de l\'écoute (K.wave) : sans l\'option, elle s\'agite pendant les lignes ; avec, une seule pose, fixe', () => {
+    const parlees = l => new Set(l.poses.filter(p => p.split(' ').some(h => h !== '' && h !== '6%')))
+    const vues = lectures.filter(l => parlees(l).size)
+    expect(vues.map(l => l.cas + (l.reduit ? ', atténué' : '')).sort()).toEqual(['m1', 'm1, atténué', 'm6', 'm6, atténué'])
+    for (const l of vues) {
+      if (l.reduit) expect(parlees(l).size, `${l.cas}, avec l'option : poses de l'onde pendant les lignes`).toBe(1)
+      else expect(parlees(l).size, `${l.cas}, sans l'option : poses de l'onde pendant les lignes`).toBeGreaterThan(5)
+    }
   })
 })
