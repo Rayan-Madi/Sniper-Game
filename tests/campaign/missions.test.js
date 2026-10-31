@@ -24,7 +24,6 @@ const { scene } = await import('../../src/scene.js')
 const { MAP_BUILDERS, clearMap } = await import('../../src/maps/index.js')
 const { withSeed } = await import('../../src/gfx/memtest.js')
 const { MAX_LEVEL } = await import('../../src/campaign/progress.js')
-const { getStats } = await import('../../src/upgrades.js')
 const { MISSIONS, missionFor, ancresCitees, resoudreAncres, nombreDeCivils } = await import('../../src/campaign/missions/index.js')
 
 const ROOT = resolve(__dirname, '../..')
@@ -142,8 +141,10 @@ function defautsDeForme(m) {
   exige(Number.isInteger(m.points) && m.points > 0, 'points')
   exige(!!m.poste && nom(m.poste.oeil) && (m.poste.regard === null || nom(m.poste.regard)), 'poste')
   exige(nom(m.zone), 'zone')
+  // Zoom : départ entre les bornes de la molette, et jamais sous ×1 (60 / zoom au-delà de 60° : plus large que sans
+  // lunette ; à ×0, aucun champ de vision)
   const z = m.zoom || {}
-  exige([z.depart, z.min, z.max].every(fini) && z.min <= z.depart && z.depart <= z.max, 'zoom')
+  exige([z.depart, z.min, z.max].every(fini) && z.min >= 1 && z.min <= z.depart && z.depart <= z.max, 'zoom')
   const p = m.profil || {}, b = p.brume || {}
   exige(fini(p.near) && fini(p.far) && p.near > 0 && p.near < p.far, 'profil.near, profil.far')
   exige(fini(b.couleur) && (b.type === 'lin' ? fini(b.debut) && fini(b.fin) && b.debut < b.fin
@@ -183,11 +184,12 @@ describe('chaque mission a tous ses champs, de la forme attendue', () => {
     })
   })
 
-  it('témoins : une mission sans fin, ou au zoom de départ sous le minimum, est relevée', () => {
+  it('témoins : une mission sans fin, au zoom de départ sous le minimum, ou au zoom minimum sous ×1, est relevée', () => {
     const { fin, ...sansFin } = MISSIONS[0]
     expect(fin).toBeDefined()
     expect(defautsDeForme(sansFin)).toEqual(['fin'])
     expect(defautsDeForme({ ...MISSIONS[2], zoom: { depart: 2, min: 3, max: 6 } })).toEqual(['zoom'])
+    expect(defautsDeForme({ ...MISSIONS[2], zoom: { depart: 0.5, min: 0.5, max: 6 } })).toEqual(['zoom'])
     expect(defautsDeForme({ ...MISSIONS[5], casting: { ...MISSIONS[5].casting, cibles: [{ routine: 'danse' }] } }))
       .toEqual(['casting.cibles'])
   })
@@ -399,12 +401,12 @@ describe('valeurs du jeu d\'aujourd\'hui', () => {
     expect(cartes.map(c => c.fond && c.fond.getHex())).toEqual(BRUMES_D_AVANT_A3.map(([couleur]) => couleur))
   })
 
-  it('zoom : ×4 au départ et ×3 au moins (main.js), ×6 au plus sans la Lunette (getStats, src/upgrades.js)', () => {
-    const src = readFileSync(join(ROOT, 'src', 'main.js'), 'utf8')
-    const depart = /setZoom\(([\d.]+), \{ instant: true \}\)/.exec(src)
-    const min = /Math\.max\(([\d.]+), Math\.min\(stats\.maxZoom/.exec(src)
-    expect(depart && min, 'main.js : zoom de départ ou minimum introuvable').toBeTruthy()
-    for (const m of MISSIONS) expect(m.zoom, `M${m.numero}`).toEqual({ depart: +depart[1], min: +min[1], max: getStats().maxZoom })
+  // Zoom que posait le jeu avant la tâche A5 (commit 4b6e4e8), le même dans les six missions : ×4 au départ
+  // (setZoom(4, { instant: true }) dans mountLevel), et la molette de ×3 à 6 + 2 × niveau de Lunette (main.js, maxZoom
+  // de getStats, src/upgrades.js), soit ×6 sans la Lunette. Depuis la tâche, le zoom de la mission en décide (et la
+  // Lunette relève son maximum de 15 % par niveau, décision 2) : 3b à 3d y mettront ceux de leurs postes.
+  it('zoom : ×4 au départ, de ×3 à ×6 sans la Lunette, celui d\'avant la tâche A5', () => {
+    for (const m of MISSIONS) expect(m.zoom, `M${m.numero}`).toEqual({ depart: 4, min: 3, max: 6 })
   })
 
   it('ni sortie, ni abri, ni fenêtre, ni radio, fin immédiate : le cône de 80° décide de la fuite, la réussite suit le ralenti', () => {

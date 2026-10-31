@@ -107,3 +107,22 @@ describe('Vélocité : la vitesse de la balle', () => {
     expect(U.getStats().boltS).toBe(0.9)
   })
 })
+
+// Lunette (spec du lot 3, décision 2 ; plan du lot 3a, tâche A5) : le zoom maximum de la mission, multiplié par
+// 1 + 0,15 × niveau (×1,45 au niveau 3 : ×29 pour les ×20 de M4 au sous-lot 3c), au lieu d'un maximum fixe de
+// 6 + 2 × niveau dans toutes les missions. Le maximum de la mission et la molette : src/aim.js (bornesDuZoom), câblés
+// dans main.js (tests/shot/main.zoom.test.js, où la molette d'avant la tâche sert de témoin). Témoin : le getStats
+// d'avant la tâche n'a que le maximum fixe, maxZoom (vu rouge).
+describe('Lunette : le zoom maximum de la mission, relevé de 15 % par niveau (décision 2)', () => {
+  it('facteur 1, 1,15, 1,3 et 1,45 du niveau 0 au niveau 3', () => {
+    const vus = [0, 1, 2, 3].map(n => { U.state.levels.zoom = n; return U.getStats().maxZoomScale })
+    // Arrondis à 1e-12 près ; un facteur absent (le getStats d'avant la tâche) donne NaN : une différence relevée par
+    // l'assertion, pas une erreur
+    expect(vus.map(f => Math.round(f * 1e12) / 1e12)).toEqual([1, 1.15, 1.3, 1.45])
+  })
+
+  it('plus de maximum fixe (maxZoom : 6 + 2 × niveau, de ×6 à ×12 quelle que soit la mission)', () => {
+    U.state.levels.zoom = 3
+    expect('maxZoom' in U.getStats()).toBe(false)
+  })
+})

@@ -8,6 +8,10 @@ export const LUNETTE = {
   fermetureMs: 120,     // durée de la fermeture
   reticuleA: 2 / 3,     // part de l'ouverture à partir de laquelle le réticule apparaît (le dernier tiers)
   zoomMs: 120,          // temps pour que le zoom effectif atteigne 95 % du zoom choisi à la molette
+  // Zoom choisi à la molette, entre les bornes de la mission (champ zoom de src/campaign/missions/ ; src/aim.js)
+  pasMolette: 0.5,      // un cran de molette change le zoom d'autant (×4 → ×4,5), sur la grille de ce pas
+  zoomParNiveau: 0.15,  // amélioration Lunette (décision 2 du lot 3) : le zoom maximum de la mission × (1 + 0,15 × niveau),
+                        // ×1,45 au niveau 3 : ×8,7 pour un maximum de base de ×6, ×29 pour les ×20 que 3c donnera à M4
 }
 
 // ─── Recul ─────────────────────────────────────────────────────────

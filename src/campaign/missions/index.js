@@ -25,8 +25,9 @@
 //   poste        { oeil, regard } : ancres de l'œil du tireur et du point regardé au départ ; regard null : la vue part
 //                à l'horizontale, vers -Z
 //   zone         ancre de la zone des PNJ
-//   zoom         { depart, min, max } : zoom de la lunette au départ, le plus petit et le plus grand à la molette ; max
-//                est celui de base, que l'amélioration Lunette relève (getStats, src/upgrades.js : +2 par niveau)
+//   zoom         { depart, min, max } : zoom de la lunette au départ (posé par mountLevel), le plus petit et le plus grand
+//                à la molette (au moins ×1) ; max est celui de base, que l'amélioration Lunette multiplie par
+//                1 + 0,15 × niveau (décision 2 ; getStats().maxZoomScale, src/upgrades.js ; bornesDuZoom, src/aim.js)
 //   zero         le réglage de la lunette (m) : la distance qu'annonce Anton au briefing (décision 1 de la spec du lot 3),
 //                affichée « ZÉRO n m » ; la balle recroise la ligne de visée à cette distance (src/shot/ballistics.js).
 //                Déjà la vraie valeur, même pour M3, M4 et M5, que leurs sous-lots (3c, 3d) n'ont pas encore mises à

@@ -11,7 +11,7 @@ import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, in
 import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources, loadedModel } from './characters.js'
 import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
 import { playCinematic } from './briefing/index.js'
-import { aimAngles, stepStress, clampPitch } from './aim.js'
+import { aimAngles, stepStress, clampPitch, bornesDuZoom, zoomApresCran } from './aim.js'
 import { STRESS, APNEE, SILLAGE, BALLE, TELEMETRE } from './shot/tuning.js'
 import { createRecoil } from './shot/recoil.js'
 import { createBolt } from './shot/bolt.js'
@@ -627,7 +627,9 @@ function mountLevel(n) {
     yaw = 0; pitch = 0
   }
 
-  setZoom(4, { instant: true })   // posé d'un coup, pas lissé depuis la mission d'avant ; la caméra suit dans loop() (syncFov)
+  // La lunette part du zoom de départ de la mission (spec du lot 3, précisions de la tâche A5), posé d'un coup, pas lissé
+  // depuis la mission d'avant ; la caméra suit dans loop() (syncFov)
+  setZoom(m.zoom.depart, { instant: true })
   // La lunette réglée sur la distance qu'annonce Anton (spec du lot 3, décision 1) : la balle recroise la ligne de visée
   // à cette distance, et la lunette l'affiche (« ZÉRO 430 m »)
   setZero(m.zero)
@@ -1280,13 +1282,14 @@ document.addEventListener('mousemove', e => {
   // Pas de limite sur yaw — rotation libre à 360°
 })
 
-document.addEventListener('wheel', e => {
+// Molette, lunette tenue pendant la mission : un cran de zoom (0,5, sur la grille de ce pas), entre les bornes de la
+// mission, son minimum et son maximum relevé par l'amélioration Lunette (décision 2 de la spec du lot 3 ; src/aim.js)
+function zoomALaMolette(e) {
   if (!isVisible() || gamePhase !== 'playing') return
-  const stats = getStats()
-  const cur = getZoom()
-  const next = Math.max(3, Math.min(stats.maxZoom, cur + (e.deltaY > 0 ? -0.5 : 0.5)))
-  setZoom(next)   // le champ de vision suit dans loop() (syncFov)
-}, { passive: true })
+  const bornes = bornesDuZoom(currentMission.zoom, getStats().maxZoomScale)
+  setZoom(zoomApresCran(getZoom(), e.deltaY > 0 ? -1 : 1, bornes))   // le champ de vision suit dans loop() (syncFov)
+}
+document.addEventListener('wheel', zoomALaMolette, { passive: true })
 
 document.getElementById('canvas').addEventListener('click', () => {
   if (gamePhase === 'playing') document.getElementById('canvas').requestPointerLock()
