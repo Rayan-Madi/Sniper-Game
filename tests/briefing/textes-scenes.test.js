@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { playCinematic } from '../../src/briefing/index.js'
 import { SCENES, lireScene, lireModule, chainesDe, textesDuHtml, contenusCss, TIRET_CADRATIN as T } from './analyse-scenes.js'
 
 // G6 (spec cinématiques v2, §3.1) : aucun tiret cadratin (U+2014) dans ce que le joueur voit d'une scène : le texte du
@@ -64,5 +65,25 @@ describe.each(Object.entries(EXCEPTIONS))('G6 : exception de %s', (id, textes) =
     expect(SCENES[id], `${id} n'est pas une scène du convertisseur`).toBeDefined()
     const vus = new Set(tiretsDe(lireScene(id)).map(t => t.texte))
     expect(textes.filter(e => !vus.has(e))).toEqual([])
+  })
+})
+
+// Décision D2 (spec §4) : la réplique de M6 qui portait un tiret se dit à deux voix, sur deux lignes. Un saut de ligne
+// sépare « Ils sont tous morts ? » de « Oui. Il ne reste que vous. », et #trans le garde à l'écran (white-space:
+// pre-line) ; sans cette règle, le saut de ligne s'affiche comme une espace et les deux voix se lisent d'un seul tenant.
+describe('G6 : la réplique de M6 à deux voix (décision D2)', () => {
+  it('tapée dans l\'écoute avec son saut de ligne, que #trans garde à l\'écran (white-space: pre-line)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] })
+    document.body.innerHTML = '<div id="briefing-root" hidden></div>'
+    try {
+      const handle = await playCinematic('m6', { params: {} })
+      const trans = document.querySelector('#briefing-root #trans')
+      for (let t = 0; t < 6000 && !trans.textContent.endsWith('»'); t += 100) await vi.advanceTimersByTimeAsync(100)
+      const vu = { texte: trans.textContent, blancs: getComputedStyle(trans).whiteSpace }
+      handle.cancel()
+      expect(vu).toEqual({ texte: '« Ils sont tous morts ?\nOui. Il ne reste que vous. »', blancs: 'pre-line' })
+    } finally {
+      vi.useRealTimers(); document.body.innerHTML = ''; document.head.innerHTML = ''
+    }
   })
 })
