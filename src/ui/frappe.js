@@ -7,7 +7,8 @@
 // dire(texte, dureeS, { masque }) remplace la réplique en cours, dont rien ne reste ; rien de la nouvelle n'est frappé
 // avant le prochain update. Elle se tape en dureeS secondes de jeu (absente : dureeFrappe(texte) ; nulle ou invalide :
 // toute à la prochaine image), lettres régulièrement espacées : la k-ième des n à k × dureeS / n, la dernière à dureeS,
-// et fini devient vrai. Les mots sont les morceaux du texte entre deux blancs, ceux de decouper (src/bar/ecoute.js).
+// et fini devient vrai. Les mots sont ceux de motsDe (ci-dessous), que decouper (src/bar/ecoute.js) prend aussi : les
+// morceaux du texte entre deux blancs, la ponctuation seule (« ? », « … ») rattachée à son mot par une espace insécable.
 // La fonction masque(i, mot) dit si le mot i est masqué : elle est appelée une seule fois par mot, dans l'ordre, quand sa
 // première lettre est frappée, et sa réponse ne change plus, même si ce qu'elle a lu change ensuite (absente ou fausse :
 // rien n'est masqué). Un mot masqué s'affiche « … » dès cette lettre ; des mots masqués voisins n'en font qu'un. Si masque
@@ -18,8 +19,8 @@
 // l'appelant) : les mots restants se décident à cet instant.
 //
 // texte : ce qui est frappé, mots masqués en « … », les mots séparés d'une espace (comme masquer, src/bar/ecoute.js) ;
-// motsFrappes : les mots commencés, en clair, le dernier coupé à sa dernière lettre frappée ; fini : toute la réplique
-// est frappée (vrai sans réplique).
+// motsFrappes : les mots commencés, en clair, le dernier coupé à sa dernière lettre frappée (les blancs qu'un mot
+// englobe y sont déjà insécables) ; fini : toute la réplique est frappée (vrai sans réplique).
 //
 // Au Bivouac (tâches B11 et B12) : masque retient l'I du moment, Is[i], et rend !affichage(Is, f)[i] ; le sous-titre
 // d'écoute est masquer(motsFrappes, Is, f), qui dit aussi « (murmures) » ; quand fini devient vrai, la réplique apprend
@@ -45,6 +46,40 @@ const blanc = c => /\s/.test(c)
 // La durée de frappe d'une réplique, en secondes de jeu.
 export const dureeFrappe = texte => PART_FRAPPEE * estimate(texte) / 1000
 
+export const INSECABLE = ' '
+const PLEIN = /[\p{L}\p{N}]/u        // un mot a au moins une lettre ou un chiffre
+
+// Les lettres de debut à fin (exclue), les blancs qu'elles englobent écrits en une seule espace insécable.
+const ecrire = (lettres, debut, fin) => lettres.slice(debut, fin).join('').replace(/\s+/g, INSECABLE)
+
+// Les mots d'un texte, dans l'ordre : [{ mot, debut, fin }], debut et fin comptés en lettres de [...texte] (une lettre
+// accentuée ou « … » compte pour une), fin exclue. Un mot est un morceau du texte entre deux blancs ; un morceau sans
+// lettre ni chiffre (« ? », « ! », « … », un guillemet) se rattache au mot d'avant, ou au suivant s'il ouvre le texte (un
+// texte sans lettre ni chiffre ne fait qu'un mot) : il se frappe, s'affiche et se masque avec lui, jamais seul. Les
+// blancs que le mot englobe s'écrivent en une seule espace insécable, qui ne coupe pas la ligne (choix de B5, spec §3.4,
+// « Réglé en B5 » : « Tu es sourd ? » donne « Tu », « es », « sourd ? », insécable).
+export function motsDe(texte) {
+  const lettres = [...texte]
+  const morceaux = []
+  lettres.forEach((c, k) => {
+    if (blanc(c)) return
+    const dernier = morceaux[morceaux.length - 1]
+    if (dernier && dernier.fin === k) dernier.fin = k + 1
+    else morceaux.push({ debut: k, fin: k + 1 })
+  })
+  const mots = []
+  let ouvre = null      // la ponctuation qui ouvre le texte attend le premier mot : son début
+  for (const m of morceaux) {
+    if (PLEIN.test(lettres.slice(m.debut, m.fin).join(''))) {
+      mots.push({ debut: ouvre ?? m.debut, fin: m.fin })
+      ouvre = null
+    } else if (mots.length) mots[mots.length - 1].fin = m.fin
+    else ouvre ??= m.debut
+  }
+  if (ouvre !== null) mots.push({ debut: ouvre, fin: morceaux[morceaux.length - 1].fin })
+  return mots.map(m => ({ mot: ecrire(lettres, m.debut, m.fin), debut: m.debut, fin: m.fin }))
+}
+
 export function createFrappe() {
   let lettres = []      // la réplique, lettre à lettre (une lettre accentuée ou « … » compte pour une)
   let mots = []         // { mot, debut, fin } : indices de sa première lettre et de la lettre qui le suit
@@ -64,8 +99,8 @@ export function createFrappe() {
     }
     frappees = cible
   }
-  // ce qui est frappé du mot i
-  const vu = i => lettres.slice(mots[i].debut, Math.min(mots[i].fin, frappees)).join('')
+  // ce qui est frappé du mot i (ses blancs, insécables)
+  const vu = i => ecrire(lettres, mots[i].debut, Math.min(mots[i].fin, frappees))
 
   return {
     dire(texte, dureeS, options = {}) {
@@ -74,12 +109,7 @@ export function createFrappe() {
       const m = options.masque || null     // absente ou fausse ({ masque: ecoute && fn }) : rien n'est masqué
       if (m !== null && typeof m !== 'function') throw new TypeError('frappe : masque doit être une fonction (i, mot) qui rend vrai si le mot est masqué')
       lettres = [...texte]
-      mots = []
-      lettres.forEach((c, k) => {
-        if (blanc(c)) return
-        const dernier = mots[mots.length - 1]
-        if (dernier && dernier.fin === k) { dernier.mot += c; dernier.fin = k + 1 } else mots.push({ mot: c, debut: k, fin: k + 1 })
-      })
+      mots = motsDe(texte)
       masques = []; masque = m; t = 0; frappees = 0; commences = 0
       duree = dureeS == null ? dureeFrappe(texte) : secondes(dureeS)
     },

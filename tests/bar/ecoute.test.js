@@ -200,6 +200,22 @@ describe('les mots masqués', () => {
     expect(decouper({ texte: '  Belote.  ' })).toEqual([{ mot: 'Belote.', cle: false }])
   })
 
+  it('un morceau sans lettre ni chiffre se rattache au mot d\'avant (au suivant s\'il ouvre la réplique), par une espace insécable', () => {
+    // Choix de B5 (spec §3.4, « Réglé en B5 ») : « ? », « ! », « … » ou un guillemet ne sont jamais un mot à eux seuls.
+    // Ils s'affichent et se masquent avec leur mot, et l'espace qui les en sépare, insécable, ne coupe pas la ligne.
+    const R1 = { texte: 'Devant. À droite. Tu es sourd ?', motsCles: ['devant', 'à droite'], renseignement: 'place' }
+    expect(motsDe(R1)).toEqual(['Devant.', 'À', 'droite.', 'Tu', 'es', 'sourd ?'])   // témoin : decouper de B2, « ? » seul
+    expect(decouper(R1).map(m => m.cle)).toEqual([true, true, true, false, false, false])
+    expect(motsDe({ texte: '… Ils ont rendez-vous. Allez…' })).toEqual(['… Ils', 'ont', 'rendez-vous.', 'Allez…'])
+    expect(motsDe({ texte: '« Bonne route » , dit-il !' })).toEqual(['« Bonne', 'route » ,', 'dit-il !'])
+    expect(motsDe({ texte: 'Hé  !  Vous ?!' })).toEqual(['Hé !', 'Vous ?!'])   // plusieurs blancs : une seule insécable
+    expect(motsDe({ texte: 'Le 7 ?' })).toEqual(['Le', '7 ?'])                      // un chiffre suffit à faire un mot
+    expect(motsDe({ texte: '… ?' })).toEqual(['… ?'])                               // rien que de la ponctuation : un seul mot
+    // le mot-clé se reconnaît malgré la ponctuation qui lui est rattachée, devant comme derrière
+    expect(decouper({ texte: 'Lui ? Dans la deuxième ?', motsCles: ['deuxième'] }).map(m => m.cle)).toEqual([false, false, false, true])
+    expect(decouper({ texte: '« Deuxième » , oui.', motsCles: ['deuxième'] }).map(m => m.cle)).toEqual([true, false])
+  })
+
   it('un mot-clé absent de sa réplique ou vide, ou un renseignement sans mot-clé, est une erreur', () => {
     expect(() => decouper({ texte: 'Le col, c\'est fini.', motsCles: ['vieille route'] })).toThrow(/vieille route/)
     expect(() => decouper({ texte: 'Bivouac. … Oui, mon colonel.', motsCles: [' '] })).toThrow(/vide/)   // témoin : trouvé sur « … »

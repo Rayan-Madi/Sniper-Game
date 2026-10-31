@@ -129,8 +129,12 @@ export const COUVERTURE = {
 }
 
 // ─── Les dialogues à choix (§3.8) ──────────────────────────────────
-// Décision 7 de la spec (G4), tranchée le 28 octobre 2026 : 10 s, 6 s face à Sorel.
+// Décision 7 de la spec (G4), tranchée le 28 octobre 2026 : 10 s, 6 s face à Sorel. Le déroulé (src/bar/dialogue.js) :
+// une réplique dure son estimation (350 + 62 × longueur ms, src/briefing/kit.js:10), frappée en 0,8 de ce temps.
 export const DIALOGUE = {
   minuterieS: 10,       // temps pour choisir une réponse en conversation ; à l'échéance, le silence
   minuterieSorelS: 6,   // le même face à Sorel, qui n'attend pas
+  choixApresS: 0.6,     // les choix s'affichent ce temps après la fin de la frappe de la question, et la minuterie part
+  enchainementS: 0.4,   // entre deux répliques qui se suivent, comme les lignes des fiches de l'enquête (investigation.js:274)
+  ticsS: [1.5, 1, 0.5], // clock() quand il reste ces temps à la minuterie : toutes les 0,5 s sur la dernière 1,5 s
 }

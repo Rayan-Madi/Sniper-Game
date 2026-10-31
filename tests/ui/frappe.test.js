@@ -206,8 +206,38 @@ describe('une réplique à la fois', () => {
   })
 })
 
+describe('la ponctuation se frappe avec son mot (choix de B5, spec §3.4)', () => {
+  it('un morceau sans lettre ni chiffre ne se décide ni ne se masque seul, et ne passe pas seul à la ligne', () => {
+    const appels = []
+    const f = createFrappe()
+    f.dire('Tu es sourd ?', 1, { masque: (i, mot) => { appels.push(mot); return mot.startsWith('sourd') } })
+    let images = 0
+    while (!f.fini && images < 1200) {
+      f.update(DT); images++
+      expect(f.texte).not.toMatch(/ \?/)                  // jamais une espace sécable devant « ? » (témoin : B4, « Tu es … ? »)
+    }
+    expect(appels).toEqual(['Tu', 'es', 'sourd ?'])  // témoin : frappe de B4, « ? » décidé seul, et en clair
+    expect(f.texte).toBe('Tu es …')                       // témoin : frappe de B4, « Tu es … ? »
+    expect(f.motsFrappes).toEqual(['Tu', 'es', 'sourd ?'])
+    f.dire('… Ils partent. Allez…', 1)
+    imagesJusqua(f, () => f.motsFrappes.length === 1)
+    expect(f.texte).toBe('…')                             // la première lettre de « … Ils » : le mot commence par elle
+    imagesJusqua(f, () => f.fini)
+    expect(f.texte).toBe('… Ils partent. Allez…')    // témoin : frappe de B4, « … Ils partent. Allez… »
+  })
+
+  it('un mot coupé en cours de frappe garde son espace insécable', () => {
+    const f = createFrappe()
+    f.dire('Tu es sourd ?', 1)
+    imagesJusqua(f, () => f.motsFrappes.length === 3 && f.motsFrappes[2].length === 6)   // « sourd » et l'espace
+    expect(f.motsFrappes[2]).toBe('sourd ')
+    expect(f.texte).toBe('Tu es sourd ')
+  })
+})
+
 describe('avec l\'écoute du Bivouac (src/bar/ecoute.js)', () => {
-  // R1 (spec §3.14), à la française : une espace insécable avant le point d'interrogation
+  // R1 (spec §3.14), à la française : une espace insécable avant le point d'interrogation ; elle reste insécable, et
+  // « ? » se frappe avec « sourd » (choix de B5)
   const R1 = { texte: 'Devant. À droite. Tu es sourd ?', motsCles: ['Devant', 'À droite'], renseignement: 'place' }
 
   // Le Bivouac branché sur la frappe (tâches B11 et B12) : masque retient l'I du moment où le mot i est frappé (ici
@@ -224,12 +254,15 @@ describe('avec l\'écoute du Bivouac (src/bar/ecoute.js)', () => {
   }
 
   it('les mots sont ceux de decouper ; le sous-titre est celui de masquer, et le renseignement suit acquis', () => {
-    const net = ecouter([0.85, 0.85, 0.85, 0.1, 0.1, 0.9, 0.9])   // « Tu es » sous les murmures
-    expect(net.f.motsFrappes).toEqual(decouper(R1).map(m => m.mot))   // témoin : mots coupés aux seules espaces, « sourd ? » d'un bloc
-    expect(net.f.texte).toBe('Devant. À droite. … sourd ?')
+    const net = ecouter([0.85, 0.85, 0.85, 0.1, 0.1, 0.9])       // « Tu es » sous les murmures
+    // témoins : mots coupés aux seules espaces, « sourd ? » d'un bloc (B4) ; « ? » rattaché par la frappe seule, ou par
+    // decouper seul (l'un change sans l'autre)
+    expect(net.f.motsFrappes).toEqual(decouper(R1).map(m => m.mot))
+    expect(net.f.motsFrappes).toEqual(['Devant.', 'À', 'droite.', 'Tu', 'es', 'sourd ?'])
+    expect(net.f.texte).toBe('Devant. À droite. … sourd ?')
     expect(net.appris).toBe(true)
-    const flou = ecouter([0.85, 0.85, 0.75, 0.1, 0.1, 0.9, 0.9])  // « droite. » frappé à 0,75 : un mot-clé masqué
-    expect(flou.f.texte).toBe('Devant. À … sourd ?')
+    const flou = ecouter([0.85, 0.85, 0.75, 0.1, 0.1, 0.9])      // « droite. » frappé à 0,75 : un mot-clé masqué
+    expect(flou.f.texte).toBe('Devant. À … sourd ?')
     expect(flou.appris).toBe(false)
   })
 })

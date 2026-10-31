@@ -10,7 +10,9 @@
 // Une réplique : { texte, motsCles?, renseignement? } ; motsCles, les expressions du texte qu'il faut lire pour
 // apprendre le renseignement (« vieille route », « sept heures et quart »), reconnues sans égard à la casse ni à la
 // ponctuation, à chacune de leurs occurrences ; une réplique qui porte un renseignement en a au moins une (sinon,
-// erreur). Les mots sont les morceaux du texte entre deux blancs.
+// erreur). Les mots sont ceux de la frappe (motsDe, src/ui/frappe.js) : les morceaux du texte entre deux blancs, un
+// morceau sans lettre ni chiffre (« ? », « … ») rattaché au mot d'avant par une espace insécable, si bien qu'il ne se
+// masque jamais seul (choix de B5, spec §3.4, « Réglé en B5 »).
 //
 // Côté frappe (src/ui/frappe.js, tâche B4) : quand la première lettre du mot i est frappée, on retient l'I du moment ;
 // affichage(Is, f) dit ce qui s'est affiché, masquer(mots frappés, Is, f) donne le sous-titre, et à la fin de la
@@ -18,6 +20,7 @@
 import { ECOUTE } from './reglages.js'
 import { coupe } from './plan.js'
 import { generateur } from '../shot/acoustics.js'
+import { motsDe } from '../ui/frappe.js'
 
 export const MURMURES = '(murmures)'   // tout le sous-titre, quand rien n'a été frappé au-dessus de ECOUTE.murmuresSous
 export const MASQUE = '…'              // un mot masqué, ou plusieurs voisins fondus en un seul
@@ -97,7 +100,7 @@ export function decouper(replique) {
   if (replique.renseignement && !motsCles.length) {
     throw new Error(`écoute : « ${replique.texte} » porte le renseignement « ${replique.renseignement} » sans mot-clé`)
   }
-  const mots = texte ? texte.split(/\s+/).map(mot => ({ mot, cle: false })) : []
+  const mots = motsDe(texte).map(({ mot }) => ({ mot, cle: false }))
   const formes = mots.map(m => forme(m.mot))
   for (const expression of motsCles) {
     const cherche = expression.trim().split(/\s+/).map(forme)
