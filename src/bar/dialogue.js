@@ -49,7 +49,8 @@
 // fini }. update rend ce qui a été émis, dans l'ordre : { type: 'replique', qui, texte, didascalie, didascalieApres,
 // dureeS } quand une réplique commence (les bips durent dureeS ; ceux de Viktor sont 'inner') ; { type: 'choix', noeud,
 // choix: [{ n, texte }] } quand les choix s'affichent ; { type: 'tic', restant } ; { type: 'effets', noeud, issue,
-// effets } (issue : le n du choix, 'silence', ou null pour les effets d'un nœud sans choix) ; { type: 'fin' }, une fois.
+// effets } (issue : le numéro du choix montré au joueur, de 1 à 3 après les conditions, le n de l'événement 'choix'
+// et non le rang du choix dans les données ; 'silence' ; ou null pour un nœud sans choix) ; { type: 'fin' }, une fois.
 // phase : 'parole' (une réplique, ou l'attente des choix), 'choix', 'fin'. texte : la réplique en cours, frappée (sans
 // masque : la ponctuation y est rattachée à son mot par une espace insécable, motsDe de src/ui/frappe.js).
 import { DIALOGUE } from './reglages.js'

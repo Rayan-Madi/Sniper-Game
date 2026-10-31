@@ -295,6 +295,16 @@ describe('les conditions et les aiguillages', () => {
     expect(resume(jusquaFin(sans)[0])).toBe('viktor : Nulle part.')
   })
 
+  it('les effets d\'un choix portent en issue son numéro montré au joueur (de 1 à 3 après les conditions), pas son rang dans les données', () => {
+    // le choix 3 des données, montré en 2 au routier : « Ça dépend de vous. » en S3 (src/bar/textes.js)
+    const choix = PARTIR.noeuds.q.choix.map((c, k) => ({ ...c, effets: { soupcon: 10 * (k + 1) } }))
+    const d = createDialogue({ ...PARTIR, noeuds: { q: { ...PARTIR.noeuds.q, choix } } }, { etat: { couverture: 'routier' } })
+    auxChoix(d)
+    expect(d.choix).toEqual([{ n: 1, texte: 'Je repars.' }, { n: 2, texte: 'Ça dépend de vous.' }])
+    expect(d.choisir(2)).toBe(true)
+    expect(jusquaFin(d).filter(e => e.type === 'effets')).toEqual([{ type: 'effets', noeud: 'q', issue: 2, effets: { soupcon: 30 } }])   // témoin : le rang dans les données, 3
+  })
+
   it('un aiguillage prend la première branche dont la condition est remplie, la dernière sinon', () => {
     const arbre = si => ({
       id: 'aiguille', interlocuteur: 'sorel', entree: 'a',

@@ -252,7 +252,7 @@ describe('les autres textes du bar', () => {
   it('aucun tiret cadratin dans les textes (couvert aussi par tests/texts.test.js)', () => {
     const avecTiret = []
     const visiter = (v, ou) => {
-      if (typeof v === 'string') { if (v.includes('—')) avecTiret.push(ou); return }
+      if (typeof v === 'string') { if (v.includes('\u2014')) avecTiret.push(ou); return }   // échappé, comme tests/texts.test.js
       if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) visiter(x, `${ou}.${k}`)
     }
     for (const [nom, v] of Object.entries(toutes)) visiter(v, nom)
