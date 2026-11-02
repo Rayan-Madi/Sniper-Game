@@ -191,7 +191,11 @@ export class NPC {
   // groundY : hauteur du sol de la carte (dalle du port, tarmac, route du convoi), 0 par défaut (menu, PvP).
   // allure : celle de la mission (src/campaign/missions/), { cibles, gardes, imprevisibles } : pas des cibles, que les
   // civils suivent aussi, et des gardes (m/s) ; cibles imprévisibles. Sans elle (PvP) : 0,5 m/s, 0,4 pour les gardes.
-  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, allure, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, modelType = null, partyMode = false, onPhone = false, standUp = null }) {
+  // casting : les options du modèle (spawnCharacter, src/characters.js : model, strict, teinte, teinteMaillage,
+  // exclure), que donne la mission ; sans lui, un modèle tiré dans le pool du rôle, comme la foule du PvP.
+  // shadowRole : le rôle que montre son ombre ('cible', 'garde' ou 'civil' ; npcCastsShadow, src/gfx/quality.js) ; sans
+  // lui, son rôle. female : le sexe du personnage de secours (modèle absent).
+  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, allure, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, casting = null, shadowRole = null, partyMode = false, onPhone = false, standUp = null }) {
     this.groundY    = groundY
     this.isTarget   = isTarget
     this.isGuard    = isGuard
@@ -205,14 +209,12 @@ export class NPC {
     this.allure     = allure
     this.bounds     = bounds || { minX: -12, maxX: 12, minZ: -15, maxZ: 15 }
 
-    // Modèle 3D importé (.glb) si configuré, sinon modèle procédural.
-    // La cible "à identifier" (chapeau + marqueur masqué, niveau 6) reste
-    // procédurale pour que les indices visuels (costume clair, chapeau) collent.
-    // Modèle .glb. modelType permet de forcer un pool (ex : la cible cachée
-    // du niveau final utilise le pool CIVIL pour se fondre dans la foule).
+    // Modèle 3D importé (.glb), sinon le personnage de secours, procédural. Son casting (spec du lot 3, §2 d) : le modèle
+    // imposé d'une cible, cherché dans tous les pools (le commanditaire de M6 a un modèle de la foule), les sosies
+    // écartés des civils ; sans casting, le pool du rôle, sans rien tirer de plus (la graine du PvP).
     this.partyMode = partyMode
-    const type = modelType || (isTarget ? 'target' : isGuard ? 'guard' : 'civilian')
-    this.character = spawnCharacter(type)
+    const type = isTarget ? 'target' : isGuard ? 'guard' : 'civilian'
+    this.character = casting ? spawnCharacter(type, casting) : spawnCharacter(type)
     if (this.character) {
       this.mesh = new THREE.Group()
       this.mesh.add(this.character.model)
@@ -225,9 +227,11 @@ export class NPC {
       this.mesh = makePerson(color, isTarget, isGuard, { hideMarker, hat, female })
     }
     this.mesh.position.set(x, groundY, z)   // les pieds sur le sol de la carte, pas sous la dalle
-    // Ombre : rôle visible du personnage. Le commanditaire de M6 (modèle de la foule) a celui des civils, sinon son
-    // ombre le distinguerait des danseurs quand seules les cibles et les gardes en ont une.
-    this.shadowRole = isGuard ? 'garde' : (isTarget && modelType !== 'civilian') ? 'cible' : 'civil'
+    // Ombre : le rôle que montre le personnage, donné par qui le crée, sinon son rôle ; jamais le pool de son modèle
+    // (Verne, une cible au modèle du pool des civils, a l'ombre des cibles). Une cible sans marqueur, comme le
+    // commanditaire de M6, reçoit celle des civils (main.js) : sinon son ombre la distinguerait des danseurs quand seules
+    // les cibles et les gardes en ont une.
+    this.shadowRole = shadowRole || (isGuard ? 'garde' : isTarget ? 'cible' : 'civil')
     this._shadowCasters = []
     this.mesh.traverse(o => { if (o.isMesh && o.castShadow) this._shadowCasters.push(o) })
     this.applyShadows(shadowMode)

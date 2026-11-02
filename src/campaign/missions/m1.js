@@ -18,9 +18,10 @@ export default {
   },
 
   casting: {
-    cibles: [{}],
-    gardes: 1,
-    civils: { nombre: [3, 5] },
+    cibles: [{ modele: 'gangster_man_01', femme: false }],   // Markov, au costume bleu nuit de son portrait
+    gardes: { nombre: 1 },
+    // Sans le tailleur bleu roi de mafia_woman_02, qui passerait pour le costume de Markov
+    civils: { nombre: [3, 5], exclure: ['mafia_woman_02'] },
   },
   allure: { cibles: 0.4, gardes: 0.3, imprevisibles: false },
   marqueurs: true,

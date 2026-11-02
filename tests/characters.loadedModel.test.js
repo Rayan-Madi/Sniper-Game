@@ -7,7 +7,9 @@ import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 // Témoin : avant la tâche S0 (commit 267ca90), le seul moyen de demander un modèle par son nom est
 // spawnCharacter(type, { match }), qui ne cherche que dans le pool du rôle, retombe en silence sur tout le pool quand
 // rien ne correspond (spec du lot 3, §0) et tire au hasard. Demandée comme cible, Verne sort sous les traits d'un autre
-// modèle. Sans loadedModel, les tests tournent sur cette règle (regleAvant) et échouent sur elle (vus rouges).
+// modèle. Sans loadedModel, les tests tournent sur cette règle (regleAvant) et échouent sur elle (vus rouges). Depuis
+// la tâche A6 du lot 3, l'option match n'existe plus : spawnCharacter impose un modèle par l'option model, cherchée
+// dans tous les pools (tests/characters.casting.test.js) ; regleAvant ne sert qu'au témoin, sur le code d'avant S0.
 
 // Faux GLTFLoader : chaque fichier rend une scène vide qui porte son adresse.
 vi.mock('three/examples/jsm/loaders/GLTFLoader.js', async () => {

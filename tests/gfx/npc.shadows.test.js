@@ -5,7 +5,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // ses triangles par la passe d'ombre. Le mode s'applique aux PNJ créés ensuite (setNpcShadows) et aux PNJ déjà en
 // scène (applyShadows). Seuls les maillages qui projetaient une ombre à la création en projettent une : jamais les
 // marqueurs, ni les yeux du modèle procédural. Le commanditaire de M6 (modèle de la foule, sans marqueur) suit la
-// règle des civils : une ombre qu'aucun danseur n'a le trahirait.
+// règle des civils : une ombre qu'aucun danseur n'a le trahirait. Depuis la tâche A6 du lot 3, ce rôle d'ombre est
+// donné au PNJ (shadowRole) et ne dépend plus du pool de son modèle : Verne, une cible au modèle du pool des civils,
+// suit la règle des cibles.
 vi.mock('../../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
@@ -34,12 +36,17 @@ const KINDS = {
   'garde': () => new npcMod.NPC({ isGuard: true, color: 0x334433, x: 3, z: -2, bounds: BOUNDS }),
   'civil': () => new npcMod.NPC({ isCivilian: true, color: 0x7a6aaa, x: 1, z: 2, bounds: BOUNDS, partyMode: true }),
   'commanditaire (modèle de la foule)': () => new npcMod.NPC({ isTarget: true, color: 0xcc4422, x: 4, z: 4, bounds: BOUNDS,
-    hideMarker: true, lockState: 'phone', onPhone: true, modelType: 'civilian' }),
+    hideMarker: true, lockState: 'phone', onPhone: true, casting: { model: 'gangster_man_02', strict: true }, shadowRole: 'civil' }),
+  'Verne (cible au modèle du pool des civils)': () => new npcMod.NPC({ isTarget: true, color: 0xcc4422, x: -4, z: 4,
+    bounds: BOUNDS, casting: { model: 'mafia_woman_02', strict: true } }),
 }
 const EXPECTED = {   // projette une ombre ?
-  tous: { 'cible marquée': true, 'garde': true, 'civil': true, 'commanditaire (modèle de la foule)': true },
-  'cibles-gardes': { 'cible marquée': true, 'garde': true, 'civil': false, 'commanditaire (modèle de la foule)': false },
-  aucun: { 'cible marquée': false, 'garde': false, 'civil': false, 'commanditaire (modèle de la foule)': false },
+  tous: { 'cible marquée': true, 'garde': true, 'civil': true, 'commanditaire (modèle de la foule)': true,
+    'Verne (cible au modèle du pool des civils)': true },
+  'cibles-gardes': { 'cible marquée': true, 'garde': true, 'civil': false, 'commanditaire (modèle de la foule)': false,
+    'Verne (cible au modèle du pool des civils)': true },
+  aucun: { 'cible marquée': false, 'garde': false, 'civil': false, 'commanditaire (modèle de la foule)': false,
+    'Verne (cible au modèle du pool des civils)': false },
 }
 
 const meshes = npc => { const out = []; npc.mesh.traverse(o => { if (o.isMesh) out.push(o) }); return out }

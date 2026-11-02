@@ -18,9 +18,14 @@ export default {
   },
 
   casting: {
-    cibles: [{}, {}, {}],
-    gardes: 4,
-    civils: { nombre: [3, 5] },
+    cibles: [
+      { modele: 'mafia_woman_02', femme: true },    // Verne : tailleur bleu nuit, chignon
+      { modele: 'mafia_henchman', femme: false },   // Halder : casque noir, « jamais sans son casque »
+      { modele: 'mafia_woman_01', femme: true },    // Rossi : cheveux courts, chemise blanche
+    ],
+    // En armure sable (mafia_boss, décision 5 de la spec du lot 3) : Halder a le modèle des gardes de son pool
+    gardes: { nombre: 4, modele: 'mafia_boss' },
+    civils: { nombre: [3, 5], exclure: ['mafia_woman_02'] },   // aucun sosie de Verne
   },
   allure: { cibles: 0.8, gardes: 0.6, imprevisibles: true },
   marqueurs: true,

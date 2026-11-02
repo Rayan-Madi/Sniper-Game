@@ -18,8 +18,10 @@ export default {
   },
 
   casting: {
-    cibles: [{}],              // le colonel, assis à l'arrière de la jeep du milieu
-    gardes: 4,                 // trois chauffeurs et un passager d'escorte
+    cibles: [{ modele: 'mafia_boss', femme: false }],   // le colonel Kessler, « sans visage », à l'arrière de la jeep du milieu
+    // Trois chauffeurs et un passager d'escorte, dans le pool des gardes : le sous-lot 3d compose le convoi, avec leur
+    // modèle (décision 5) et le signe de Kessler
+    gardes: { nombre: 4 },
     civils: { nombre: 0 },
   },
   allure: { cibles: 1.0, gardes: 0.7, imprevisibles: true },

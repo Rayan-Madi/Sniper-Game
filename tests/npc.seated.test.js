@@ -53,12 +53,15 @@ const SHOT_FROM = new THREE.Vector3(0, 9, 5)   // la fenêtre d'en face
 // La place du commanditaire dans la carte de M6 (l'ancre que cite sa mission, src/campaign/missions/m6.js).
 const canape = () => M6.ancres.places[M6_MISSION.casting.cibles[0].place]
 
-// Comme mountLevel en M6 : modèle de la foule, verrouillé au téléphone, fuite vers les côtés, assis sur le canapé.
+// Comme mountLevel en M6 : le modèle de sa mission (un modèle de la foule, casting de la tâche A6 du lot 3 ; sans la
+// teinte de son polo, que le faux modèle ne nomme pas comme le vrai), l'ombre des civils, verrouillé au téléphone,
+// fuite vers les côtés, assis sur le canapé.
 function commanditaire() {
   const p = canape()
   const npc = new NPC({ isTarget: true, color: 0xcc4422, x: p.x, z: p.z, groundY: M6.groundY,
     allure: M6_MISSION.allure, bounds: M6.ancres.zone, fleeSideways: true, hideMarker: true,
-    lockState: STATES.PHONE, onPhone: true, modelType: 'civilian', standUp: p.debout })
+    lockState: STATES.PHONE, onPhone: true, standUp: p.debout, shadowRole: 'civil',
+    casting: { model: M6_MISSION.casting.cibles[0].modele, strict: true, teinte: 0xffffff } })
   npc.mesh.position.y = p.assise
   return npc
 }

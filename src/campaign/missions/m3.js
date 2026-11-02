@@ -18,9 +18,14 @@ export default {
   },
 
   casting: {
-    cibles: [{}, {}],
-    gardes: 3,
-    civils: { nombre: [3, 5] },
+    cibles: [
+      { modele: 'gangster_man_01', femme: false },   // Vosko : costume sombre, cheveux plaqués
+      { modele: 'mafia_woman_03', femme: true },     // Mira : t-shirt clair, jean (à confirmer par un rendu, spec §3)
+    ],
+    gardes: { nombre: 3 },
+    // Des dockers (gangster_man_02) : ni le visage de Mira, ni le tailleur sombre aux cheveux tirés de mafia_woman_02,
+    // qui mêlerait les signes des deux cibles
+    civils: { nombre: [3, 5], exclure: ['mafia_woman_02', 'mafia_woman_03'] },
   },
   allure: { cibles: 0.7, gardes: 0.5, imprevisibles: true },
   marqueurs: true,

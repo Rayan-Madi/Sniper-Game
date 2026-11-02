@@ -4,7 +4,7 @@ import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope,
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
 import { MAP_BUILDERS, buildMenuDecor, updateMapAmbient, makeJeep, isMapObject, solidMeshes, vitres, setSolidTint, clearMap } from './maps/index.js'
-import { missionFor, resoudreAncres, nombreDeCivils } from './campaign/missions/index.js'
+import { missionFor, resoudreAncres, nombreDeCivils, castingDesCivils } from './campaign/missions/index.js'
 import { playShot, playSilencedShot, playShotSounds, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, mountEcho, unmountEcho, audioState, audioContext, masterNode } from './audio.js'
 import { spawnTrail, retargetTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
@@ -657,10 +657,12 @@ function mountLevel(n) {
       lockState: telephone ? STATES.PHONE : null,
       onPhone: telephone,
       standUp: place ? place.debout : null,   // en fuite, il se lève devant le canapé (src/maps/m6-fete.js)
-      // Le commanditaire est indiscernable : même pool de modèles que la FOULE.
-      // Seul son comportement (assis, au téléphone, ne danse jamais) le trahit.
-      modelType: c.pool || null,
-      female: c.femme ?? Math.random() < 0.4,
+      // Son visage (spec du lot 3, §2 d) : le modèle de son portrait, cherché dans tous les pools, sans tirage ni
+      // retombée (une erreur si la mission cite un modèle que le jeu n'a pas), sans teinte sauf mention
+      casting: { model: c.modele, strict: true, teinte: c.teinte ?? 0xffffff, teinteMaillage: c.teinteMaillage },
+      // Sans marqueur, l'ombre des civils : une ombre que les civils n'ont pas la désignerait (le commanditaire de M6)
+      shadowRole: m.marqueurs ? 'cible' : 'civil',
+      female: c.femme,   // le personnage de secours, sans modèle chargé
     })
     // Assis sur le canapé (la pose "Talk" est assise) → il se démarque des danseurs
     if (place && place.assise !== undefined) npc.mesh.position.y = place.assise
@@ -668,8 +670,10 @@ function mountLevel(n) {
     npcs.push(npc); targets.push(npc)
   }
 
-  // Spawner gardes
-  for (let i = 0; i < m.casting.gardes; i++) {
+  // Spawner gardes : le modèle de la mission s'il y en a un (M4, mafia_boss : Halder a celui du pool des gardes), sinon
+  // un modèle tiré dans le pool des gardes
+  const gardes = m.casting.gardes
+  for (let i = 0; i < gardes.nombre; i++) {
     const npc = new NPC({
       isGuard: true,
       color: 0x334433,
@@ -679,13 +683,15 @@ function mountLevel(n) {
       allure: m.allure,
       bounds: b,
       fleeSideways: sideFlee,
+      casting: gardes.modele ? { model: gardes.modele, strict: true, teinte: gardes.teinte ?? 0xffffff } : null,
     })
     npcs.push(npc); guards.push(npc)
   }
 
-  // Spawner civils innocents : tirer dessus, c'est l'échec
+  // Spawner civils innocents : tirer dessus, c'est l'échec. Les sosies des cibles sont écartés de leur tirage.
   const civilColors = [0x7a6aaa, 0xaa7a3a, 0x3a7aaa, 0xaaaaaa, 0x6a9a6a, 0xaa5a8a, 0x5aaa8a, 0xccaa44]
-  const numCivils = nombreDeCivils(m.casting.civils)
+  const civils = m.casting.civils
+  const numCivils = nombreDeCivils(civils)
   for (let i = 0; i < numCivils; i++) {
     const npc = new NPC({
       isTarget: false,
@@ -698,7 +704,8 @@ function mountLevel(n) {
       allure: m.allure,
       bounds: b,
       fleeSideways: sideFlee,
-      partyMode: !!m.casting.civils.danse,   // à la fête, la foule danse
+      partyMode: !!civils.danse,   // à la fête, la foule danse
+      casting: castingDesCivils(m),
       female: Math.random() < 0.5,   // mixité des civils
     })
     npcs.push(npc); civilians.push(npc)
@@ -1041,12 +1048,13 @@ function resolveBullet(arrivee) {
     const { points, victimes } = currentMission.choixMoral
     score += points
     addKillFeed(`🔓 Conteneur ouvert : ils s'échappent... (+${points} pts)`)
-    // les victimes (des silhouettes) s'enfuient du conteneur
+    // les victimes (des silhouettes) s'enfuient du conteneur ; des civils de la mission, sans sosie de ses cibles
     for (let i = 0; i < victimes; i++) {
       const freed = new NPC({
         isCivilian: true, color: 0x8a7a5a,
         x: lockPos.x + 0.5 + i * 0.4, z: lockPos.z + 1 + i * 0.6, groundY: mapGround(),
         allure: currentMission.allure, bounds: currentAnchors.zone,
+        casting: castingDesCivils(currentMission),
       })
       freed.flee(lockPos)
       npcs.push(freed); civilians.push(freed)

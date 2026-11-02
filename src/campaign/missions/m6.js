@@ -18,10 +18,11 @@ export default {
   },
 
   casting: {
-    // Le commanditaire, à identifier : aucun signe distinctif, un modèle de la foule (et son ombre). Seul son comportement
-    // le trahit : pendant que tout le monde danse, il reste assis au téléphone, sur le canapé de gauche.
-    cibles: [{ place: 'canape', pool: 'civilian', routine: 'telephone', femme: false }],
-    gardes: 2,
+    // Le commanditaire, à identifier : aucune photo, un homme au modèle de la foule (gangster_man_02, décision 6 de la
+    // spec du lot 3), au polo sombre, et à l'ombre des civils (sans marqueur). Son comportement le trahit : pendant que
+    // tout le monde danse, il reste assis au téléphone, sur le canapé de gauche.
+    cibles: [{ modele: 'gangster_man_02', teinteMaillage: { Ch01_Shirt: 0x3a3f4a }, place: 'canape', routine: 'telephone', femme: false }],
+    gardes: { nombre: 2 },
     civils: { nombre: 24, danse: true },   // foule très dense : un tir sur un innocent, et la mission échoue
   },
   allure: { cibles: 0.7, gardes: 0.5, imprevisibles: true },

@@ -18,9 +18,14 @@ export default {
   },
 
   casting: {
-    cibles: [{}, {}],
-    gardes: 2,
-    civils: { nombre: [3, 5] },
+    // Les frères Sanctechair, le modèle de leurs portraits : Luc au polo blanc de sa texture, Marc au polo beige de son
+    // signe au briefing, teint sur ce seul maillage
+    cibles: [
+      { modele: 'gangster_man_02', femme: false },                                            // Luc
+      { modele: 'gangster_man_02', teinteMaillage: { Ch01_Shirt: 0xd9c19a }, femme: false },   // Marc
+    ],
+    gardes: { nombre: 2 },
+    civils: { nombre: [3, 5], exclure: ['gangster_man_02'] },   // aucun sosie des frères
   },
   allure: { cibles: 0.6, gardes: 0.4, imprevisibles: false },
   marqueurs: true,

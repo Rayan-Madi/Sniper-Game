@@ -39,13 +39,19 @@
 //                qui ne pose plus de brume ; hors mission (menu, PvP, fin de l'enquête), le profil hors mission revient.
 //                Le soleil d'une mission se règle ici seulement : la carte ne le déplace pas (le profil, posé après
 //                elle, l'écraserait sans bruit).
-//   casting      { cibles, gardes, civils }. cibles : une entrée par cible ; {} : un modèle tiré dans le pool des cibles,
-//                posé au hasard dans la zone. Facultatifs : place (une ancre de places, où la cible est posée au lieu du
-//                hasard), pool (le pool de src/characters.js où son modèle est tiré : 'target', 'guard' ou 'civilian'),
-//                routine ('telephone' : assise au téléphone, tant qu'elle ne fuit pas), femme (faux : un homme, sans
-//                tirage ; sinon tiré au hasard, pour le personnage de secours sans modèle). gardes : leur nombre.
-//                civils { nombre, danse } : un nombre, ou [min, max] tiré au hasard (nombreDeCivils) ; danse : la foule
-//                danse (la fête)
+//   casting      { cibles, gardes, civils } (spec §2 d ; tâche A6 : chaque cible a son visage, sans tirage).
+//                cibles : une entrée par cible, { modele, femme }, posée au hasard dans la zone. modele : le modèle de
+//                son portrait, le fichier d'un modèle de src/characters.js (MODELS), cherché dans tous les pools ; une
+//                erreur au montage s'il n'existe pas. femme : le sexe du personnage de secours (modèle absent), celui du
+//                modèle. Facultatifs : teinte (celle du modèle entier ; sans elle, aucune : la texture du portrait),
+//                teinteMaillage ({ maillage: teinte } : celle de ces maillages seulement, le polo de Marc), place (une
+//                ancre de places, où la cible est posée au lieu du hasard), routine ('telephone' : assise au téléphone,
+//                tant qu'elle ne fuit pas).
+//                gardes { nombre, modele, teinte } : leur nombre ; modele, le modèle de tous les gardes de la mission
+//                (et leur teinte, aucune sans elle), sinon un modèle tiré dans le pool des gardes.
+//                civils { nombre, danse, exclure } : un nombre, ou [min, max] tiré au hasard (nombreDeCivils) ; danse : la
+//                foule danse (la fête) ; exclure : les modèles écartés de leur tirage, les sosies des cibles (la règle
+//                « aucun modèle partagé » vaut par mission ; la foule de M6 partage exprès celui du commanditaire)
 //   allure       { cibles, gardes, imprevisibles } : le pas des PNJ (m/s), celui des cibles, que les civils suivent
 //                aussi, et celui des gardes ; imprevisibles : les cibles changent d'activité plus souvent (src/npc.js)
 //   marqueurs    le marqueur rouge au-dessus des cibles
@@ -79,6 +85,15 @@ export function missionFor(n) {
 // graine dans les captures).
 export function nombreDeCivils({ nombre }, random = Math.random) {
   return Array.isArray(nombre) ? nombre[0] + Math.floor(random() * (nombre[1] - nombre[0] + 1)) : nombre
+}
+
+// Casting des civils d'une mission (options de spawnCharacter, src/characters.js) : les sosies de ses cibles écartés de
+// leur tirage, en mode strict (un exclu que le jeu n'a pas est une erreur) ; null sans exclusion (un modèle tiré dans le
+// pool des civils, comme avant). Pour les civils du montage et les victimes que libère le cadenas de M3, des civils de
+// la mission elles aussi.
+export function castingDesCivils(mission) {
+  const { exclure } = mission.casting.civils
+  return exclure ? { exclure, strict: true } : null
 }
 
 const fini = v => typeof v === 'number' && Number.isFinite(v)

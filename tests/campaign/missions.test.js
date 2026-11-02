@@ -151,14 +151,21 @@ function defautsDeForme(m) {
     : b.type === 'exp2' && fini(b.densite) && b.densite > 0), 'profil.brume')
   exige(!!p.soleil && FORMES.point(p.soleil.pos) && FORMES.point(p.soleil.cible), 'profil.soleil')
   exige(fini(p.cadreOmbre) && p.cadreOmbre > 0, 'profil.cadreOmbre')
+  // Casting (tâche A6) : chaque cible a son modèle et le sexe de son personnage de secours ; une teinte, celle du modèle
+  // entier ou de certains maillages, est facultative ; les gardes, un nombre et peut-être un modèle ; les civils, un
+  // nombre et peut-être des modèles exclus. Les modèles cités existent : tests/campaign/casting.test.js.
   const c = m.casting || {}
+  const teinte = v => v === undefined || fini(v)
+  const parMaillage = v => v === undefined || (!!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length > 0 &&
+    Object.entries(v).every(([k, t]) => nom(k) && fini(t)))
   exige(Array.isArray(c.cibles) && c.cibles.length > 0 && c.cibles.every(x => !!x && typeof x === 'object' &&
-    (x.place === undefined || nom(x.place)) && (x.pool === undefined || ['target', 'guard', 'civilian'].includes(x.pool)) &&
-    (x.routine === undefined || x.routine === 'telephone') && (x.femme === undefined || typeof x.femme === 'boolean')), 'casting.cibles')
-  exige(Number.isInteger(c.gardes) && c.gardes >= 0, 'casting.gardes')
-  const n = c.civils && c.civils.nombre
-  exige(Number.isInteger(n) ? n >= 0 : Array.isArray(n) && n.length === 2 && n.every(Number.isInteger) && n[0] >= 0 &&
-    n[0] <= n[1], 'casting.civils')
+    nom(x.modele) && typeof x.femme === 'boolean' && teinte(x.teinte) && parMaillage(x.teinteMaillage) &&
+    (x.place === undefined || nom(x.place)) && (x.routine === undefined || x.routine === 'telephone')), 'casting.cibles')
+  const g = c.gardes || {}
+  exige(Number.isInteger(g.nombre) && g.nombre >= 0 && (g.modele === undefined || nom(g.modele)) && teinte(g.teinte), 'casting.gardes')
+  const civ = c.civils || {}, n = civ.nombre
+  exige((Number.isInteger(n) ? n >= 0 : Array.isArray(n) && n.length === 2 && n.every(Number.isInteger) && n[0] >= 0 &&
+    n[0] <= n[1]) && (civ.exclure === undefined || (Array.isArray(civ.exclure) && civ.exclure.every(nom))), 'casting.civils')
   const a = m.allure || {}
   exige(fini(a.cibles) && fini(a.gardes) && typeof a.imprevisibles === 'boolean', 'allure')
   exige(typeof m.marqueurs === 'boolean', 'marqueurs')
@@ -190,8 +197,20 @@ describe('chaque mission a tous ses champs, de la forme attendue', () => {
     expect(defautsDeForme(sansFin)).toEqual(['fin'])
     expect(defautsDeForme({ ...MISSIONS[2], zoom: { depart: 2, min: 3, max: 6 } })).toEqual(['zoom'])
     expect(defautsDeForme({ ...MISSIONS[2], zoom: { depart: 0.5, min: 0.5, max: 6 } })).toEqual(['zoom'])
-    expect(defautsDeForme({ ...MISSIONS[5], casting: { ...MISSIONS[5].casting, cibles: [{ routine: 'danse' }] } }))
+    expect(defautsDeForme({ ...MISSIONS[5], casting: { ...MISSIONS[5].casting, cibles: [{ ...MISSIONS[5].casting.cibles[0], routine: 'danse' }] } }))
       .toEqual(['casting.cibles'])
+  })
+
+  // Témoins du casting (tâche A6) : chaque champ hors de sa forme est relevé, seul.
+  it.each([
+    ['une cible sans modèle (le tirage d\'avant la tâche)', c => ({ ...c, cibles: [{ femme: false }] }), 'casting.cibles'],
+    ['une cible sans le sexe de son personnage de secours', c => ({ ...c, cibles: [{ modele: 'gangster_man_01' }] }), 'casting.cibles'],
+    ['une teinte de maillage qui n\'est pas un nombre', c => ({ ...c, cibles: [{ ...c.cibles[0], teinteMaillage: { Ch01_Shirt: 'beige' } }] }), 'casting.cibles'],
+    ['des gardes comptés par un nombre seul (la forme d\'avant la tâche)', c => ({ ...c, gardes: 2 }), 'casting.gardes'],
+    ['un modèle de gardes vide', c => ({ ...c, gardes: { nombre: 2, modele: '' } }), 'casting.gardes'],
+    ['des exclus qui ne sont pas une liste', c => ({ ...c, civils: { ...c.civils, exclure: 'mafia_woman_02' } }), 'casting.civils'],
+  ])('témoin : %s : relevé', (_, casting, attendu) => {
+    expect(defautsDeForme({ ...MISSIONS[0], casting: casting(MISSIONS[0].casting) })).toEqual([attendu])
   })
 })
 
