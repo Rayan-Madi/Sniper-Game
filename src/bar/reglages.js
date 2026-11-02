@@ -138,3 +138,46 @@ export const DIALOGUE = {
   enchainementS: 0.4,   // entre deux répliques qui se suivent, comme les lignes des fiches de l'enquête (investigation.js:274)
   ticsS: [1.5, 1, 0.5], // clock() quand il reste ces temps à la minuterie : toutes les 0,5 s sur la dernière 1,5 s
 }
+
+// ─── La soirée (§3.9) ──────────────────────────────────────────────
+// L'horloge et le programme du Bivouac (src/bar/seance.js). Les échanges partent à l'instant que leur donne
+// src/bar/textes.js (ECHANGES, t) ; la soirée place ceux qui n'en ont pas, et décide du reste : l'entrée de Sorel, la
+// sonnerie de l'appel, D2, la piste, la fin et la sortie.
+export const SEANCE = {
+  debutMin: 18 * 60 + 10,   // 18:10, l'heure à l'entrée de Viktor
+  minuteS: 10.5,        // secondes de jeu par minute de la soirée : de 18:10 à 18:50 en 420 s, « 18:36 » à 273 s
+  enchainementS: DIALOGUE.enchainementS,   // entre deux répliques d'un échange, comme dans un dialogue
+  placesS: {            // l'instant des échanges sans heure dans src/bar/textes.js
+    ouvriers: 10.5,     // 18:11 : la cimenterie, au mange-debout de la porte, quand Viktor vient d'entrer à côté d'eux
+  },
+  silenceEntreeSorelS: 3,   // Sorel entre (18:30) : clochette, les tables se taisent ce temps, puis il commande au zinc
+  sonnerie: { coups: 3, intervalleS: 1.5 },   // L'APPEL : trois sonneries, une par intervalle, puis Fernand décroche
+  d2S: 315,             // 18:40 : Sorel s'approche de Viktor (D2) ; plus tôt dès SOUPÇON, une fois Sorel entré
+  pisteS: 150,          // rien d'appris à cet instant : Viktor pense « Ils ne parleront pas devant le zinc. » (une fois)
+  sortieAutoS: 6,       // après « Le 7 a gagné. » d'Albert, Viktor sort de lui-même au bout de ce temps
+  reportS: SOUPCON.effets.reportS,          // en SOUPÇON, un échange porteur d'un renseignement est retenté toutes les 20 s
+  reportEssais: SOUPCON.effets.reportEssais,   // deux fois, puis il est perdu
+  sortieSoupcon: SOUPCON.paliers.soupcon.monte,   // passer la porte avec S à 60 ou plus : Sorel le suit, démasqué (§3.6)
+  toilettesS: COUVERTURE.toilettesS,        // le routier occupe le WC de 240 à 300 s : l'attendre est un prétexte (§3.7)
+}
+
+// ─── Le convoi selon les renseignements (§5.1) ─────────────────────
+// Ce que le convoi (sous-lot 3d du lot 3) doit à ce que Viktor a appris au bar (effetsSurLeConvoi,
+// src/bar/renseignements.js). Jamais de pile ou face : un renseignement manquant coûte du temps, de la vitesse ou tend un
+// piège visible, jamais une devinette. Valeurs de départ, à régler en 3d en jouant.
+export const CONVOI = {
+  fenetre: {            // la fenêtre de tir, selon le poste (TRAJET)
+    virage: { dureeS: 13.5, barre: true, freinage: true },        // TRAJET appris : l'épingle du calvaire (le M5 de la spec
+                        // du lot 3 : 13,5 s à 8,5 m/s), barre FENÊTRE DE TIR à l'entrée, freinage et feux stop
+    ligneDroite: { dureeS: 9, barre: false, freinage: false },    // TRAJET manqué (décision 2, G1) : la butte à 140 m de la
+                        // ligne droite, 12,5 m/s (115 m de route), ni freinage, ni feux stop, ni barre
+  },
+  arrivee: {            // quand la mission commence, et le stress de Viktor à ce moment (HEURE)
+    calme: { avantFenetreS: 40, stressDepart: 0 },   // HEURE apprise : environ 40 s de calme avant que la jeep 2 n'entre dans la fenêtre
+    juste: { avantFenetreS: 8, stressDepart: 0.5 },  // HEURE manquée : la jeep 2 à 8 s de la fenêtre, Viktor essoufflé ; le
+                        // stress retombe de 0,5 par seconde lunette fermée (STRESS.descenteParS, src/shot/tuning.js) : la
+                        // seconde de calme est prise sur la fenêtre
+  },
+  pointsParRenseignement: 50,   // bonus du rapport par renseignement (§5.3) ; le +100 d'un bar sans MÉFIANCE vient de la
+                        // couverture, hors de ce contrat (tâche B17)
+}
