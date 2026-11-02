@@ -10,8 +10,9 @@
 // Sortie : le build vérifié (date, commit, nombre de lignes de git status --porcelain), une fois ces refus passés, le
 // JSON du scénario ({ echecs, requetesBloquees, modeles, images, sauvegarde, … }, lu à la fermeture des flux
 // d'Electron), puis le verdict ; code 0 (vert), 1 (rouge), 2 (refus, ou aucun résultat : Electron arrêté avant
-// d'écrire, sans « [fumee] debut » au bout de 30 s, ou tué au délai de garde), 130 (interrompu). Profil jetable vide,
-// supprimé à la fin ou sur interruption ; Electron et ses processus fils arrêtés au délai de garde ou sur interruption.
+// d'écrire, sans « [fumee] debut » au bout de 30 s, tué au délai de garde, ou toujours là 10 s après et plus attendu),
+// 130 (interrompu). Profil jetable vide, supprimé à la fin ou sur interruption ; Electron et ses processus fils arrêtés
+// au délai de garde (de nouveau si l'arrêt à 30 s est resté sans effet) ou sur interruption.
 // Aucune fenêtre, aucun port de débogage, aucun téléchargement (binaire Electron absent : le script le dit et s'arrête).
 // Machine partagée : un seul Electron ou Chrome sans interface à la fois (verrou Chrome des chantiers parallèles).
 import { spawn, spawnSync } from 'node:child_process'
@@ -25,6 +26,7 @@ const LIGNE_DEBUT = '[fumee] debut'           // écrite par electron/main.js d�
 const DELAI_DEBUT_MS = 30 * 1000              // sans elle au-delà : Electron bloqué au lancement (ou paquet trop ancien)
 const DELAI_GARDE_MS = 5 * 60 * 1000          // au-delà du délai du processus principal (3 min) : Electron bloqué
 const DELAI_FLUX_MS = 2000                    // après la sortie d'Electron, attente de la fermeture de ses flux
+const DELAI_ARRET_MS = 10 * 1000              // après l'arrêt au délai de garde : Electron toujours là, plus attendu
 // Ctrl+C, Ctrl+Pause, console fermée ; SIGTERM n'arrive que sous POSIX (Windows ne le délivre jamais à node)
 const SIGNAUX = ['SIGINT', 'SIGBREAK', 'SIGHUP', 'SIGTERM']
 const USAGE = 'usage : node scripts/fumee.mjs [--exe=<exécutable empaqueté, par exemple release/win-unpacked/Sniper.exe>]'
@@ -166,16 +168,20 @@ export function surveillerInterruptions({ processus, pid, profil, tuer, supprime
 }
 
 // Electron et tous ses processus fils (Chromium en lance plusieurs) : taskkill /F (forcé) /T (l'arbre), sans fenêtre de
-// console. lancerSync : spawnSync, remplacé par les tests.
+// console. lancerSync : spawnSync, remplacé par les tests. Un statut non nul, ou taskkill introuvable, est dit sur la
+// sortie d'erreur.
 export function tuerArbre(pid, lancerSync = spawnSync) {
-  return lancerSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true })
+  const r = lancerSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true })
+  if (r && r.status !== 0) console.error(`taskkill /F /T /PID ${pid} : ${r.error ? r.error.message : `statut ${r.status}`} (l'arbre d'Electron n'est peut-être pas arrêté)`)
+  return r
 }
 const estFichier = chemin => { try { return statSync(chemin).isFile() } catch { return false } }
 
-// Outils du système, remplacés par les tests (aucun processus lancé)
+// Outils du système, remplacés par les tests (aucun processus lancé). tuer, sauf s'il est remplacé : tuerArbre avec
+// lancerSync (main), que les tests remplacent seul pour voir ce branchement sans lancer taskkill.
 const OUTILS = {
   lancer: (commande, args, options) => spawn(commande, args, options),
-  tuer: pid => tuerArbre(pid),
+  lancerSync: spawnSync,
   git: (racine, args) => {
     const r = spawnSync('git', args, { cwd: racine, encoding: 'utf8', windowsHide: true })
     return r.status === 0 ? r.stdout : null
@@ -185,7 +191,7 @@ const OUTILS = {
 }
 
 export async function main(argv, outils = {}) {
-  const o = { racine: RACINE, temp: tmpdir(), processus: process, ...OUTILS, ...outils }
+  const o = { racine: RACINE, temp: tmpdir(), processus: process, tuer: pid => tuerArbre(pid, o.lancerSync), ...OUTILS, ...outils }
   const args = lireArguments(argv)
   if (args.erreur) { console.error(args.erreur); return 2 }
   const exe = args.exe && resolve(o.racine, args.exe)
@@ -210,7 +216,7 @@ export async function main(argv, outils = {}) {
   // force : taskkill ou process.kill sur node, outil qui coupe la commande)
   const profil = mkdtempSync(join(o.temp, 'sniper-fumee-'))
   const t0 = Date.now()
-  let code = null, sortie = '', erreurs = '', tue = null, sorti = false, retirer = () => {}
+  let code = null, sortie = '', erreurs = '', tue = null, sorti = false, abandon = false, retirer = () => {}
   try {
     const { commande, args: argsElectron } = commandeFumee({ racine: o.racine, exe, profil, electron: () => binaireElectron(o.racine) })
     const env = { ...process.env }
@@ -221,9 +227,20 @@ export async function main(argv, outils = {}) {
     // de garde), jamais après sa sortie : son PID a pu être repris par un autre processus
     const tuer = pid => { if (!sorti) o.tuer(pid) }
     retirer = surveillerInterruptions({ processus: o.processus, pid: proc.pid, profil, tuer, supprimer: o.supprimer, attendre: o.attendre })
-    const arreter = raison => { if (!tue) { tue = raison; tuer(proc.pid) } }
+    // tue : la première raison. Le délai de garde arrête l'arbre même si le délai de 30 s l'a déjà fait (un taskkill sans
+    // effet n'est pas le dernier) ; Electron toujours là DELAI_ARRET_MS après n'est plus attendu : le script finit (code
+    // 2) et rend le verrou Chrome au lieu d'attendre sans fin
+    const arreter = raison => { tue = tue || raison; tuer(proc.pid) }
+    let finAttente = () => {}, apresArret = null
     const debut = setTimeout(() => arreter('debut'), DELAI_DEBUT_MS)
-    const garde = setTimeout(() => arreter('garde'), DELAI_GARDE_MS)
+    const garde = setTimeout(() => {
+      arreter('garde')
+      apresArret = setTimeout(() => {
+        abandon = true
+        console.error(`Electron toujours là ${DELAI_ARRET_MS / 1000} s après son arrêt au délai de garde : plus attendu ; vérifier tasklist et l'arrêter à la main (taskkill /F /T /PID ${proc.pid})`)
+        finAttente(null)
+      }, DELAI_ARRET_MS)
+    }, DELAI_GARDE_MS)
     proc.stdout.setEncoding('utf8')
     proc.stderr.setEncoding('utf8')
     proc.stdout.on('data', d => { sortie += d; if (sortie.includes(LIGNE_DEBUT)) clearTimeout(debut) })
@@ -231,11 +248,13 @@ export async function main(argv, outils = {}) {
     // Code de sortie lu à « exit », résultat à « close » : à « exit », les flux d'Electron peuvent encore retenir la
     // ligne de résultat. DELAI_FLUX_MS au plus, un processus fils de Chromium pouvant garder le tube ouvert.
     code = await new Promise(r => {
+      finAttente = r
       let codeSortie = null, borne = null
       proc.once('exit', c => {
         sorti = true
         clearTimeout(debut)
         clearTimeout(garde)
+        clearTimeout(apresArret)
         codeSortie = c
         borne = setTimeout(() => r(c), DELAI_FLUX_MS)
       })
@@ -244,6 +263,7 @@ export async function main(argv, outils = {}) {
     })
     clearTimeout(debut)
     clearTimeout(garde)
+    clearTimeout(apresArret)
   } catch (e) {
     console.error(`fumée impossible : ${e.message}`)
     return 2
@@ -252,6 +272,11 @@ export async function main(argv, outils = {}) {
     retirer()
   }
   const duree = Math.round((Date.now() - t0) / 1000)
+  if (abandon) {
+    const sansDebut = tue === 'debut' ? ` (aucune ligne « ${LIGNE_DEBUT} » au bout de ${DELAI_DEBUT_MS / 1000} s)` : ''
+    console.log(`FUMÉE ROUGE (${duree} s) : Electron toujours là après son arrêt au délai de garde${sansDebut}`)
+    return 2
+  }
   if (tue === 'debut') {
     // Le main.js du dépôt écrit cette ligne dès son départ (tests/electron.fumee.test.js) ; un paquet peut être plus ancien
     const cause = exe ? `${args.exe} n'a pas démarré la fumée (bloqué au lancement, ou paquet trop ancien : relancer npm run dist)`

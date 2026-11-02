@@ -32,9 +32,12 @@ const nodeRequire = createRequire(import.meta.url)
 // d'Electron 42 (electron.d.ts, setPath) : une erreur pour un chemin sans lettre de lecteur ni UNC (« Path must be
 // absolute » : FilePath::IsAbsolute de Chromium sous Windows) ou pour un dossier qui n'existe pas.
 // webRequest.onBeforeRequest garde son filtre éventuel, que requete() applique. modules : modules de Node remplacés pour
-// electron/main.js (os.tmpdir, par exemple).
-function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = false, modules = {} } = {}) {
-  const vu = { fenetres: [], gardes: [], chemins: {}, codes: [], lignes: [], vidages: [], muet: null, ralenti: null, gestionnaires: {} }
+// electron/main.js (os.tmpdir, par exemple). vu.requis : les modules requis, dans l'ordre. absent : un module dont le
+// require lève au chargement (« Cannot find module », comme un module absent du paquet) ; l'exception va alors, comme
+// dans Electron 42.5.0 (lib/browser/init.ts, lu dans node_modules/electron/dist/electron.exe), au gestionnaire
+// « uncaughtException » de l'application, et sans lui à celui d'Electron, qui ouvre sa boîte de dialogue (vu.boite).
+function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = false, modules = {}, absent = null } = {}) {
+  const vu = { fenetres: [], gardes: [], chemins: {}, codes: [], lignes: [], vidages: [], muet: null, ralenti: null, gestionnaires: {}, requis: [], boite: null }
   class WebContents extends EventEmitter {
     constructor() {
       super()
@@ -75,9 +78,19 @@ function lancerMain({ argv = ['electron', '.'], page = null, sortieDifferee = fa
     on: (evenement, f) => { vu.gestionnaires[evenement] = f },
     stdout: { write: (texte, vide) => { vu.lignes.push(texte); if (!vide) return; if (sortieDifferee) vu.vidages.push(vide); else vide() } },
   }
-  const fakeRequire = name => (name === 'electron' ? electron : modules[name] || nodeRequire(name))
+  const fakeRequire = name => {
+    vu.requis.push(name)
+    if (name === absent) throw Object.assign(new Error(`Cannot find module '${name}'`), { code: 'MODULE_NOT_FOUND' })
+    return name === 'electron' ? electron : modules[name] || nodeRequire(name)
+  }
   const src = readFileSync(join(ELECTRON_DIR, 'main.js'), 'utf8')
-  new Function('require', 'process', '__dirname', src)(fakeRequire, processus, ELECTRON_DIR)
+  try {
+    new Function('require', 'process', '__dirname', src)(fakeRequire, processus, ELECTRON_DIR)
+  } catch (e) {
+    if (absent === null) throw e
+    if (vu.gestionnaires.uncaughtException) vu.gestionnaires.uncaughtException(e)
+    else vu.boite = `A JavaScript error occurred in the main process\nUncaught Exception:\n${e.stack}`
+  }
   return vu
 }
 
@@ -540,6 +553,25 @@ describe('electron/main.js --fumee : scénario joué dans la page (faux jeu)', (
     expect(sortie(vu).echecs).toEqual(['promesse rejetée dans le processus principal : chargement rejeté'])
   })
 
+  // Un module absent du paquet (tâche E2 : un fichier oublié dans l'asar) lève à son require, pendant le chargement de
+  // electron/main.js. En mode --fumee, son exception doit déjà aller au gestionnaire de la fumée : sinon Electron ouvre sa
+  // boîte de dialogue sur le bureau, jusqu'au taskkill du script 30 s plus tard. Chaque module requis est essayé, sauf
+  // electron et path, requis avant la ligne de la fumée : un require ajouté ensuite (relais de la tâche R5) l'est d'office.
+  it('--fumee : un module requis qui lève au chargement (absent du paquet) rend la fumée rouge, sans fenêtre, jamais la boîte de dialogue d\'Electron', async () => {
+    const requis = lancerMain({ argv: ['electron', '.', '--fumee'] }).requis.filter(m => m !== 'electron' && m !== 'path')
+    expect(requis.length).toBeGreaterThan(0)
+    for (const absent of requis) {
+      const vu = lancerMain({ argv: FUMEE, absent })
+      expect(vu.boite, absent).toBeNull()
+      await finie(vu)
+      expect(vu.lignes[0], absent).toBe('[fumee] debut\n')
+      expect(sortie(vu).echecs, absent).toEqual([`exception du processus principal : Cannot find module '${absent}'`])
+      expect(vu.codes, absent).toEqual([1])
+      await new Promise(r => setTimeout(r, 20))   // whenReady passé : la fenêtre serait déjà créée
+      expect(vu.fenetres, absent).toEqual([])
+    }
+  })
+
   it('le résultat tient sur une ligne « [fumee] {json} », et le processus ne quitte qu\'une fois la ligne écrite', async () => {
     const vu = lancerMain({ argv: FUMEE, page: fauxJeu(), sortieDifferee: true })
     await vi.waitFor(() => { expect(vu.lignes.length).toBe(2) })
@@ -864,7 +896,8 @@ describe('scripts/fumee.mjs lancé dans un bac à sable : refus avant tout lance
 // processus factice pour les signaux et la sortie, aucune attente entre deux essais de suppression. Le bac à sable a un
 // build à jour et un binaire Electron factice qui n'est pas un exécutable ; avec --exe, un faux exécutable (un fichier
 // texte) que seul ce lancement factice « lance ». Le faux Electron sort comme un processus fils de Node : « exit » (son
-// code), puis « close » (ses flux fermés). Le vrai tuer (taskkill /F /T) est vérifié à part, spawnSync remplacé.
+// code), puis « close » (ses flux fermés). Le vrai tuer (taskkill /F /T) est vérifié à part, spawnSync remplacé, puis
+// branché par main() sans tuer remplacé, son seul lanceur synchrone remplacé.
 describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la fumée', () => {
   let S
   beforeAll(async () => { S = await chargerScript() })
@@ -886,7 +919,8 @@ describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la f
     bac.poser('release/win-unpacked/resources/app.asar', asar, date)
   }
   const AVEC_FUMEE = "const fumee = process.argv.includes('--fumee')"
-  // outils : des outils remplacés en plus, ou une fonction qui les rend à partir de l'état du test (s)
+  // outils : des outils remplacés en plus, ou une fonction qui les rend à partir de l'état du test (s) ; un outil mis à
+  // undefined n'est pas passé à main() (celui du script sert : tuer, par exemple)
   function lancerScript(bac, outils = {}, argv = []) {
     const s = { lances: [], tues: [], sorties: [], journal: [] }
     s.proc = Object.assign(new EventEmitter(), { pid: 4242, stdout: flux(), stderr: flux() })
@@ -894,14 +928,15 @@ describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la f
     s.sortir = code => { s.proc.emit('exit', code, null); s.proc.emit('close', code, null) }
     vi.spyOn(console, 'log').mockImplementation(m => { s.journal.push(['log', String(m)]) })
     vi.spyOn(console, 'error').mockImplementation(m => { s.journal.push(['erreur', String(m)]) })
-    s.fin = S.main(argv, {
+    const remplaces = {
       racine: bac.racine, temp: bac.temp, processus: s.processus,
       lancer: (commande, args) => { s.lances.push({ commande, args }); return s.proc },
       tuer: pid => { s.tues.push(pid); s.sortir(1) },
       git: (racine, args) => (args[0] === 'rev-parse' ? 'abc1234\n' : ' M src/main.js\n?? notes.txt\n'),
       attendre: () => {},
       ...(typeof outils === 'function' ? outils(s) : outils),
-    })
+    }
+    s.fin = S.main(argv, Object.fromEntries(Object.entries(remplaces).filter(([, v]) => v !== undefined)))
     s.profil = () => s.lances[0].args.find(a => a.startsWith('--profil=')).slice('--profil='.length)
     s.texte = genre => s.journal.filter(([g]) => !genre || g === genre).map(([, m]) => m).join('\n')
     s.vert = () => {
@@ -911,6 +946,10 @@ describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la f
     }
     return s
   }
+  // Refus attendu, rien ne doit partir : s.lances et les messages se lisent sans attendre (main() n'attend rien avant le
+  // lancement). Un lancement fautif fait sortir le faux Electron au tour suivant : main() finit (profil supprimé, délais
+  // désarmés) au lieu de tenir le test jusqu'au délai de vitest et de laisser le bac à sable dans %TEMP%.
+  const refus = s => ({ lancer: (commande, args) => { s.lances.push({ commande, args }); setTimeout(() => s.sortir(1)); return s.proc } })
 
   it('fin normale : vert, rien tué, profil supprimé, gestionnaires de signaux posés pendant la fumée puis retirés', async () => {
     const bac = bacPret()
@@ -954,16 +993,29 @@ describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la f
     expect(appels).toEqual([{ commande: 'taskkill', args: ['/F', '/T', '/PID', '4242'], options: { stdio: 'ignore', windowsHide: true } }])
   })
 
+  it('taskkill en échec (statut non nul, ou taskkill introuvable) : dit sur la sortie d\'erreur avec le PID ; réussi, rien n\'est dit', () => {
+    const erreurs = []
+    vi.spyOn(console, 'error').mockImplementation(m => { erreurs.push(String(m)) })
+    S.tuerArbre(4242, () => ({ status: 0 }))
+    expect(erreurs).toEqual([])
+    S.tuerArbre(4242, () => ({ status: 128 }))
+    S.tuerArbre(4242, () => ({ status: null, error: new Error('spawnSync taskkill ENOENT') }))
+    expect(erreurs).toEqual([
+      'taskkill /F /T /PID 4242 : statut 128 (l\'arbre d\'Electron n\'est peut-être pas arrêté)',
+      'taskkill /F /T /PID 4242 : spawnSync taskkill ENOENT (l\'arbre d\'Electron n\'est peut-être pas arrêté)',
+    ])
+  })
+
   it('--exe vers un exécutable introuvable (chemin mal tapé, ou le dossier du paquet) : « exécutable introuvable », jamais « relancer npm run dist » ; rien lancé', async () => {
     const bac = bacPret()
     try {
       paquet(bac, AVEC_FUMEE)
       for (const exe of ['release/win-unpaked/Sniper.exe', 'release/win-unpacked']) {
-        const s = lancerScript(bac, {}, [`--exe=${exe}`])
-        expect(await s.fin, exe).toBe(2)
+        const s = lancerScript(bac, refus, [`--exe=${exe}`])
         expect(s.lances, exe).toEqual([])
         expect(s.texte('erreur'), exe).toBe(`exécutable introuvable : ${join(bac.racine, exe)}`)
         expect(bac.profils(), exe).toEqual([])
+        expect(await s.fin, exe).toBe(2)
         vi.restoreAllMocks()
       }
     } finally {
@@ -978,11 +1030,11 @@ describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la f
       bac.poser('release/sans-asar/Sniper.exe', 'faux exécutable : un fichier texte, jamais lancé')
       bac.poser('release/sans-asar/resources/app/electron/main.js', "const isDev = process.argv.includes('--dev')")
       for (const exe of [EXE, 'release/sans-asar/Sniper.exe']) {
-        const s = lancerScript(bac, {}, [`--exe=${exe}`])
-        expect(await s.fin, exe).toBe(2)
+        const s = lancerScript(bac, refus, [`--exe=${exe}`])
         expect(s.lances, exe).toEqual([])
         expect(s.texte('erreur'), exe).toContain('exécutable sans mode --fumee : relancer npm run dist')
         expect(bac.profils(), exe).toEqual([])
+        expect(await s.fin, exe).toBe(2)
         vi.restoreAllMocks()
       }
     } finally {
@@ -997,13 +1049,13 @@ describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la f
       paquet(bac, AVEC_FUMEE, t - 3600)
       for (const f of ['src/main.js', 'electron/main.js']) {
         bac.poser(f, 'x', t)
-        const s = lancerScript(bac, {}, [`--exe=${EXE}`])
-        expect(await s.fin, f).toBe(2)
+        const s = lancerScript(bac, refus, [`--exe=${EXE}`])
         expect(s.lances, f).toEqual([])
         expect(s.texte('erreur'), f).toContain('build périmé : relancer npm run dist')
         expect(s.texte('erreur'), f).toContain(f)
         expect(s.texte(), f).not.toContain('build vérifié')
         expect(bac.profils(), f).toEqual([])
+        expect(await s.fin, f).toBe(2)
         bac.poser(f, 'x', t - 7200)
         vi.restoreAllMocks()
       }
@@ -1054,6 +1106,27 @@ describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la f
     }
   })
 
+  // Les autres tests remplacent tuer : ici, l'arrêt du script lui-même, tuerArbre, dont seul le lanceur synchrone est
+  // remplacé (aucun taskkill lancé). Sans ce branchement, les délais et l'interruption ne tueraient plus rien pour de vrai.
+  it('arrêt par défaut (tuer non remplacé) : sans « [fumee] debut » au bout de 30 s, taskkill /F /T sur le PID d\'Electron, par tuerArbre', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const bac = bacPret()
+    try {
+      const appels = []
+      const s = lancerScript(bac, s => ({
+        tuer: undefined,
+        lancerSync: (commande, args, options) => { appels.push({ commande, args, options }); s.sortir(1); return { status: 0 } },
+      }))
+      await vi.advanceTimersByTimeAsync(30 * 1000)
+      expect(appels).toEqual([{ commande: 'taskkill', args: ['/F', '/T', '/PID', '4242'], options: { stdio: 'ignore', windowsHide: true } }])
+      expect(await s.fin).toBe(2)
+      expect(s.texte('erreur')).toContain('aucune ligne « [fumee] debut » au bout de 30 s')
+      expect(bac.profils()).toEqual([])
+    } finally {
+      bac.fermer()
+    }
+  })
+
   it('« [fumee] debut » reçue : plus de délai de 30 s ; Electron bloqué ensuite, arbre tué au délai de garde (5 min), code 2', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const bac = bacPret()
@@ -1070,6 +1143,43 @@ describe('scripts/fumee.mjs avec un lancement factice : --exe, puis pendant la f
       expect(bac.profils()).toEqual([])
     } finally {
       bac.fermer()
+    }
+  })
+
+  // Un taskkill sans effet ne laisse pas le script attendre sans fin, verrou Chrome tenu jusqu'à sa péremption : l'arrêt
+  // est relancé au délai de garde, puis Electron n'est plus attendu 10 s après, et le script dit de l'arrêter à la main
+  it('arrêt sans effet (Electron toujours là après taskkill) : relancé au délai de garde, puis plus attendu 10 s après, code 2', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    // la première raison de l'arrêt reste dite : sans « [fumee] debut », c'est elle
+    const SANS_DEBUT = '(aucune ligne « [fumee] debut » au bout de 30 s)'
+    const cas = [
+      ['sans « [fumee] debut »', () => {}, [4242], [4242, 4242], true],
+      ['« [fumee] debut » reçue', s => s.proc.stdout.emit('data', '[fumee] debut\n'), [], [4242], false],
+    ]
+    for (const [quoi, partir, a30s, aLaGarde, sansDebut] of cas) {
+      const bac = bacPret()
+      try {
+        const s = lancerScript(bac, s => ({ tuer: pid => { s.tues.push(pid) } }))   // sans effet : le faux Electron ne sort pas
+        let fin = null
+        s.fin.then(c => { fin = c })
+        partir(s)
+        await vi.advanceTimersByTimeAsync(30 * 1000)
+        expect(s.tues, quoi).toEqual(a30s)
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000 - 30 * 1000)
+        expect(s.tues, quoi).toEqual(aLaGarde)
+        await vi.advanceTimersByTimeAsync(10 * 1000 - 1)
+        expect(fin, quoi).toBeNull()
+        await vi.advanceTimersByTimeAsync(1)
+        expect(fin, quoi).toBe(2)
+        expect(s.texte('erreur'), quoi).toContain('Electron toujours là 10 s après son arrêt au délai de garde : plus attendu')
+        expect(s.texte('erreur'), quoi).toContain('taskkill /F /T /PID 4242')
+        expect(s.texte('log'), quoi).toMatch(/FUMÉE ROUGE \(\d+ s\) : Electron toujours là après son arrêt au délai de garde/)
+        expect(s.texte('log').includes(SANS_DEBUT), quoi).toBe(sansDebut)
+        expect(bac.profils(), quoi).toEqual([])
+      } finally {
+        vi.restoreAllMocks()
+        bac.fermer()
+      }
     }
   })
 

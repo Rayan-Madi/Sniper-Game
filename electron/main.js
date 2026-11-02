@@ -8,6 +8,12 @@ const isDev = process.argv.includes('--dev')
 // « electron . --fumee » (scripts/fumee.mjs) : vérification du livrable hors
 // ligne, dans une fenêtre cachée (section « Fumée du livrable », en fin de fichier).
 const fumee = process.argv.includes('--fumee')
+// Fumée : sa ligne de départ et ses gestionnaires d'exception posés dès ici
+// (debuterFumee), avant tout autre require. Un module qui lève à son require
+// (absent du paquet) rend alors la fumée rouge au lieu d'ouvrir la boîte de
+// dialogue d'Electron : tout require ajouté à ce fichier vient après (testé).
+let fumeeResultat = null, fumeeFinie = false, fumeeGarde = null, fumeeDebut = 0
+if (fumee) debuterFumee()
 
 function createWindow() {
   if (fumee && fumeeFinie) return   // fumée finie avant la fenêtre (profil jetable manquant ou refusé) : aucune fenêtre
@@ -61,17 +67,13 @@ const SAUVEGARDE_M3 = {
 const RESEAU = /^(https?|wss?):/i
 const DELAI_FUMEE_MS = 180000   // toute la fumée
 const DELAI_ETAPE_MS = 60000    // chaque attente du scénario (chargement des modèles compris)
-let fumeeResultat = null
-let fumeeFinie = false
-let fumeeGarde = null
-let fumeeDebut = 0
+// État de la fumée (fumeeResultat, fumeeFinie, fumeeGarde, fumeeDebut) : déclaré en tête de fichier, avant debuterFumee
 
-// Avant que l'application soit prête : exceptions du processus principal rattrapées (sans quoi Electron ouvrirait sa
-// boîte de dialogue sur le bureau), délai de garde, puis le profil jetable. Celui-ci est créé (vide) et supprimé par
-// scripts/fumee.mjs, jamais ici : sans --profil, avec un dossier absent ou non vide (un profil déjà servi, celui du
-// joueur par exemple), ou avec un chemin que refuse Electron (relatif), la fumée finit rouge tout de suite, sans dossier
-// créé ni fenêtre (createWindow), donc sans jamais lancer le jeu sur le profil du joueur.
-function preparerFumee() {
+// Dès le départ, en tête de fichier, avant tout autre require : « [fumee] debut », puis les exceptions du processus
+// principal rattrapées, celles du chargement de ce fichier comprises (un module absent du paquet), sans quoi Electron
+// ouvrirait sa boîte de dialogue sur le bureau. Ni elle ni finirFumee, qu'appellent ses gestionnaires, ne lisent une
+// constante ou une variable déclarée après la tête du fichier : inaccessible si son chargement s'est arrêté avant.
+function debuterFumee() {
   process.stdout.write('[fumee] debut\n')
   fumeeDebut = Date.now()
   fumeeResultat = {
@@ -80,6 +82,13 @@ function preparerFumee() {
   }
   process.on('uncaughtException', e => finirFumee(`exception du processus principal : ${e && e.message}`))
   process.on('unhandledRejection', e => finirFumee(`promesse rejetée dans le processus principal : ${e && e.message}`))
+}
+
+// Avant que l'application soit prête : délai de garde, puis le profil jetable. Celui-ci est créé (vide) et supprimé par
+// scripts/fumee.mjs, jamais ici : sans --profil, avec un dossier absent ou non vide (un profil déjà servi, celui du
+// joueur par exemple), ou avec un chemin que refuse Electron (relatif), la fumée finit rouge tout de suite, sans dossier
+// créé ni fenêtre (createWindow), donc sans jamais lancer le jeu sur le profil du joueur.
+function preparerFumee() {
   fumeeGarde = setTimeout(() => finirFumee(`délai de garde dépassé (${DELAI_FUMEE_MS / 1000} s)`), DELAI_FUMEE_MS)
   const arg = process.argv.find(a => a.startsWith('--profil='))
   const profil = arg ? arg.slice('--profil='.length) : ''
