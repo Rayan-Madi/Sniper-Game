@@ -196,7 +196,8 @@ describe('le convoi selon les renseignements : effetsSurLeConvoi (§5.1)', () =>
     for (const leurre of [false, true]) {
       for (const r of combinaisons(leurre)) {
         const e = effetsSurLeConvoi(r)
-        for (const t of [...e.fiche, ...e.radio.map(l => l.texte), ...e.bonus.lignes]) if (t.includes('—')) avecTiret.push(t)
+        const textes = [...e.fiche, ...e.radio.map(l => l.texte), ...e.bonus.lignes]
+        for (const t of textes) if (t.includes('\u2014')) avecTiret.push(t)   // échappé, comme tests/texts.test.js
       }
     }
     expect(avecTiret).toEqual([])                          // témoin : un tiret cadratin dans « Ils accélèrent. »

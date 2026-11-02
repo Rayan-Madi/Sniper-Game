@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { SEANCE } from '../../src/bar/reglages.js'
-import { createSeance, heureDe, JAMAIS_REPORTES } from '../../src/bar/seance.js'
+import { createSeance, heureDe, JAMAIS_REPORTES, ESCORTE } from '../../src/bar/seance.js'
 import { ECHANGES, REACTIONS, DIALOGUES } from '../../src/bar/textes.js'
 import { estimate } from '../../src/briefing/kit.js'
 
@@ -45,6 +45,7 @@ describe('les réglages de la soirée', () => {
       sortieSoupcon: 60, toilettesS: [240, 300],
     })
     expect(JAMAIS_REPORTES).toEqual(['appel', 'R3'])
+    expect(ESCORTE).toEqual(['sorel', 'dussart', 'lenoir', 'haas', 'mattei'])   // les hommes du colonel (§3.2)
   })
 })
 
@@ -269,6 +270,54 @@ describe('les heures de Sorel', () => {
     expect(s.escortePartie).toBe(false)
     jouer(s, 389 + dureeEchange('R3') + 2 * DT)
     expect(s.escortePartie).toBe(true)                      // témoin : partie dès le début du départ
+  })
+})
+
+describe('l\'escorte s\'en va (relecture de B6)', () => {
+  // les répliques d'un homme de l'escorte ailleurs qu'au départ, commencées à `depuis` ou après
+  const paroleEscorte = (notes, depuis) => notes.filter(([, e]) => e.type === 'replique' && e.echange !== 'R3'
+    && ESCORTE.includes(e.replique.qui) && e.debutS >= depuis - PRES).map(([, e]) => `${e.echange}:${e.rang}`)
+
+  it('le départ commencé, R1 et R2 reportés au-delà de 389 s sont perdus : personne ne parle une fois parti', () => {
+    const s = createSeance()
+    const notes = jouer(s, 440, soupconEntre(350, 380))   // R1 et R2 reportés à 377 s, puis à 397 s
+    const r3 = quand(notes, e => e.type === 'echange' && e.id === 'R3')
+    expect(r3.length).toBe(1)
+    expect(vers(r3[0], 389)).toBe(true)
+    for (const id of ['R1', 'R2']) {
+      expect(s.statut(id), id).toBe('perdu')                // témoin (le module de bc4ac18) : R1 à 397 s, R2 à 403,9 s
+      const perdu = quand(notes, e => e.type === 'perdu' && e.id === id)
+      expect(perdu.length, id).toBe(1)
+      expect(vers(perdu[0], 389), id).toBe(true)            // perdu quand le départ commence, pas à son troisième essai
+    }
+    expect(notes.filter(([, e]) => e.type === 'replique' && ['R1', 'R2'].includes(e.echange))).toEqual([])
+    expect(paroleEscorte(notes, 389)).toEqual([])
+  })
+
+  it('de même pour un échange qu\'un dialogue retenait jusqu\'après le départ, sans report', () => {
+    const s = createSeance()
+    // Lise retient Viktor de 120 à 395 s : A4 (Lise et Dussart) attend la fin du dialogue, qui tombe après 389 s
+    const notes = jouer(s, 440, t => ({ dialogue: t >= 120 && t < 395 ? enCours('lise') : null }))
+    expect(s.statut('A4')).toBe('perdu')                    // témoin : seul un report qui tombe après le départ est perdu, A4 à 395 s
+    expect(vers(quand(notes, e => e.type === 'perdu' && e.id === 'A4')[0], 389)).toBe(true)
+    expect(paroleEscorte(notes, 389)).toEqual([])
+  })
+
+  it('le départ attend que l\'escorte ait fini l\'échange où elle parle, comme ses propres gens', () => {
+    const programme = [
+      { id: 'Z', t: 5, foyer: 'A', repliques: [{ qui: 'lenoir', texte: 'Il monte derrière, le vieux ? Comme un général ?' },
+        { qui: 'dussart', texte: 'Jamais. Derrière, il a mal au cœur.' }] },
+      { id: 'R3', t: 6, foyer: 'porte', repliques: [{ qui: 'sorel', texte: 'On y va.' }] },
+    ]
+    const s = createSeance({ programme })
+    const notes = jouer(s, 20)
+    const finZ = 5 + programme[0].repliques.reduce((x, r) => x + duree(r), 0) + SEANCE.enchainementS
+    const r3 = quand(notes, e => e.type === 'echange' && e.id === 'R3')
+    expect(r3.length).toBe(1)
+    expect(vers(r3[0], finZ)).toBe(true)                    // témoin : départ à 6 s, Dussart encore à Z après la porte
+    const onYVa = notes.find(([, e]) => e.type === 'replique' && e.echange === 'R3')[1].debutS
+    expect(paroleEscorte(notes, onYVa)).toEqual([])
+    expect(s.escortePartie).toBe(true)
   })
 })
 

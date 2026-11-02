@@ -11,6 +11,9 @@
 // Les règles de la soirée :
 // - personne ne tient deux conversations : un échange attend que chacun de ses gens ait fini celui où il parle, et que
 //   le dialogue de Viktor avec l'un d'eux soit fini (Lise qui lui parle ne sert pas la table A) ;
+// - personne ne parle une fois parti : le départ (R3) emmène toute l'ESCORTE, il attend donc que chacun d'eux ait fini
+//   l'échange où il parle ; quand il commence, tout échange pas encore commencé où parle un homme de l'escorte est perdu
+//   (un report dû après lui, un échange qu'un dialogue retenait) ;
 // - en SOUPÇON, un échange porteur d'un renseignement ne commence pas : il est reporté (nouvel essai SEANCE.reportS
 //   plus tard, SEANCE.reportEssais fois), puis perdu. La règle se lit quand il devrait commencer ; un échange commencé
 //   va jusqu'au bout. L'appel et le départ (JAMAIS_REPORTES) ne se reportent pas : le colonel appelle à son heure, le
@@ -54,6 +57,8 @@ export const APPEL = 'appel'
 export const DEPART = 'R3'
 export const FIN_SOIREE = 'fin'
 export const JAMAIS_REPORTES = Object.freeze([APPEL, DEPART])
+// Les hommes du colonel (§3.2) : ils s'en vont tous au départ (R3).
+export const ESCORTE = Object.freeze(['sorel', 'dussart', 'lenoir', 'haas', 'mattei'])
 const SOREL = 'sorel'          // le lieutenant, et l'arbre de D2 dans DIALOGUES (son interlocuteur)
 const RANG_SOUPCON = PALIERS.indexOf('soupcon')
 
@@ -92,6 +97,9 @@ export function createSeance({ programme = ECHANGES, reglages = SEANCE } = {}) {
       statut: 'attente',         // puis 'reporte', 'cours', 'fini' ou 'perdu'
       essais: 0,                 // reports passés
       gens: new Set(e.repliques.map(r => r.qui)),
+      // ceux qu'il attend : ses gens ; pour le départ, toute l'escorte, qui s'en va avec lui
+      attend: new Set([...e.repliques.map(r => r.qui), ...(id === DEPART ? ESCORTE : [])]),
+      escorte: e.repliques.some(r => ESCORTE.includes(r.qui)),
       reportable: !JAMAIS_REPORTES.includes(id) && e.repliques.some(r => r.renseignement != null),
       pasAvant: 0,               // la fin de la dernière image où un dialogue le retenait
       debut: null, rang: 0, prochaine: 0, finReplique: 0, sonneries: 0, coups: 0,
@@ -141,7 +149,17 @@ export function createSeance({ programme = ECHANGES, reglages = SEANCE } = {}) {
       x.coups = sonnerie.coups
       x.prochaine = quand + sonnerie.coups * sonnerie.intervalleS
     }
-    if (x.id === DEPART) depart = true
+    if (x.id === DEPART) {
+      depart = true
+      // l'escorte s'en va : ce qu'elle n'a pas commencé ne se dira plus (un report dû après 389 s, un échange qu'un
+      // dialogue retenait), sinon des hommes partis parleraient encore
+      for (const y of echanges) {
+        if (y.escorte && (y.statut === 'attente' || y.statut === 'reporte')) {
+          y.statut = 'perdu'
+          emis.push({ type: 'perdu', id: y.id })
+        }
+      }
+    }
   }
 
   // Ce qu'un échange commencé fait ensuite : une sonnerie, une réplique, ou sa fin.
@@ -184,9 +202,9 @@ export function createSeance({ programme = ECHANGES, reglages = SEANCE } = {}) {
         const s = suite(x)
         proposer(s.quand, 1, x.ordre, () => s.faire(emis))
       } else if ((x.statut === 'attente' || x.statut === 'reporte') && x.du <= t + EPS) {
-        if ([...x.gens].some(parle)) continue
+        if ([...x.attend].some(parle)) continue
         if (c.dialogue && (x.id === FIN_SOIREE || x.gens.has(c.interlocuteur))) { x.pasAvant = t; continue }
-        const quand = tenir(Math.max(x.du, x.pasAvant, libreDes(x.gens)), x)
+        const quand = tenir(Math.max(x.du, x.pasAvant, libreDes(x.attend)), x)
         proposer(quand, 2, x.ordre, () => tenter(x, quand, c.rang, emis))
       }
     }
