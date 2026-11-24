@@ -216,11 +216,28 @@ describe('contrôleur du bar : balancement, assis, vitesse', () => {
     c.setMoveLocked(true)
     key('keydown', 'KeyW'); key('keydown', 'ArrowRight'); c.update(1)
     expect(c.position).toEqual({ x: 0, z: 0 })
-    close(camera.position.y, 1.65)                                             // pas de balancement sur place
     mouse(100, 50)
     close(c.yaw, -100 * 0.0022); close(c.pitch, -50 * 0.0022)
     c.update(0.016)
     close(camera.rotation.y, -100 * 0.0022)
+    c.dispose()
+  })
+
+  // Le balancement vaut sin(walked · 2π / 1,5) × 2,5 cm × amplitude : sans avoir marché (walked = 0), il est nul quelle
+  // que soit l'amplitude, et un test assis dès le départ ne verrait rien (relecture de B8). Viktor marche donc d'abord
+  // un quart de foulée (0,384 m, sinus ≈ 1), puis s'assoit Z enfoncé.
+  it('assis après avoir marché : ni la touche tenue en s\'asseyant ni une touche pressée assis ne balancent l\'œil', () => {
+    const { c, camera } = make()
+    lock(true)
+    key('keydown', 'KeyW')
+    for (let i = 0; i < 15; i++) c.update(0.016)
+    expect(camera.position.y - 1.65).toBeGreaterThan(0.02)                    // l'œil balance : la prémisse tient
+    const { x, z } = c.position
+    c.setMoveLocked(true)                                                      // Z toujours enfoncé
+    keyRepeat('KeyW'); key('keydown', 'KeyD')                                  // sa répétition, puis un appui neuf
+    for (let i = 0; i < 120; i++) c.update(0.016)                              // ≈ 2 s assis : l'amplitude retombe
+    expect(c.position).toEqual({ x, z })
+    close(camera.position.y, 1.65)
     c.dispose()
   })
 
