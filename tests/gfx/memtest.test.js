@@ -405,3 +405,59 @@ describe('annexes : mesures versionnées du lot 2', () => {
     expect(failed(r)).toEqual(['triangles de M6', 'appels de M6'])
   })
 })
+
+// Mesures versionnées du socle du lot 3 (plan du lot 3a, tâche A9 ; spec du lot 3, §5, risque 9 : les références du
+// memtest à republier ; README des annexes, « Lot 3 : socle vérifié »). Les cinq seuils du lot 1 restent tenus en Moyen
+// et en Bas ; M6, à la vue de départ, garde ses triangles et ses appels à ±3 % du lot 2 (seul le visage du commanditaire
+// change, spec du lot 3 §2 d) ; le menu de départ est celui du lot 2 à l'unité près, et aux retours au menu comme au PvP
+// seuls les programmes changent (shaders des modèles dessinés dès M2, gardés pour la session). Les étapes des missions,
+// elles, changent avec leurs visages et leurs marqueurs : elles ne sont comparées qu'au README.
+describe('annexes : mesures versionnées du socle du lot 3', () => {
+  const annexe = nom => JSON.parse(readFileSync(resolve(__dirname, '../../docs/superpowers/specs/annexes', nom), 'utf8'))
+  const failed = r => r.filter(c => !c.ok).map(c => c.critere)
+  const SOCLE = [['2026-11-24-memtest-socle-lot3.json', '2026-10-09-memtest-apres-lot2.json', 'moyen'],
+    ['2026-11-24-memtest-socle-lot3-bas.json', '2026-10-09-memtest-apres-lot2-bas.json', 'bas']]
+  const COMPTEURS = ['geometries', 'textures', 'programmes', 'appels', 'triangles']
+  const HORS_MISSION = ['menu-campagne', 'menu-m6', 'pvp-1', 'pvp-2', 'pvp-3', 'pvp-4', 'pvp-5', 'menu-final']
+  // Écarts des étapes nommées de a à celles de b, sur les compteurs donnés : « étape compteur avant → après » ; une étape
+  // absente ou en erreur d'un côté est un écart (jamais un succès par défaut).
+  const ecarts = (a, b, etapes, cles) => etapes.flatMap(nom => {
+    const x = a.find(e => e.etape === nom), y = b.find(e => e.etape === nom)
+    if (!x || !y || x.erreur || y.erreur) return [`${nom} absente`]
+    return cles.filter(k => x[k] !== y[k]).map(k => `${nom} ${k} ${y[k]} → ${x[k]}`)
+  })
+
+  it('socle : les cinq seuils tenus en Moyen et en Bas, sur l\'arbre commité', () => {
+    for (const [nom, , qualite] of SOCLE) {
+      const r = annexe(nom)
+      expect([nom, r.etat, r.qualite, r.commit]).toEqual([nom, 'memtest:fini', qualite, '153696b'])
+      const crit = checkMemtest(r.etapes, { qualite: r.qualite })
+      expect(crit).toHaveLength(5)
+      expect([nom, failed(crit)]).toEqual([nom, []])
+    }
+  })
+
+  it('M6 : triangles et appels à ±3 % du lot 2, dans le même préréglage', () => {
+    for (const [nom, lot2] of SOCLE) {
+      expect([nom, failed(compareM6(annexe(nom).etapes, annexe(lot2).etapes))]).toEqual([nom, []])
+    }
+  })
+
+  it('le menu de départ du lot 2 à l\'unité près ; retours au menu et PvP : seuls les programmes changent', () => {
+    for (const [nom, lot2] of SOCLE) {
+      const s = annexe(nom).etapes, l = annexe(lot2).etapes
+      expect([nom, ecarts(s, l, ['menu'], COMPTEURS)]).toEqual([nom, []])
+      expect([nom, ecarts(s, l, HORS_MISSION, COMPTEURS.filter(k => k !== 'programmes'))]).toEqual([nom, []])
+    }
+  })
+
+  it('témoins : un autre menu, une arène qui garde une texture, une étape absente sont relevés', () => {
+    // La référence d'avant le lot 1 : la rue du menu tirait un hasard libre (416 géométries au lieu de 409).
+    expect(ecarts(annexe('2026-10-07-memtest-reference.json').etapes, annexe(SOCLE[0][1]).etapes, ['menu'], COMPTEURS))
+      .toContain('menu geometries 409 → 416')
+    const socle = annexe(SOCLE[0][0]).etapes, lot2 = annexe(SOCLE[0][1]).etapes
+    const garde = socle.map(e => e.etape === 'pvp-3' ? { ...e, textures: e.textures + 1 } : e)
+    expect(ecarts(garde, lot2, HORS_MISSION, ['textures'])).toEqual(['pvp-3 textures 357 → 358'])
+    expect(ecarts(socle.filter(e => e.etape !== 'menu-m6'), lot2, HORS_MISSION, ['textures'])).toEqual(['menu-m6 absente'])
+  })
+})

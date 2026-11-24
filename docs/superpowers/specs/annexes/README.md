@@ -423,7 +423,7 @@ Silhouette d'au moins 80 px et signe d'au moins 10 px, en Bas, au zoom maximum d
 | M4 | 430 m | ×20 | 63 px (Verne) | tête : 9 px (Verne) | ne tient pas |
 | M4 | 250 m | ×20 | 109 px (Verne) | tête : 15 px (Verne) | tient |
 
-- **M4 passe au repli, à titre provisoire** (décision 11 de la spec, §4 : jusqu'à la réponse de Rayan, ou jusqu'à la fin de 3a s'il n'a pas répondu) : à 430 m, Verne (1,8 m, la plus petite des trois) ne fait que 63 px en Bas à ×20, et sa tête 9 px ; Halder et Rossi 66 et 65 px. Au haut de la fourchette, 250 m, le critère tient avec de la marge (109 px, tête 15 px). Le champ `decisionM4` du relevé est le verdict du critère par défaut, lu en pixels du tampon.
+- **M4 passe au repli, à titre provisoire** (décision 11 de la spec, §4 : jusqu'à la réponse de Rayan, ou jusqu'à la fin de 3a s'il n'a pas répondu) : à 430 m, Verne (1,8 m, la plus petite des trois) ne fait que 63 px en Bas à ×20, et sa tête 9 px ; Halder et Rossi 66 et 65 px. Au haut de la fourchette, 250 m, le critère tient avec de la marge (109 px, tête 15 px). Le champ `decisionM4` du relevé est le verdict du critère par défaut, lu en pixels du tampon. Tranché depuis par Rayan, le même jour, après avoir regardé les deux captures : **M4 garde 430 m** (décision 11 de la spec, « fais le dur ») ; le repli est écarté.
 - **Pixels du tampon ou de l'écran** : c'est cette lecture qui tranche. Les mesures comptent les pixels du tampon de dessin (en Bas, 1 440 × 810, agrandi d'un tiers pour remplir l'écran de 1 920 × 1 080), comme le risque 2 de la spec (§5 : « environ 65 px réels en Bas ») ; les captures, elles, montrent l'écran. À l'écran, Verne fait environ 84 px à 430 m et sa tête 12 px : comptés ainsi, les pixels tiendraient le critère (en Moyen, où tampon et écran coïncident, 84 px et tête de 11 px). Les deux images à comparer, `sonde-430m-x20-bas.jpg` et `sonde-250m-x20-bas.jpg`, ont été envoyées à Rayan le 28 octobre 2026 avec cette explication.
 - Distance où le critère tiendrait encore au même zoom (la taille suit 1 / distance) : environ 340 m pour M4 à ×20, 169 m pour M3 à ×10, 216 m pour M5 à ×12. C'est la silhouette qui lâche la première en M4.
 - M3 et M5 tiennent à leur distance.
@@ -434,3 +434,100 @@ Silhouette d'au moins 80 px et signe d'au moins 10 px, en Bas, au zoom maximum d
 - **155 m**, de nuit : la taille suffit, mais le costume sombre de Vosko se perd sur le quai sombre, quand le t-shirt clair de Mira se voit. C'est le risque 3 de la spec (nuit illisible sans marqueur) : 3c devra éclairer la zone.
 - **138 m** : Kessler se lit à tous les zooms. Il est ici debout sur la route ; assis dans la jeep (3d), seule sa partie haute dépassera.
 - **Les cartes d'aujourd'hui** : leur sol s'arrête à 100 m du centre en M3 et M4, à 150 m en M5 ; au-delà, la couleur du fond (bandes unies en haut et en bas des captures de M4 à ×8 et ×12). Sur la ligne de visée de M4, les piliers et la plateforme de l'ancienne tour de garde restent dans le champ, d'où l'écart entre les officiers (5 m, puis 2,5 m à 250 m, où le carré de la lunette ne couvre que 5 m de part et d'autre du point visé à ×20). En M5, l'ancien promontoire du tireur, 30 m devant la route, cacherait Kessler depuis un œil dans l'axe : l'œil est décalé de 30 m le long de la route (visée à 78° de la route). 3c et 3d refont ces cartes.
+
+## Lot 3 : socle vérifié (tâche A9)
+
+Vérifications du 24 novembre 2026, toutes les tâches du socle faites (S0, A1 à A8 et leurs relectures, K0), sur `153696b`. Elles répondent aux critères de fin de 3a (spec du lot 3, §2, « Critères de fin 3a ») et à la tâche A9 du plan du lot 3a.
+
+### Mémoire et performance (`2026-11-24-memtest-socle-lot3.json`, `2026-11-24-memtest-socle-lot3-bas.json`)
+
+```bash
+node scripts/memtest.mjs --check --qualite=moyen --comparer=2026-10-09-memtest-apres-lot2.json --annexe=2026-11-24-memtest-socle-lot3.json
+node scripts/memtest.mjs --check --qualite=bas --comparer=2026-10-09-memtest-apres-lot2-bas.json --annexe=2026-11-24-memtest-socle-lot3-bas.json
+```
+
+SwiftShader, arbre propre (`153696b` dans les annexes : les mesures précèdent tout changement de la tâche A9), une mesure de chaque, finie du premier essai (216 s et 227 s). Les cinq seuils du lot 1 sont tenus en Moyen et en Bas, et M6 reste à ±3 % du lot 2 :
+
+| | Fin du lot 2, Moyen | Socle, Moyen | Fin du lot 2, Bas | Socle, Bas |
+|---|---|---|---|---|
+| Menu de départ : géométries, textures, programmes, appels, triangles | 409, 3, 5, 540, 10 506 | identique à l'unité | 409, 3, 5, 540, 10 506 | identique à l'unité |
+| M6 à la vue de départ : appels, triangles | 294, 1 422 955 | 289 (-1,7 %), 1 390 854 (-2,3 %) | 290, 1 330 361 | 285 (-1,7 %), 1 298 260 (-2,4 %) |
+| Retour de campagne (`menu-campagne`) : géométries, textures, programmes | 447, 32, 31 | 447, 32, 39 | 447, 32, 19 | 447, 32, 27 |
+| Relances de M6, arènes PvP | Δ = 0 | Δ = 0 | Δ = 0 | Δ = 0 |
+| Arène PvP : géométries, textures, programmes, appels, triangles | 122, 357, 34, 445, 2 748 345 | 122, 357, 42, 445, 2 748 345 | 122, 357, 22, 445, 2 748 345 | 122, 357, 30, 445, 2 748 345 |
+| Fin de partie (`menu-final`) | 447, 32, 34 | 447, 32, 42 | 447, 32, 22 | 447, 32, 30 |
+| Tas JS à `M6-10`, puis à `menu-final` (indicatif) | 56 Mo, 52 Mo | 50 Mo, 47 Mo | 56 Mo, 52 Mo | 50 Mo, 47 Mo |
+
+Vues de départ des missions, appels et triangles :
+
+| Mission | Lot 2, Moyen | Socle, Moyen | Lot 2, Bas | Socle, Bas |
+|---|---|---|---|---|
+| M1 | 608, 386 303 | 607, 365 940 | 599, 289 249 | 596, 264 710 |
+| M2 | 382, 642 205 | 361, 550 293 | 364, 448 097 | 357, 457 699 |
+| M3 | 156, 606 084 | 142, 560 526 | 139, 400 884 | 136, 421 635 |
+| M4 | 212, 855 771 | 177, 414 211 | 186, 553 517 | 169, 368 707 |
+| M5 | 297, 486 082 | 279, 387 260 | 280, 245 961 | 271, 202 072 |
+| M6 | 294, 1 422 955 | 289, 1 390 854 | 290, 1 330 361 | 285, 1 298 260 |
+
+- **Hors des missions, seuls les programmes changent** : le menu de départ est celui du lot 2 à l'unité près ; aux retours au menu et dans l'arène PvP, géométries, textures, appels et triangles aussi ; les programmes de shaders, gardés pour la session, sont 8 de plus dans les deux préréglages (les variantes des modèles que dessinent désormais les missions : 7 à la tâche A6, une de plus à la tâche A7).
+- **Les missions changent avec leurs visages, leurs marqueurs et leur hasard** : modèles imposés aux cibles et gardes de M4 en `mafia_boss` (A6), marqueurs retirés de M2 à M5 et ombre des cibles coupée en Moyen (A7), PNJ placés autrement en M2, M3 et M4 (chaque objet three tire quatre nombres au hasard pour son identifiant : les objets des marqueurs en moins décalent le hasard à graine). M4 perd ainsi plus de la moitié de ses triangles en Moyen (gardes en `mafia_boss`, plus légers, et ombres des cibles en moins) ; en Bas, sans aucune ombre de personnage, M2 et M3 en gagnent un peu (d'autres PNJ dans le champ). Mêmes nombres, à l'unité près, que la mesure de la tâche A7 (`shots/memtest-2026-11-24T12-35-31.json` et `…T12-39-04.json`, locaux) : la tâche A8 ne change aucune étape.
+- Garde : `tests/gfx/memtest.test.js`, « annexes : mesures versionnées du socle du lot 3 » (cinq seuils en Moyen et en Bas sur l'arbre commité, M6 à ±3 % du lot 2, menu de départ du lot 2 à l'unité près, retours au menu et PvP aux géométries, textures, appels et triangles du lot 2 ; témoins : la référence d'avant le lot 1, autre menu ; une arène qui garde une texture ; une étape absente).
+
+### Captures
+
+`QUALITE=moyen`, SwiftShader, `scripts/capture-mission.mjs` de `153696b` des deux côtés. Avant : le code du lot 2, `main` à `3cd328d` (la base de la branche), extrait par `git archive` hors du dépôt et servi par un second Vite (port 5191, `three` pris dans le `node_modules` du dépôt, cache à part, arrêté ensuite) ; après : la branche. Dossiers locaux `shots/a9-lot2/` et `shots/a9-final/`, non versionnés ; empreintes SHA-256 (16 premiers caractères) :
+
+| Vue | Lot 2 | Socle | Comparaison |
+|---|---|---|---|
+| menu | `8002ed31843e8eba` | `8002ed31843e8eba` | identiques à l'octet |
+| M1 | `5307c86dfe74a937` | `94d76d74b4eebadd` | à l'œil : la fiche, les civils |
+| M2 | `da2efa9978ecd4de` | `d9bdfb44900bd3fa` | à l'œil : la fiche, les marqueurs, les PNJ |
+| M3 | `1ed617aa2bb65bb9` | `98e1134dd5acf35b` | à l'œil : la fiche, le marqueur, les PNJ |
+| M4 | `5d5f83c8a0fd3081` | `d5f09b08fdbd3681` | à l'œil : la fiche, les marqueurs, les PNJ et leurs ombres |
+| M5 | `9b69c96e54bf74cf` | `b96a66748d6aec3b` | à l'œil : la fiche seule |
+| M6 | `002daa8df482e821` | `a5da478f4de9fa85` | à l'œil : la fiche, la foule |
+
+- **Menu identique à l'octet près au lot 2**, capturé le même jour. Contre les captures du lot 2 faites avant le 24 novembre 2026 (`shots/l8-moyen/`, `shots/t8-lot2/`, `shots/lot3-a5-final/` : `4c10cd8c7b1aa076`), 1 386 pixels diffèrent, tous sur le lissage des textes et des cadres des boutons du menu : la machine est passée sous Windows 11 entre-temps (Chrome et rendu des polices), le décor 3D est identique au pixel près ; le code du lot 2, capturé aujourd'hui, donne le menu du socle. Les comparaisons à l'octet se font donc entre captures d'un même jour.
+- **M1 à M6, chaque image regardée** (planches côte à côte, avant et après, et masque des pixels qui diffèrent) : dans les six missions, les pixels qui diffèrent sont tous sur la fiche ou sur les personnages (silhouettes, ombres, marqueurs), et le décor est identique au pixel près hors d'eux ; changent la fiche des cibles en haut à gauche (« DOSSIER 0n », qui remplace en M6 l'encadré « CIBLE À IDENTIFIER »), les marqueurs rouges (gardés en M1 seulement), les visages et les places des PNJ (casting de A6, hasard décalé), les gardes de M4 en armure sable (`mafia_boss`) et, en plein jour en M4, l'ombre des cibles. M5 ne change que par sa fiche : le convoi n'est pas encore dans le champ.
+- **Socle contre la fin de la tâche A8** (`shots/a8-final/`, même jour) : menu, vues de départ de M1 à M6, lunette ouverte en M2 et M4 et tir visé en M2 et M4 (`VISER=cible`) identiques à l'octet près. Le tir droit devant (sans `VISER`), capturé en plus, touche le parasol de la place en M2 (31 m, un garde alerté) et le sol de l'aire de M4 (34 m).
+- **Retours au menu** (`retour1`, `retour3`, `retour6` : trois tirs manqués, pause, MENU) : de 12 à 33 objets hors de la carte avant le retour (PNJ, cadenas, marques, gerbes, sillage), aucun au menu (`{"fond":"87a0b0","horsCarte":[]}`), qui propose COMMENCER, REPRENDRE : MISSION 3 et REPRENDRE : MISSION 6.
+
+### Parcours réels (`scripts/verif-mission.mjs`)
+
+`node scripts/verif-mission.mjs` (sans argument : les 19 scénarios), sur la carte graphique, contre le Vite du port 5173 : **19 verts** en une passe, dont `tete` (M2 debout et accroupie, M6 assis : HEADSHOT), `culasse` (revenue 1,205 s après le coup, à l'horloge de la mission), `occlusion`, `son`, `cadenas`, `convoi`, `civil-echap` et les scénarios de l'aide. Le socle n'en ajoute aucun : ses briques de la tâche A8 (sorties, réaction, fenêtres, radio, fin différée) ne servent encore à aucune mission ; elles sont vérifiées par leurs tests et par les essais dans le vrai jeu de la tâche A8 (spec, précisions de A8).
+
+`difficulte` (8 essais par mesure ; rapport sans seuil, qui ne rougit que si la mesure échoue) :
+
+| Mesure | Tête | Torse | Membre | Manqué | Autre PNJ |
+|---|---|---|---|---|---|
+| Au repos, visée au crâne, cible menée | 8 | 0 | 0 | 0 | 0 |
+| Stress plein (lunette tenue 14 s), même visée | 2 | 2 | 0 | 4 | 0 |
+| En fuite, visée au torse sans la mener | 6 | 1 | 0 | 1 | 0 |
+| En fuite, visée au torse en la menant | 1 | 7 | 0 | 0 | 0 |
+
+- **La cible en fuite qu'on ne mène pas est désormais touchée** (7 sur 8, contre 0 sur 62 au lot 2) : la balle réelle (tâche A4) vole 0,04 s à 31 m au lieu des 0,45 s fixes d'avant, et la cible n'y parcourt que 19 cm au lieu de 2,2 m. À 430 m (M4, sous-lot 3c), le vol durera 0,54 s et mener redeviendra nécessaire. Le tir au torse d'une cible qui court prend souvent la tête, comme au lot 2 (8 têtes sur 60 touches menées).
+- Huit essais ne donnent qu'une tendance : la passe de 64 essais du lot 2 reste la mesure des proportions, à refaire sur les longues distances (plan de 3c, tâche 3c.14).
+
+### Fiche des cibles et lentille de la lunette (relecture de A7)
+
+Mesure de la limite relevée à la relecture de A7 : `#target-dossier` (`index.html` : en haut à gauche, à 24 px du bord et 90 px du haut, largeur `clamp(176px, 16vw, 240px)`) contre le bord noir de la lunette ouverte (`drawScope`, `src/scope.js` : cercle de rayon 1,02 × R au centre de l'écran, R = 0,38 × min(W, H), soit le bord gauche de la lentille à W / 2 - 0,38 × 1,02 × min(W, H) du bord gauche). Chrome sans interface (carte graphique), la mission montée et sa fiche affichée, la fenêtre émulée (`Emulation.setDeviceMetricsOverride`) à dix tailles courantes, puis de 400 à 1 600 px de haut par pas de 10 px dans quatre formats ; à chaque taille, le rectangle de la fiche lu dans la page (`getBoundingClientRect`) : elle touche quand son point le plus proche du centre est à moins de 1,02 × R. Script jetable, hors du dépôt.
+
+| Fenêtre | Fiche de M4 (trois entrées) : largeur × hauteur | Bord de la lentille | Marge (négative : dans la lentille) |
+|---|---|---|---|
+| 800 × 600 | 176 × 265 | 167 px | -33 px |
+| 1 024 × 768 | 176 × 265 | 214 px | 16 px |
+| 1 280 × 1 024 | 205 × 236 | 243 px | 55 px |
+| 1 280 × 720 | 205 × 236 | 361 px | 134 px |
+| 1 366 × 768 | 219 × 236 | 385 px | 147 px |
+| 1 920 × 1 080 | 240 × 236 | 541 px | 310 px |
+
+| Format | Plus grande fenêtre où la fiche de M4 touche | M2 (deux entrées) | M3 (deux entrées) |
+|---|---|---|---|
+| 16:9 | aucune (de 711 × 400 à 2 844 × 1 600) | aucune | aucune |
+| 16:10 | 768 × 480 | 768 × 480 | 768 × 480 |
+| 4:3 | 947 × 710 | 907 × 680 | 920 × 690 |
+| 5:4 | 1 025 × 820 | 938 × 750 | 950 × 760 |
+
+- Au-delà de chacune de ces fenêtres, la fiche ne touche plus la lentille, à aucune taille de la série. Le commentaire d'`index.html` (« dans la marge noire de la lunette jusqu'en 4:3 ») vaut donc à partir de 960 × 720 en 4:3 (1 024 × 768 : 16 px de marge) ; en 800 × 600, la fiche de M4 entre de 33 px dans la lentille, celles de M2 et M3 de 30 et 32 px.
+- **Lignes coupées** : à 176 px de large (fenêtres de moins de 1 100 px) et jusqu'à 200 px environ, des lignes passent sur deux, dans tous les formats : les signes de M4 (« TAILLEUR BLEU NUIT », « CHEMISE BLANCHE ») jusqu'à 1 248 px de large, les noms des frères de M2 (« LUC SANCTECHAIR », « MARC SANCTECHAIR ») jusqu'à 1 216 px, « CHEVEUX PLAQUÉS » de M3 jusqu'à 1 120 px. Dès 1 280 px de large (205 px de fiche), aucune.
+- Non bloquant (les fenêtres de jeu courantes, 1 280 × 720 et au-delà, n'ont ni contact ni ligne coupée) ; reste connu de `docs/superpowers/REPRISE.md`.
