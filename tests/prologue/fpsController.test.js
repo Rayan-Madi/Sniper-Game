@@ -188,3 +188,107 @@ describe('contrôleur', () => {
     c.dispose()
   })
 })
+
+// Retouches du bar (spec M5 §3.7, §3.13, §9 ; plan, tâche B8). L'enquête ne passe aucune de ces options : ses tests
+// ci-dessus restent tels quels.
+describe('contrôleur du bar : balancement, assis, vitesse', () => {
+  const make = (extra = {}) => {
+    const camera = new THREE.PerspectiveCamera()
+    const c = createFpsController({ camera, colliders: [], start: { x: 0, z: 0, yaw: 0 }, ...extra })
+    c.enable()
+    return { c, camera }
+  }
+  const keyRepeat = code => document.dispatchEvent(new KeyboardEvent('keydown', { code, repeat: true }))
+
+  it('effets atténués (balancement: false) : l\'œil reste à hauteur fixe en marchant, et Viktor avance', () => {
+    const { c, camera } = make({ balancement: false })
+    key('keydown', 'KeyW')
+    let ecart = 0
+    for (let i = 0; i < 120; i++) { c.update(0.016); ecart = Math.max(ecart, Math.abs(camera.position.y - 1.65)) }   // ≈ 3 m
+    expect(ecart).toBe(0)
+    expect(c.position.z).toBeCloseTo(-1.6 * 0.016 * 120, 5)
+    c.dispose()
+  })
+
+  it('assis (setMoveLocked) : ZQSD et les flèches ne déplacent pas, la souris tourne la vue', () => {
+    const { c, camera } = make()
+    lock(true)
+    c.setMoveLocked(true)
+    key('keydown', 'KeyW'); key('keydown', 'ArrowRight'); c.update(1)
+    expect(c.position).toEqual({ x: 0, z: 0 })
+    close(camera.position.y, 1.65)                                             // pas de balancement sur place
+    mouse(100, 50)
+    close(c.yaw, -100 * 0.0022); close(c.pitch, -50 * 0.0022)
+    c.update(0.016)
+    close(camera.rotation.y, -100 * 0.0022)
+    c.dispose()
+  })
+
+  it('relevé, Viktor remarche ; une touche tenue avant de s\'asseoir ne le fait pas repartir seule', () => {
+    const { c } = make()
+    lock(true)
+    key('keydown', 'KeyW')
+    c.setMoveLocked(true); c.update(1)
+    c.setMoveLocked(false); c.update(1)
+    expect(c.position.z).toBe(0)                                               // il faut un nouvel appui
+    key('keyup', 'KeyW'); key('keydown', 'KeyW'); c.update(1)
+    expect(c.position.z).toBeCloseTo(-1.6, 5)
+    c.dispose()
+  })
+
+  it('assis puis figé (dialogue) : la souris ne tourne plus ; dégelé, il est toujours assis', () => {
+    const { c } = make()
+    lock(true)
+    c.setMoveLocked(true); c.setFrozen(true)
+    mouse(100, 0)
+    expect(c.yaw).toBe(0)
+    c.setFrozen(false)
+    key('keydown', 'KeyW'); c.update(1)
+    expect(c.position.z).toBe(0)
+    mouse(100, 0)
+    close(c.yaw, -100 * 0.0022)
+    c.dispose()
+  })
+
+  it('assis, le premier appui d\'une touche de déplacement appelle onMoveKey (relever Viktor), jamais sa répétition', () => {
+    const onMoveKey = vi.fn()
+    const { c } = make({ onMoveKey })
+    lock(true)
+    key('keydown', 'KeyW')                                                    // debout : rien
+    expect(onMoveKey).not.toHaveBeenCalled()
+    key('keyup', 'KeyW')
+    c.setMoveLocked(true)
+    keyRepeat('KeyW')                                                         // Z resté enfoncé en s'asseyant
+    key('keydown', 'KeyE')                                                    // pas une touche de déplacement
+    expect(onMoveKey).not.toHaveBeenCalled()
+    settings.pvpKeys.left = 'KeyQ'                                            // touches relues à chaque appui
+    key('keydown', 'KeyQ')
+    expect(onMoveKey).toHaveBeenCalledTimes(1)
+    expect(onMoveKey).toHaveBeenLastCalledWith('l')
+    key('keydown', 'ArrowDown')
+    expect(onMoveKey).toHaveBeenLastCalledWith('b')
+    c.setFrozen(true)                                                          // en dialogue : rien
+    key('keydown', 'KeyS')
+    expect(onMoveKey).toHaveBeenCalledTimes(2)
+    c.dispose()
+  })
+
+  it('setSpeed change la vitesse de marche dès l\'image suivante', () => {
+    const { c } = make()
+    key('keydown', 'KeyW'); c.update(1)
+    expect(c.position.z).toBeCloseTo(-1.6, 5)
+    c.setSpeed(0.8); c.update(1)
+    expect(c.position.z).toBeCloseTo(-2.4, 5)
+    c.dispose()
+  })
+
+  it('setSpeed refuse une vitesse qui n\'est pas un nombre fini positif ou nul, et garde la précédente', () => {
+    const { c } = make()
+    for (const v of [NaN, -1, Infinity, '1', undefined]) expect(() => c.setSpeed(v)).toThrow(RangeError)
+    key('keydown', 'KeyW'); c.update(1)
+    expect(c.position.z).toBeCloseTo(-1.6, 5)
+    c.setSpeed(0); c.update(1)
+    expect(c.position.z).toBeCloseTo(-1.6, 5)
+    c.dispose()
+  })
+})

@@ -1,6 +1,8 @@
 // Déplacement à la première personne de l'enquête : touches de settings.pvpKeys (codes physiques, relues à chaque
 // événement) et flèches, souris en verrouillage du pointeur, collisions d'un cercle contre des boîtes au sol.
 // Caméra en ordre 'YXZ' : lacet 0 = regard vers −z, lacet positif = à gauche, tangage négatif = vers le bas.
+// Pour le bar (spec M5 §3.7, §9) : balancement: false garde l'œil fixe (effets atténués) ; setMoveLocked (assis, et
+// onMoveKey au premier appui d'une touche de déplacement) ; setSpeed. L'enquête n'en passe aucun et marche comme avant.
 import { settings, sensMultiplier, invertY } from '../settings.js'
 
 const LOOK = 0.0022            // radians par pixel de souris à sensibilité 100
@@ -35,9 +37,10 @@ export function moveCircle(pos, dx, dz, r, boxes) {
 }
 
 export function createFpsController({ camera, colliders = [], start = { x: 0, z: 0, yaw: 0 }, eye = 1.65, speed = 1.6, radius = 0.28,
-  onStep = () => {}, onUnlock = () => {}, target = document } = {}) {
+  balancement = true, onStep = () => {}, onUnlock = () => {}, onMoveKey = () => {}, target = document } = {}) {
   const pos = { x: start.x, z: start.z }
   let yaw = start.yaw || 0, pitch = start.pitch || 0, y = eye, frozen = false, enabled = false, walked = 0, sinceStep = 0, bobAmp = 0
+  let moveLocked = false
   const held = new Set()
   camera.rotation.order = 'YXZ'
 
@@ -50,7 +53,14 @@ export function createFpsController({ camera, colliders = [], start = { x: 0, z:
     return null
   }
   const locked = () => !!document.pointerLockElement
-  const onDown = e => { const a = actionOf(e.code); if (a && !frozen) held.add(a) }
+  // assis (setMoveLocked) : une touche de déplacement ne s'enregistre pas ; son premier appui (pas une répétition de
+  // la touche tenue) appelle onMoveKey, pour que l'appelant relève Viktor (spec M5 §3.7)
+  const onDown = e => {
+    const a = actionOf(e.code)
+    if (!a || frozen) return
+    if (moveLocked) { if (!e.repeat) onMoveKey(a); return }
+    held.add(a)
+  }
   const onUp = e => { const a = actionOf(e.code); if (a) held.delete(a) }
   const onMove = e => {
     if (frozen || !locked()) return
@@ -80,10 +90,17 @@ export function createFpsController({ camera, colliders = [], start = { x: 0, z:
     // Chrome renvoie une promesse, rejetée si on reverrouille trop vite après Échap : on l'avale (pas d'erreur en console)
     lock(el) { if (el && typeof el.requestPointerLock === 'function') { try { const p = el.requestPointerLock(); if (p && p.catch) p.catch(() => {}) } catch (e) { /* refusé */ } } },
     setFrozen(v) { frozen = !!v; if (frozen) held.clear() },
+    // assis : la souris tourne toujours la vue, les touches ne déplacent plus ; indépendant de setFrozen (un dialogue
+    // ouvert assis gèle tout, et Viktor est encore assis quand il se termine)
+    setMoveLocked(v) { moveLocked = !!v; if (moveLocked) held.clear() },
+    setSpeed(v) {
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new RangeError(`setSpeed : vitesse invalide (${v})`)
+      speed = v
+    },
     setPose(p) { pos.x = p.x; pos.z = p.z; if (p.y != null) y = p.y; if (p.yaw != null) yaw = p.yaw; if (p.pitch != null) pitch = p.pitch },
     update(dt) {
       let mx = 0, mz = 0
-      if (!frozen && held.size) {
+      if (!frozen && !moveLocked && held.size) {
         const f = forwardOf(yaw), r = rightOf(yaw)
         const fw = (held.has('f') ? 1 : 0) - (held.has('b') ? 1 : 0), st = (held.has('r') ? 1 : 0) - (held.has('l') ? 1 : 0)
         mx = f.x * fw + r.x * st; mz = f.z * fw + r.z * st
@@ -98,7 +115,7 @@ export function createFpsController({ camera, colliders = [], start = { x: 0, z:
         while (sinceStep >= STEP_EVERY) { sinceStep -= STEP_EVERY; steps++ }
       }
       // le balancement s'installe et retombe en douceur (au relâchement, il sautait de 2,5 cm à 0 d'une image à l'autre)
-      bobAmp += ((held.size && !frozen ? 1 : 0) - bobAmp) * Math.min(1, (dt || 0) * BOB_EASE)
+      bobAmp += ((balancement && held.size && !frozen ? 1 : 0) - bobAmp) * Math.min(1, (dt || 0) * BOB_EASE)
       camera.position.set(pos.x, y + Math.sin(walked * Math.PI * 2 / 1.5) * BOB * bobAmp, pos.z)
       camera.rotation.set(pitch, yaw, 0, 'YXZ')
       // les pas après la pose : la caméra est à jour pour eux, et une erreur de son ne la laisse pas en arrière
