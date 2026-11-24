@@ -3,8 +3,9 @@ import { existsSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { MISSIONS } from '../../src/campaign/missions/index.js'
 import { portrait, PORTRAITS } from '../../src/campaign/portraits.js'
-import * as fiche from '../../src/campaign/fiche.js'
 import { afficherFiche, barrerCible, entreeDeFiche, titreDeFiche } from '../../src/campaign/fiche.js'
+// Le module tel quel, passé aux mêmes cas que ses copies fautives (relancee, retrouvees ; témoins par ficheModifiee).
+import * as ficheModule from '../../src/campaign/fiche.js'
 import { readSource, executer } from '../gfx/mainSource.js'
 
 // Fiche des cibles dans le HUD (spec du lot 3, §2 e et tests 3a : « Fiche : nombre d'entrées = cibles nommées, aucun
@@ -204,7 +205,7 @@ describe('afficherFiche : titre « DOSSIER 0n », une entrée par cible, dans l\
   }
 
   it('une mission relancée, ou la suivante : la fiche repart vierge (ni entrée en double, ni ligne barrée)', () => {
-    expect(relancee(fiche)).toEqual(VIERGE)
+    expect(relancee(ficheModule)).toEqual(VIERGE)
   })
 
   // Témoin : fiche.js qui ajoute la fiche sans vider l'élément garde la mission d'avant, et sa ligne barrée.
@@ -219,7 +220,7 @@ describe('afficherFiche : titre « DOSSIER 0n », une entrée par cible, dans l\
 
 describe('barrerCible et entreeDeFiche : l\'entrée retrouvée par cibleId, pas par sa place', () => {
   it('sur une fiche à l\'ordre inverse du casting : Vosko pour la cible 0, Mira pour la 1, rien pour la 7', () => {
-    expect(retrouvees(fiche)).toEqual(RETROUVEES)
+    expect(retrouvees(ficheModule)).toEqual(RETROUVEES)
   })
 
   it('entreeDeFiche : l\'élément de chaque cible ; null pour une cible sans entrée', () => {
