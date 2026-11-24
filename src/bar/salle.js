@@ -895,8 +895,8 @@ export function creerSalle({ attenue = false } = {}) {
       if (disposed) return
       dt = Math.min(Math.max(+dt || 0, 0), 0.1)
       ventilateur.rotation.y = (ventilateur.rotation.y + dt * DECOR.ventilateur.toursParS * TAU) % TAU
+      if (attenue) return   // §9 : néon et télé fixes, la course du tiercé comprise
       T.tele.offset.x = (T.tele.offset.x + dt * TV.defilement) % 1
-      if (attenue) return
       neon(dt)
       plan -= dt
       if (plan <= 0) { plan = entre(TV.planS); eclairer(entre(TV.eclat)) }

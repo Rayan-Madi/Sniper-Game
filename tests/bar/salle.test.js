@@ -121,7 +121,10 @@ describe('la salle du Bivouac : ce qu\'on voit est ce qui arrête', () => {
       ['mur est', [0, 1.6, 0], [1, 0, 0], 'x', 6],
       ['mur nord', [0.5, 1.6, 0], [0, 0, -1], 'z', -4.5],
       ['mur ouest, au nord de la cuisine', [0, 1.6, -3.3], [-1, 0, 0], 'x', -6],
-      ['mur sud plein', [-2.8, 1.6, 0], [0, 0, 1], 'z', 4.5],
+      // l'enduit nu, entre l'ardoise (x de -3,17 à -2,53) et le juke-box (x de -1,95 à -1,25) : en x = -2,8, le
+      // rayon touchait le panneau de l'ardoise, à 2,5 cm du mur, et passait encore l'enduit reculé de 10 cm
+      // (témoin de la boîte décalée, relecture de B9)
+      ['mur sud plein', [-2.0, 1.6, 0], [0, 0, 1], 'z', 4.5, 'enduit'],
       ['allège de la vitrine', [2.6, 0.5, 2.0], [0, 0, 1], 'z', 4.5],
       ['porte d\'entrée', [3.5, 1.0, 3.0], [0, 0, 1], 'z', 4.5],
       ['réserve, face est', [-2.5, 1.6, 3.5], [-1, 0, 0], 'x', -3.8],
@@ -130,10 +133,11 @@ describe('la salle du Bivouac : ce qu\'on voit est ce qui arrête', () => {
       ['cloison est du couloir', [-2.0, 1.6, -6], [1, 0, 0], 'x', -1.4],
       ['porte du WC', [-2.0, 1.6, -5], [0, 0, -1], 'z', -7.5],
     ]
-    for (const [nom, o, d, axe, attendu] of rayons) {
+    for (const [nom, o, d, axe, attendu, matiere] of rayons) {
       const h = impact(salle, o, d)
       expect(h, nom).not.toBeNull()
       expect(Math.abs(h.point[axe] - attendu), `${nom} : ${h && h.point[axe]}`).toBeLessThan(0.05)   // témoin : boîte décalée
+      if (matiere) expect(h.object.material.name, nom).toBe(matiere)          // témoin : le rayon en x = -2,8, qui touche l'ardoise
     }
     salle.dispose()
   })
@@ -271,12 +275,28 @@ describe('la salle du Bivouac : ce qui bouge', () => {
     salle.dispose()
   })
 
-  it('effets atténués : néon, télé et sa lumière fixes', () => {
+  // La garde du §9 tient d'elle-même, sur toute fenêtre d'une seconde, et pas seulement parce qu'une salve compte au
+  // plus 3 éclats (relecture de B9)
+  it('deux allumages du O mort sont toujours séparés de plus de 1/3 s', () => {
+    const salle = creerSalle()
+    const o = materiau(salle, 'neonO')
+    const v = relever(salle, 300, () => o.color.r)
+    const debuts = []
+    v.slice(1).forEach((x, i) => { if (x - v[i] > 0.2 * Math.max(Math.abs(v[i]), 1e-3)) debuts.push((i + 1) / 60) })
+    expect(debuts.length).toBeGreaterThan(20)
+    const ecarts = debuts.slice(1).map((t, i) => t - debuts[i])
+    expect(Math.min(...ecarts)).toBeGreaterThan(1 / 3)                      // témoin : DECOR.neon.entreS à [0.28, 0.45]
+    salle.dispose()
+  })
+
+  it('effets atténués : néon, télé (course du tiercé comprise) et sa lumière fixes', () => {
     const salle = creerSalle({ attenue: true })
     const o = materiau(salle, 'neonO'), ecran = materiau(salle, 'teleEcran')
+    const course = ecran.map.offset.x
     for (const f of [() => o.color.r, () => ecran.color.r, () => salle.lumieres.tele.intensity]) {
       expect(sauts(relever(salle, 30, f))).toBe(0)                          // témoin : attenue ignoré
     }
+    expect(ecran.map.offset.x).toBe(course)                                  // témoin : la course défile en atténué
     salle.dispose()
   })
 
@@ -316,12 +336,30 @@ describe('la salle du Bivouac : ce qui bouge', () => {
     salle.dispose()
   })
 
-  it('le ventilateur tourne au temps de jeu, et rien ne bouge sans update', () => {
+  it('le ventilateur tourne au temps de jeu', () => {
     const salle = creerSalle()
     const v = salle.ventilateur, a0 = v.rotation.y
-    expect(v.rotation.y).toBe(a0)
     salle.update(0.5)
     expect(v.rotation.y).not.toBe(a0)
+    salle.dispose()
+  })
+
+  // Rien n'avance hors de update(dt) : ni au rendu (le vrai renderer appelle onBeforeRender sur chaque objet dessiné),
+  // ni par stats() ou setWcOccupe(). Sinon la salle bougerait encore en pause (relecture de B9).
+  it('rien ne bouge sans update : ni au rendu, ni par stats() ou setWcOccupe()', () => {
+    const salle = creerSalle(), scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera()
+    scene.add(salle.group)
+    const renderer = createFakeRenderer(), ecran = materiau(salle, 'teleEcran')
+    const etat = () => [salle.ventilateur.rotation.y, materiau(salle, 'neonO').color.r, ecran.color.r, ecran.map.offset.x,
+      salle.lumieres.tele.intensity]
+    salle.update(1 / 60)
+    const avant = etat()
+    for (let i = 0; i < 120; i++) {
+      renderer.render(scene)
+      scene.traverseVisible(o => o.onBeforeRender(null, scene, camera, o.geometry, o.material, null))
+      salle.stats(); salle.setWcOccupe(i % 2 === 0)
+    }
+    expect(etat()).toEqual(avant)                                            // témoin : le ventilateur tourné à chaque rendu (onBeforeRender)
     salle.dispose()
   })
 

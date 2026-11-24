@@ -355,15 +355,17 @@ export const DECOR = {
     jukebox: { couleur: 0xff7038, intensite: 1.6, portee: 3 },   // le juke-box et ses tubes de couleur
   },
   neon: {               // « LE BIV UAC » : le O mort essaie parfois de se rallumer (jamais plus de 3 éclats par seconde, §9)
-    mort: 0.045,         // éclat du O éteint (multiplie sa couleur) : un tube froid qu'on devine
+    mort: 0.02,         // éclat du O éteint (multiplie sa couleur) : un tube froid qu'on devine ; à 0,045, le O se lisait
+                        // encore et l'enseigne disait « LE BIVOUAC » (captures de la relecture de B9)
     allume: 1,          // éclat du O quand il se rallume
     reposS: [7, 13],    // entre deux salves, le O reste mort, tiré entre ces bornes (s)
     eclats: [1, 3],     // nombre d'éclats d'une salve, tiré entre ces bornes
     eclatS: [0.06, 0.12],   // durée d'un éclat (s)
-    entreS: [0.28, 0.45],   // d'un éclat au début du suivant, toujours plus de 1/3 s (s)
+    entreS: [0.34, 0.45],   // d'un début d'éclat au suivant, dans une salve (s) : plus de 1/3 s, jamais plus de 3 par seconde
+                        // même si une salve en comptait plus de 3 (tests/bar/salle.test.js)
   },
   tele: {               // le tiercé : la course défile, la lumière change à chaque plan (pas de scintillement)
-    defilement: 0.07,   // tours de la bande de la course par seconde
+    defilement: 0.07,   // tours de la bande de la course par seconde ; effets atténués : la course reste fixe (§9)
     planS: [2.5, 6],    // durée d'un plan, tirée entre ces bornes (s)
     eclat: [0.55, 1],   // éclat d'un plan, tiré entre ces bornes ; effets atténués : la moyenne, fixe
   },
