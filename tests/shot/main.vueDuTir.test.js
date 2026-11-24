@@ -38,6 +38,7 @@ function monter(source, tremble) {
     spawnTrail: () => ({}), MUZZLE: new THREE.Vector3(...SILLAGE.canon), predireImpact: () => BALLE.volMaxS,
     toucherSegment: () => ({ impact: null, traversees: [] }),
     recoil: { kick: () => {} },
+    coupEntendu: () => {},   // le coup entendu par les règles de la mission (tâche A8), hors de ce que vérifie ce test
   }, source)
 }
 

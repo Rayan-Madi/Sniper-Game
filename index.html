@@ -134,6 +134,25 @@
       color: #4eff4e;
       animation: fadeup 2.5s ease forwards;
     }
+    /* Ligne d'Anton dans le fil (direALaRadio, src/main.js ; tâche A8 du lot 3) : la voix du fixeur, aux couleurs de la
+       fiche des cibles et sous le voyant de la radio des briefings, pour ne pas la lire comme un tir. Elle entre comme
+       les autres lignes du fil, reste le temps de la lire, puis s'efface (le départ de la sortie est posé par la ligne). */
+    .kill-entry.radio {
+      max-width: 300px;
+      background: rgba(20,15,8,0.82);
+      border-left: 3px solid #ffd44e;
+      color: #f0e0b0;
+      line-height: 1.4;
+      animation: radio-entree 0.5s ease both, radio-sortie 0.5s ease forwards;
+      animation-delay: 0s, 2.3s;
+    }
+    @keyframes radio-entree { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes radio-sortie { to { opacity: 0; } }
+    .radio-qui {
+      margin-right: 8px;
+      color: #ffd44e; font-size: 10px; letter-spacing: 0.14em;
+    }
+    .radio-qui::before { content: '\25CF\00A0'; color: #e04848; }
     @keyframes fadeup {
       0% { opacity: 0; transform: translateY(8px); }
       20% { opacity: 1; transform: translateY(0); }

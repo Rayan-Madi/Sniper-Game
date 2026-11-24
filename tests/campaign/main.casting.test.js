@@ -232,6 +232,7 @@ describe('les victimes libérées par le cadenas de M3 : aucun sosie des cibles'
       moralLockMesh: { position: new THREE.Vector3(4, 1, -2) }, removeMoralLock: () => {}, upgradeState: {},
       currentMission: M3, currentAnchors: resoudreAncres(M3, CARTES[2].ancres), mapGround: () => 0,
       NPC, npcs: [], civilians, castingDesCivils,
+      signaler: () => {},   // l'événement du cadenas (tâche A8), hors de ce que vérifie ce test
     }, source)
     const hasard = vi.spyOn(Math, 'random').mockReturnValue(r)
     try {

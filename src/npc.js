@@ -241,6 +241,8 @@ export class NPC {
     this.stateTimer   = 0
     this.walkDir      = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize()
     this.fleeDir      = new THREE.Vector3()
+    this.cibleFuite   = null    // [x, z] : le point vers lequel il fuit (fuirVers : une sortie, un abri), null sinon
+    this.corpsGarde   = false   // garderCorps : abattu, son corps reste jusqu'au démontage de la mission
     this.animT        = Math.random() * Math.PI * 2
     this.ringPulse    = 0
     this.onVehicle    = false   // cible à bord d'un véhicule (position gérée par main.js)
@@ -394,14 +396,8 @@ export class NPC {
   // Fuit dans la direction opposée au tir
   flee(shotPos) {
     if (this.onVehicle) return   // une cible en voiture ne fuit pas à pied
-    this.state      = STATES.FLEE
-    this.stateTimer = 0
-    // Le commanditaire raccroche et se lève : il quitte la pose assise (clip de course, update) et le canapé (_rise)
-    // (spec du lot 2, §3.7 ; avant, il glissait assis, 20 cm au-dessus du parquet).
-    if (this.onPhone) {
-      this.onPhone = false
-      this._rising = { fromY: this.mesh.position.y, t: 0, k: 0 }
-    }
+    this._commencerFuite()
+    this.cibleFuite = null
 
     if (this.fleeSideways) {
       // Appartement : on court vers la sortie latérale la plus proche (±X)
@@ -418,6 +414,36 @@ export class NPC {
     if (this.fleeDir.length() < 0.01) {
       this.fleeDir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize()
     }
+  }
+
+  // Fuit vers le point [x, z] (spec du lot 3, §2 f ; fuirVersLaSortie, main.js) : une sortie ou un abri de la mission, au
+  // bout de la réaction d'une cible (src/campaign/alarm.js). Tout d'une fuite (état, lever du canapé), à la vitesse d'une
+  // fuite ; le cap est repris vers le point à chaque image (_move), et elle s'y arrête.
+  fuirVers([x, z]) {
+    if (this.onVehicle) return
+    this._commencerFuite()
+    this.cibleFuite = [x, z]
+    this._capVersLaCible()
+  }
+
+  // Ce que fait toute fuite : l'état, et le commanditaire qui raccroche et se lève : il quitte la pose assise (clip de
+  // course, update) et le canapé (_rise) (spec du lot 2, §3.7 ; avant, il glissait assis, 20 cm au-dessus du parquet).
+  _commencerFuite() {
+    this.state      = STATES.FLEE
+    this.stateTimer = 0
+    if (this.onPhone) {
+      this.onPhone = false
+      this._rising = { fromY: this.mesh.position.y, t: 0, k: 0 }
+    }
+  }
+
+  // Cap de la fuite vers cibleFuite ; rend la distance qui reste (m).
+  _capVersLaCible() {
+    const pos = this.mesh.position
+    const dx = this.cibleFuite[0] - pos.x, dz = this.cibleFuite[1] - pos.z
+    const d = Math.hypot(dx, dz)
+    if (d > 1e-6) this.fleeDir.set(dx / d, 0, dz / d)
+    return d
   }
 
   react(shotPos) {
@@ -515,6 +541,14 @@ export class NPC {
     if (this.state === STATES.FLEE) {
       // Vitesse de fuite très élevée — sort du champ de vision rapidement
       const spd = this.speed * 8.0 * dt
+      // Fuite vers un point : le cap est repris à chaque image ; arrivée, elle s'y arrête
+      if (this.cibleFuite) {
+        const reste = this._capVersLaCible()
+        if (reste <= spd) {
+          pos.x = this.cibleFuite[0]; pos.z = this.cibleFuite[1]
+          return
+        }
+      }
       // Contourne les bâtiments : si le chemin est bloqué, dévie à 90°
       const wasInside = blocked(pos.x, pos.z)
       if (!wasInside && blocked(pos.x + this.fleeDir.x * spd * 4, pos.z + this.fleeDir.z * spd * 4)) {
@@ -630,6 +664,15 @@ export class NPC {
     }
     if (this.mesh.userData.marker) this.mesh.userData.marker.visible = false
     if (this.mesh.userData.ring)   this.mesh.userData.ring.visible = false
-    this.removeIn = BODY_TIME   // le corps part au bout de 8 s de jeu (update), libéré
+    // Le corps part au bout de 8 s de jeu (update), libéré ; gardé (garderCorps), il reste jusqu'au démontage
+    this.removeIn = this.corpsGarde ? Infinity : BODY_TIME
+  }
+
+  // Le corps de ce PNJ, abattu ou à venir, reste jusqu'au démontage de la mission (NPC.dispose, unmountLevel) : fin
+  // différée de la mission (spec du lot 3, §2 c, contrat avec le lot 4 : « retrait des corps suspendu dès la première
+  // mort »), et la kill-cam du lot 4.
+  garderCorps() {
+    this.corpsGarde = true
+    if (!this.alive) this.removeIn = Infinity
   }
 }

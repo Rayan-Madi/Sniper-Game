@@ -62,13 +62,33 @@
 //                ceux de son briefing ; portrait, le nom de l'image de son briefing (portrait(nom),
 //                src/campaign/portraits.js), ou null sans photo. ordre : les entrées suivent l'ordre de tir du
 //                briefing, numérotées dans le HUD (M3, M4)
-//   fuite        'opposee' : un PNJ fuit à l'opposé du tir ; 'laterale' : vers la sortie latérale la plus proche (±X)
-//   sorties, abris  noms d'ancres où une fuite fera échouer la mission (spec §2 f, tâche A8) ; aucune aujourd'hui : le
-//                cône de 80° décide (main.js, checkFledTargets)
-//   fenetres     fenêtres de tir (spec §2 g, tâche A8) ; aucune aujourd'hui
-//   radio        lignes d'Anton dans le fil (spec §2 g, tâche A8) ; aucune aujourd'hui
-//   fin          { calmeS } : les secondes de calme après la dernière cible, avant la fin ; 0 : la fin d'aujourd'hui, le
-//                ralenti sur la dernière cible, puis la réussite (tâche A8 : fin différée de M3)
+//   fuite        'opposee' : un PNJ fuit à l'opposé du tir ; 'laterale' : vers la sortie latérale la plus proche (±X) ;
+//                la fuite immédiate autour d'un impact (main.js, fleeNearby), celle des civils et des gardes, et celle des
+//                cibles d'une mission sans sortie ni abri
+//   sorties, abris  noms d'ancres de la carte (spec §2 f et décision 4 ; tâche A8 ; src/campaign/escape.js). Une
+//                mission qui en déclare : ses cibles réagissent au coup (reaction) puis fuient vers l'issue la plus
+//                proche, et une cible en fuite qui en atteint une (à FUITE.rayonArriveeM, src/shot/tuning.js) fait
+//                échouer la mission ; le cône ne compte plus. Sans elles (les six missions d'aujourd'hui), le cône de 80°
+//                décide (main.js, checkFledTargets) et les cibles fuient tout de suite autour d'un impact, comme avant
+//   reaction     null, ou { stupeurS, rayonChuteM } (src/campaign/alarm.js), obligatoire dans une mission à sorties ou
+//                abris : une cible réagit au plus tôt du son du départ (d / 343 s, jamais au silencieux) et de la chute
+//                d'un collègue (cible ou garde) tombé à moins de rayonChuteM (m) et en vue, se fige stupeurS (s), puis fuit
+//   perteDeVueS  null, ou N (s) : dans une mission à sorties ou abris, une cible en fuite hors de la vue du tireur plus
+//                de N s d'affilée fait aussi échouer la mission (un rayon contre le décor solide)
+//   fuiteMessages  facultatif, { <nom d'une sortie ou d'un abri>: texte } : l'écran d'échec quand une cible l'atteint ;
+//                sinon celui de sa sorte (MESSAGES_DE_FUITE, src/campaign/escape.js)
+//   fenetres     fenêtres de tir (spec §2 g ; src/campaign/window.js) : [{ nom, depart, dureeS, echeance }] ; ouverte au
+//                premier signal de son événement depart (EVENEMENTS), son échéance tombe dureeS s plus tard, une fois :
+//                { echec: texte } (la mission échoue), { penalite: points, fil } (le score perd ces points, le fil le
+//                dit) ou { evenement } (signalé à la mission) ; la mort de la dernière cible les arrête. Aucune aujourd'hui
+//   radio        lignes d'Anton dans le fil, avec ses bips (spec §2 g ; src/campaign/radio.js) : [{ evenement, texte,
+//                apresS, fois }] ; dite apresS s (0 par défaut) après son événement (EVENEMENTS), au plus fois fois (1 par
+//                défaut), une ligne à la fois. Aucune aujourd'hui
+//   fin          { calmeS, tantQue } (spec §2 g ; src/campaign/phase.js, creerFin ; lancerFin de main.js) : calmeS, les
+//                secondes de calme après la mort de la dernière cible, en jeu, avant le ralenti et la réussite ; 0 : la fin
+//                d'aujourd'hui, le ralenti tout de suite. Avec un calme, les corps restent dès la première mort.
+//                tantQue, facultatif : une condition de CONDITIONS_DE_FIN (phase.js) ; le calme finit dès qu'elle tombe
+//                ('cadenas' : le cadenas du choix moral tiré)
 //   choixMoral   (M3 seulement) { cadenas, indice { apresS, texte }, points, victimes } : l'ancre du cadenas, l'indice
 //                que le fil donne apresS secondes après le départ, les points et les victimes libérées par un tir sur
 //                le cadenas
@@ -81,6 +101,17 @@ import m5 from './m5.js'
 import m6 from './m6.js'
 
 export const MISSIONS = [m1, m2, m3, m4, m5, m6]
+
+// Les événements que le jeu signale à la mission (main.js, signaler), que citent ses fenêtres de tir (depart, echeance
+// evenement) et ses lignes de radio (evenement) :
+//   depart        le départ de la mission (startLevel), à 0 s
+//   premier-tir   le premier coup de feu de la mission ; tir : chaque coup de feu
+//   cible         une cible abattue
+//   fuite         une cible part vers une sortie ou un abri (au bout de sa réaction)
+//   alerte        l'alerte des gardes
+//   calme         la mort de la dernière cible, quand la fin est différée : le calme commence
+//   cadenas       le cadenas du choix moral tiré
+export const EVENEMENTS = ['depart', 'premier-tir', 'tir', 'cible', 'fuite', 'alerte', 'calme', 'cadenas']
 
 // La mission n (1 à 6), celle de la carte MAP_BUILDERS[(n - 1) % 6].
 export function missionFor(n) {

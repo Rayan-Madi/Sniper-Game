@@ -590,3 +590,62 @@ describe('pluie du port (M3)', () => {
     expect(ms / 1000, 'coupée avec la nappe').toBeLessThanOrEqual(1.2 + 0.01)
   })
 })
+
+// La voix radio d'Anton en mission (spec du lot 3, §2 g ; plan du lot 3a, tâche A8) : les bips des cinématiques le temps
+// d'une ligne (déclic, souffle du canal, syllabes synthétiques, déclic de fin), tout programmé d'un coup sur l'horloge
+// audio, dans un gain à elle branché au maître ; coupée par stopRadio (la pause) et par stopMissionAmbience (fin de
+// mission, menu, briefing). Son hasard vient d'un générateur à graine : le hasard du jeu ne bouge pas.
+// Témoin : playRadio n'existe pas avant la tâche (ne compte pas) ; par mutation de src/audio.js, vues rouges : la voix
+// qui tire dans Math.random ; stopMissionAmbience qui ne la coupe pas ; une ligne qui ne coupe pas la précédente.
+describe("la voix radio d'Anton", () => {
+  const sources = () => created.filter(n => n.kind === 'oscillator' || n.kind === 'buffer')
+
+  it('playRadio(2) : des sons dans les 2 s de la ligne, dont des syllabes, dans un gain branché au maître ; aucun Math.random', async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext(), master = audio.masterNode()
+    ctx.currentTime = 10
+    created.length = 0
+    const hasard = vi.spyOn(Math, 'random')
+    audio.playRadio(2)
+    expect(hasard).not.toHaveBeenCalled()
+    const voix = gainsOn(master)
+    expect(voix).toHaveLength(1)
+    const s = sources()
+    // Des syllabes, chacune sur la grille de 125 ms de la voix des cinématiques
+    const syllabes = s.filter(n => n.kind === 'oscillator')
+    expect(syllabes.length, 'syllabes').toBeGreaterThan(0)
+    for (const o of syllabes) {
+      const place = (o.startAt - 10) / 0.125
+      expect(Math.abs(place - Math.round(place))).toBeLessThan(1e-6)
+    }
+    for (const n of s) {
+      expect(n.startAt).toBeGreaterThanOrEqual(10)
+      expect(n.startAt).toBeLessThanOrEqual(12)
+      expect(n.stopAt).toBeLessThanOrEqual(12.2)
+    }
+  })
+
+  it('stopRadio() la coupe : son gain débranché du maître', async () => {
+    const audio = await import('../src/audio.js')
+    const master = audio.masterNode()
+    audio.playRadio(3)
+    audio.stopRadio()
+    expect(gainsOn(master)).toHaveLength(0)
+  })
+
+  it('stopMissionAmbience() la coupe aussi', async () => {
+    const audio = await import('../src/audio.js')
+    const master = audio.masterNode()
+    audio.playRadio(3)
+    audio.stopMissionAmbience()
+    expect(gainsOn(master)).toHaveLength(0)
+  })
+
+  it('une nouvelle ligne coupe la précédente : une seule voix branchée', async () => {
+    const audio = await import('../src/audio.js')
+    const master = audio.masterNode()
+    audio.playRadio(3)
+    audio.playRadio(2)
+    expect(gainsOn(master)).toHaveLength(1)
+  })
+})

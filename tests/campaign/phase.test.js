@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canPause, canShoot, canClear, canFail, canRebrief } from '../../src/campaign/phase.js'
+import { canPause, canShoot, canClear, canFail, canRebrief, canFinish, creerFin, CONDITIONS_DE_FIN } from '../../src/campaign/phase.js'
 import { recordClear } from '../../src/campaign/progress.js'
 
 describe('fin de la kill-cam : la réussite n\'est enregistrée que si la mission est encore en cours', () => {
@@ -169,5 +169,55 @@ describe('gardes de phase, cas limites', () => {
       expect(canPause({ phase, killcam: false, failPending: false })).toBe(false)
     }
     expect(canPause({ phase: 'playing', killcam: false, failPending: false })).toBe(true)
+  })
+})
+
+// Fin de mission paramétrable (spec du lot 3, §2 g ; plan du lot 3a, tâche A8 ; contrat avec le lot 4) : à la mort de la
+// dernière cible, la fin est immédiate (le ralenti tout de suite, fin.calmeS à 0 : les six missions d'aujourd'hui) ou
+// différée (fin.calmeS secondes de calme, en jeu, puis le ralenti ; M3 au sous-lot 3c). tantQue, facultatif : le nom
+// d'une condition que le jeu tient à jour ; le calme ne dure que tant qu'elle reste vraie ('cadenas' : le cadenas du
+// choix moral n'est pas tiré ; « fin au tir ou à l'échéance », rapport de M3).
+// Témoins (par mutation de src/campaign/phase.js, chacune vue rouge) : l'échéance comptée depuis le départ de la
+// mission au lieu de la mort de la dernière cible ; tantQue ignoré ; canFinish sans la garde de l'échec en attente.
+describe('fin différée : creerFin', () => {
+  it('fin.calmeS à 0 : immédiate (differee faux)', () => {
+    expect(creerFin({ calmeS: 0 }).differee).toBe(false)
+  })
+
+  it('12 s de calme, lancées à la mort de la dernière cible (t = 4) : échue à 16 s, pas avant', () => {
+    const f = creerFin({ calmeS: 12 })
+    expect(f.differee).toBe(true)
+    expect(f.lancee).toBe(false)
+    expect(f.echue(100)).toBe(false)   // pas lancée : jamais échue
+    f.lancer(4)
+    expect(f.lancee).toBe(true)
+    expect(f.resteS(10)).toBeCloseTo(6, 12)
+    expect(f.echue(15.99)).toBe(false)
+    expect(f.echue(16)).toBe(true)
+    f.lancer(9)   // une seconde fois : rien ne change
+    expect(f.echue(16)).toBe(true)
+  })
+
+  it('tantQue : le calme finit dès que sa condition tombe, l\'échéance au plus tard', () => {
+    const f = creerFin({ calmeS: 12, tantQue: 'cadenas' })
+    f.lancer(0)
+    expect(f.echue(3, { cadenas: true })).toBe(false)
+    expect(f.echue(3, { cadenas: false })).toBe(true)
+    expect(f.echue(12, { cadenas: true })).toBe(true)
+    expect(CONDITIONS_DE_FIN).toEqual(['cadenas'])
+  })
+})
+
+// La fin (le ralenti de la dernière cible, tout de suite ou à l'échéance du calme) ne part qu'en jeu, jamais deux fois,
+// jamais sous la pause, jamais avec l'échec d'un civil abattu en attente : sinon l'échéance du calme tombée dans les
+// 600 ms qui suivent un civil abattu lancerait la kill-cam, qui refuse l'échec, et la mission serait réussie.
+describe('canFinish', () => {
+  it('en jeu seulement, sans ralenti déjà lancé ni échec en attente', () => {
+    expect(canFinish({ phase: 'playing', killcam: false, failPending: false })).toBe(true)
+    expect(canFinish({ phase: 'playing', killcam: true, failPending: false })).toBe(false)
+    expect(canFinish({ phase: 'playing', killcam: false, failPending: true })).toBe(false)
+    for (const phase of ['paused', 'briefing', 'cleared', 'dead', 'menu']) {
+      expect(canFinish({ phase, killcam: false, failPending: false }), phase).toBe(false)
+    }
   })
 })

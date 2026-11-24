@@ -37,6 +37,8 @@ export default {
   fuite: 'laterale',   // dans l'appartement, on court vers la sortie latérale la plus proche
   sorties: [],
   abris: [],
+  reaction: null,
+  perteDeVueS: null,
   fenetres: [],
   radio: [],
   fin: { calmeS: 0 },

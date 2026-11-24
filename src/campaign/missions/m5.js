@@ -36,6 +36,8 @@ export default {
   fuite: 'opposee',
   sorties: [],
   abris: [],
+  reaction: null,
+  perteDeVueS: null,
   fenetres: [],
   radio: [],
   fin: { calmeS: 0 },

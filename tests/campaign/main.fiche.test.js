@@ -49,6 +49,8 @@ function jeu(source = MAIN_SRC, { reduit = false } = {}) {
     targetScore: () => 100, STRESS: { cibleAbattue: 0.1 }, convoyTarget: null, convoyCar: null,
     fleeNearby: () => 0, reactNearby: () => {}, guards: [], camera: { position: new THREE.Vector3() },
     getStats: () => ({ silenced: true }), checkGuardAlert: () => {}, checkWin: () => {},
+    // les règles de la mission (tâche A8), hors de ce que vérifie ce test
+    monterRegles: () => {}, signaler: () => {}, surUneMort: () => {},
     // la fiche
     dossierEl, afficherFiche, barrerCible, effectsReduced: () => reduit,
   }, source)

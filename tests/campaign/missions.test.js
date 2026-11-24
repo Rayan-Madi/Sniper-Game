@@ -24,7 +24,8 @@ const { scene } = await import('../../src/scene.js')
 const { MAP_BUILDERS, clearMap } = await import('../../src/maps/index.js')
 const { withSeed } = await import('../../src/gfx/memtest.js')
 const { MAX_LEVEL } = await import('../../src/campaign/progress.js')
-const { MISSIONS, missionFor, ancresCitees, resoudreAncres, nombreDeCivils } = await import('../../src/campaign/missions/index.js')
+const { MISSIONS, EVENEMENTS, missionFor, ancresCitees, resoudreAncres, nombreDeCivils } = await import('../../src/campaign/missions/index.js')
+const { CONDITIONS_DE_FIN } = await import('../../src/campaign/phase.js')
 
 const ROOT = resolve(__dirname, '../..')
 const DOSSIER = join(ROOT, 'src', 'campaign', 'missions')
@@ -173,8 +174,24 @@ function defautsDeForme(m) {
   exige(!!m.fiche && typeof m.fiche.ordre === 'boolean' && Array.isArray(m.fiche.entrees) && m.fiche.entrees.length > 0, 'fiche')
   exige(['opposee', 'laterale'].includes(m.fuite), 'fuite')
   for (const k of ['sorties', 'abris']) exige(Array.isArray(m[k]) && m[k].every(nom), k)
-  for (const k of ['fenetres', 'radio']) exige(Array.isArray(m[k]), k)
-  exige(!!m.fin && fini(m.fin.calmeS) && m.fin.calmeS >= 0, 'fin')
+  // Réaction, fuite, fenêtres, radio et fin (tâche A8 ; en-tête de src/campaign/missions/index.js)
+  const issues = Array.isArray(m.sorties) && Array.isArray(m.abris) ? [...m.sorties, ...m.abris] : []
+  const r = m.reaction
+  // une réaction dans une mission à sorties ou abris, et là seulement (sans elles, alarm.js ne la lit pas)
+  exige(issues.length === 0 ? r === null : !!r && fini(r.stupeurS) && r.stupeurS >= 0 && fini(r.rayonChuteM) && r.rayonChuteM >= 0,
+    'reaction')
+  exige(m.perteDeVueS === null || (fini(m.perteDeVueS) && m.perteDeVueS > 0), 'perteDeVueS')
+  exige(m.fuiteMessages === undefined || (!!m.fuiteMessages && typeof m.fuiteMessages === 'object' &&
+    Object.entries(m.fuiteMessages).every(([k, t]) => issues.includes(k) && nom(t))), 'fuiteMessages')
+  const evenement = e => EVENEMENTS.includes(e)
+  const echeance = e => !!e && Object.keys(e).length > 0 && (Object.keys(e).join() === 'echec' ? nom(e.echec)
+    : Object.keys(e).sort().join() === 'fil,penalite' ? Number.isInteger(e.penalite) && e.penalite > 0 && nom(e.fil)
+      : Object.keys(e).join() === 'evenement' && evenement(e.evenement))
+  exige(Array.isArray(m.fenetres) && m.fenetres.every(f => !!f && nom(f.nom) && evenement(f.depart) && fini(f.dureeS) &&
+    f.dureeS > 0 && echeance(f.echeance)) && new Set(m.fenetres.map(f => f.nom)).size === m.fenetres.length, 'fenetres')
+  exige(Array.isArray(m.radio) && m.radio.every(l => !!l && evenement(l.evenement) && nom(l.texte) &&
+    (l.apresS === undefined || (fini(l.apresS) && l.apresS >= 0)) && (l.fois === undefined || (Number.isInteger(l.fois) && l.fois >= 1))), 'radio')
+  exige(!!m.fin && fini(m.fin.calmeS) && m.fin.calmeS >= 0 && (m.fin.tantQue === undefined || CONDITIONS_DE_FIN.includes(m.fin.tantQue)), 'fin')
   exige(fini(m.zero) && m.zero > 0, 'zero')
   if (m.choixMoral !== undefined) {
     const x = m.choixMoral || {}
@@ -200,6 +217,38 @@ describe('chaque mission a tous ses champs, de la forme attendue', () => {
     expect(defautsDeForme({ ...MISSIONS[2], zoom: { depart: 0.5, min: 0.5, max: 6 } })).toEqual(['zoom'])
     expect(defautsDeForme({ ...MISSIONS[5], casting: { ...MISSIONS[5].casting, cibles: [{ ...MISSIONS[5].casting.cibles[0], routine: 'danse' }] } }))
       .toEqual(['casting.cibles'])
+  })
+
+  // Témoins des règles (tâche A8) : chaque champ hors de sa forme est relevé, seul.
+  const M = MISSIONS[1]
+  it.each([
+    ['une sortie sans réaction', { sorties: ['ruelle'] }, 'reaction'],
+    ['une réaction sans sortie ni abri', { reaction: { stupeurS: 0.4, rayonChuteM: 15 } }, 'reaction'],
+    ['une stupeur négative', { abris: ['igloo'], reaction: { stupeurS: -1, rayonChuteM: 15 } }, 'reaction'],
+    ['une perte de vue nulle', { perteDeVueS: 0 }, 'perteDeVueS'],
+    ['un message pour une issue que la mission n\'a pas', { sorties: ['ruelle'], reaction: { stupeurS: 0, rayonChuteM: 0 }, fuiteMessages: { porte: 'Parti.' } }, 'fuiteMessages'],
+    ['un message vide', { sorties: ['ruelle'], reaction: { stupeurS: 0, rayonChuteM: 0 }, fuiteMessages: { ruelle: '' } }, 'fuiteMessages'],
+    ['une fenêtre au départ inconnu', { fenetres: [{ nom: 'f', depart: 'premierTir', dureeS: 6, echeance: { echec: 'Raté.' } }] }, 'fenetres'],
+    ['une fenêtre à l\'échec sans texte', { fenetres: [{ nom: 'f', depart: 'premier-tir', dureeS: 6, echeance: { echec: '' } }] }, 'fenetres'],
+    ['une fenêtre à la pénalité sans fil', { fenetres: [{ nom: 'f', depart: 'tir', dureeS: 2, echeance: { penalite: 50 } }] }, 'fenetres'],
+    ['une fenêtre à deux échéances', { fenetres: [{ nom: 'f', depart: 'tir', dureeS: 2, echeance: { echec: 'Raté.', evenement: 'alerte' } }] }, 'fenetres'],
+    ['deux fenêtres du même nom', { fenetres: [1, 2].map(() => ({ nom: 'f', depart: 'tir', dureeS: 2, echeance: { evenement: 'alerte' } })) }, 'fenetres'],
+    ['une ligne à l\'événement inconnu', { radio: [{ evenement: 'decroche', texte: 'Il décroche.' }] }, 'radio'],
+    ['une ligne sans texte', { radio: [{ evenement: 'calme', texte: '' }] }, 'radio'],
+    ['une ligne dite zéro fois', { radio: [{ evenement: 'calme', texte: 'Calme.', fois: 0 }] }, 'radio'],
+    ['une fin tant qu\'une condition inconnue', { fin: { calmeS: 12, tantQue: 'pluie' } }, 'fin'],
+  ])('témoin des règles : %s : relevé', (_, champs, attendu) => {
+    expect(defautsDeForme({ ...M, ...champs })).toEqual([attendu])
+  })
+
+  it('la forme complète des règles, telle que les sous-lots la rempliront, est acceptée', () => {
+    expect(defautsDeForme({ ...M, sorties: ['ruelle'], abris: ['igloo'], reaction: { stupeurS: 0.4, rayonChuteM: 15 }, perteDeVueS: 3,
+      fuiteMessages: { ruelle: 'Luc a filé par la ruelle.' },
+      fenetres: [{ nom: 'triple', depart: 'premier-tir', dureeS: 6, echeance: { echec: 'Un officier a gagné un igloo.' } },
+        { nom: 'lente', depart: 'tir', dureeS: 2, echeance: { penalite: 50, fil: 'Trop lent' } },
+        { nom: 'appel', depart: 'depart', dureeS: 90, echeance: { evenement: 'alerte' } }],
+      radio: [{ evenement: 'calme', texte: 'Eux deux, c\'est fait.', apresS: 1, fois: 2 }],
+      fin: { calmeS: 12, tantQue: 'cadenas' } })).toEqual([])
   })
 
   // Témoins du casting (tâche A6) : chaque champ hors de sa forme est relevé, seul.
@@ -429,9 +478,11 @@ describe('valeurs du jeu d\'aujourd\'hui', () => {
     for (const m of MISSIONS) expect(m.zoom, `M${m.numero}`).toEqual({ depart: 4, min: 3, max: 6 })
   })
 
-  it('ni sortie, ni abri, ni fenêtre, ni radio, fin immédiate : le cône de 80° décide de la fuite, la réussite suit le ralenti', () => {
+  // Tâche A8 : les règles sont branchées, chaque mission garde le jeu d'aujourd'hui ; les sous-lots 3b à 3d les remplissent.
+  it('ni sortie, ni abri, ni réaction, ni perte de vue, ni fenêtre, ni radio, fin immédiate : le cône de 80° décide de la fuite, la réussite suit le ralenti', () => {
     for (const m of MISSIONS) {
       expect([m.sorties, m.abris, m.fenetres, m.radio], `M${m.numero}`).toEqual([[], [], [], []])
+      expect([m.reaction, m.perteDeVueS, m.fuiteMessages], `M${m.numero}`).toEqual([null, null, undefined])
       expect(m.fin, `M${m.numero}`).toEqual({ calmeS: 0 })
     }
   })

@@ -138,6 +138,16 @@ export const SON = {
   impactDb: { chair: 0, metal: 0, pierre: 0, bois: 0, sol: 0 },
 }
 
+// ─── Fuite des cibles (src/campaign/escape.js ; spec du lot 3, §2 f) ──
+// Une mission qui déclare des sorties ou des abris (src/campaign/missions/) échoue quand une cible en fuite en atteint
+// un ; sans eux, le cône d'avant le lot 3 décide. La stupeur et la portée de la chute vue sont des données de chaque
+// mission (champ reaction), pas des réglages communs.
+export const FUITE = {
+  rayonArriveeM: 0.5,   // une cible en fuite à moins de cette distance d'une sortie ou d'un abri l'a atteint : échec
+  coneDeg: 80,          // sans sortie ni abri : une cible en fuite hors de ce cône autour du regard de la caméra…
+  coneDistanceM: 12,    // …et à plus de cette distance d'elle a fui (le délai pour se retourner) : échec
+}
+
 // ─── Pluie du port (M3) ────────────────────────────────────────────
 // La pluie de l'enquête (src/prologue/ambience.js), démarrée et coupée avec la nappe de la mission (src/audio.js).
 export const PLUIE = {

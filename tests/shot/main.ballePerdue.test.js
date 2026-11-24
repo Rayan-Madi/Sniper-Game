@@ -7,6 +7,8 @@ import { planShotSounds } from '../../src/shot/soundPlan.js'
 import { missFeed } from '../../src/shot/score.js'
 import { isHit } from '../../src/campaign/rank.js'
 import { STRESS } from '../../src/shot/tuning.js'
+import { MISSIONS } from '../../src/campaign/missions/index.js'
+import { fuiteParSorties } from '../../src/campaign/escape.js'
 
 // Ce qu'un tir manqué fait autour de lui (spec du lot 3, §2 c, précisions de la tâche A4 ; relecture de A4). Une balle
 // perdue (rien rencontré au bout de BALLE.volMaxS, 0,6 s, soit 480 m) l'est là où elle est : ni son ni réaction, même
@@ -67,7 +69,7 @@ function tirManque(objets, source = MAIN_SRC) {
   const journal = { fil: [], alertes: [], sons: [] }
   const s = executer(['resolveBullet', 'roleDe', 'fleeNearby', 'reactNearby', 'checkGuardAlert'], {
     balle, stress: 0, lastImpact: null, statHits: 0, dernierTirMortel: null, alertActive: false,
-    npcs: [civil, garde], guards: [garde],
+    npcs: [civil, garde], guards: [garde], currentMission: MISSIONS[3], fuiteParSorties,
     STRESS, planShotSounds, missFeed, isHit,
     getStats: () => ({ silenced: false }),
     retargetTrail: () => {}, playShotSounds: sons => journal.sons.push(...sons),
