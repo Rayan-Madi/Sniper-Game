@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 // ─── Repère au sol du contre-tueur (PvP) ─────────────────────────────
-// Le lacet yaw est celui de pvp.js : l'avant vaut (sin yaw, 0, cos yaw),
+// Le lacet yaw est celui de contreTueur.js : l'avant vaut (sin yaw, 0, cos yaw),
 // donc yaw = π regarde vers -Z (départ du contre-tueur).
 
 export function groundForward(yaw) {

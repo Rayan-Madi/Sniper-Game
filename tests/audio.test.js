@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 // Audio (spec du lot 1 §4.2, tâche L3). La nappe de mission baisse en 1,2 s quand la mission s'arrête : son gain doit
@@ -163,9 +163,13 @@ describe('sons du PvP', () => {
     expect(master.inputs.size).toBeGreaterThan(3)   // musique, sonnerie, bips de l'alarme
   })
 
-  it('garde sur le source : pvp/index.js n\'instancie aucun AudioContext', () => {
-    const src = readFileSync(resolve(__dirname, '../src/pvp/index.js'), 'utf8')
-    expect(src).not.toMatch(/AudioContext\s*\|\||new\s*\(?\s*(window\.)?(webkit)?AudioContext/)
+  it('garde sur le source : aucun module du PvP (src/pvp/) n\'instancie d\'AudioContext', () => {
+    const dossier = resolve(__dirname, '../src/pvp')
+    const modules = readdirSync(dossier).filter(f => f.endsWith('.js'))
+    expect(modules).toEqual(expect.arrayContaining(['index.js', 'salon.js', 'sniper.js', 'contreTueur.js', 'son.js', 'etat.js']))
+    for (const f of modules) {
+      expect(readFileSync(resolve(dossier, f), 'utf8'), f).not.toMatch(/AudioContext\s*\|\||new\s*\(?\s*(window\.)?(webkit)?AudioContext/)
+    }
   })
 })
 
