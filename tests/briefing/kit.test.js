@@ -416,11 +416,12 @@ describe('kit des cinématiques', () => {
       expect(appelsApres).toBe(0)
     })
 
+    // courbe linéaire : l'avancement reçu est celui du temps, qu'on lit ici directement (les courbes sont gardées plus bas)
     it('gelé entre deux images, dessin reçoit l\'avancement de l\'instant du gel, pas celui de la dernière image', async () => {
       const K = createKit({ root: mountScene(), freeze: 505 })
       const recus = []
       K.run({ beats: [{ min: 3000 }] })
-      K.anim(k => recus.push(k), 1000)   // lancé à t = 0 : images à 16, 32… 496 ms, puis gel à 505 ms
+      K.anim(k => recus.push(k), 1000, { courbe: 'lineaire' })   // lancé à t = 0 : images à 16, 32… 496 ms, puis gel à 505 ms
       await vi.advanceTimersByTimeAsync(600); await flush()
       expect(K.frozen).toBe(true)
       expect(recus.at(-1)).toBeCloseTo(0.505, 3)
@@ -491,6 +492,42 @@ describe('kit des cinématiques', () => {
       expect(recus.at(-1)[0]).toBeLessThanOrEqual(300 + 16)   // fini à 300 ms, à une image près
       const gele = await recusDe({ reducedMotion: true, attenue: 'fondu', freeze: 150 })
       expect(gele.at(-1)[2]).toBeCloseTo(0.5, 3)
+    })
+
+    // Courbes (audit de design du 24 novembre 2026, CIN-1 ; spec §3.3) : jamais à vitesse constante, sauf ce qui mesure
+    // un temps vrai. 'douce' par défaut, k² (3 − 2k) ; 'sortie' pour une arrivée, 1 − (1 − k)³ ; 'lineaire' pour un REC,
+    // une durée d'appel, une tête de lecture, un compte à rebours, un chariot d'impression. Lues au gel, au quart de la
+    // durée (avant elles, l'avancement brut : 0,25).
+    const auQuart = async options => {
+      const K = createKit({ root: mountScene(), freeze: 250 })
+      const recus = []
+      K.run({ beats: [{ min: 3000 }] })
+      K.anim(k => recus.push(k), 1000, options)
+      await vi.advanceTimersByTimeAsync(300); await flush()
+      return recus.at(-1)
+    }
+
+    it('gelé au quart de la durée, dessin reçoit 0,156 par défaut (courbe douce, k² (3 − 2k)), pas l\'avancement brut 0,25', async () => {
+      expect(Math.abs(await auQuart() - 0.156)).toBeLessThanOrEqual(0.02)
+      expect(Math.abs(await auQuart({ courbe: 'douce' }) - 0.156)).toBeLessThanOrEqual(0.02)
+    })
+
+    it('courbe \'sortie\', 1 − (1 − k)³ : 0,578 au quart ; courbe \'lineaire\' : 0,25, l\'avancement du temps', async () => {
+      expect(await auQuart({ courbe: 'sortie' })).toBeCloseTo(1 - 0.75 ** 3, 3)
+      expect(await auQuart({ courbe: 'lineaire' })).toBeCloseTo(0.25, 3)
+    })
+
+    it('une courbe inconnue est une erreur (une faute de frappe ne donne pas un mouvement linéaire en silence)', () => {
+      const K = createKit({ root: mountScene() })
+      const recus = []
+      expect(() => K.anim(k => recus.push(k), 1000, { courbe: 'linéaire' })).toThrow(/courbe/)
+      expect(recus).toEqual([])
+    })
+
+    it('effets atténués, attenue: \'fondu\' : l\'opacité suit la même courbe (0,156 au quart du fondu par défaut)', async () => {
+      const gele = await recusDe({ reducedMotion: true, attenue: 'fondu', freeze: 75 })
+      expect(gele.at(-1)[1]).toBe(1)
+      expect(Math.abs(gele.at(-1)[2] - 0.156)).toBeLessThanOrEqual(0.02)
     })
 
     it('sans attenue, il joue pareil en effets atténués ; hors effets atténués, attenue ne change rien', async () => {

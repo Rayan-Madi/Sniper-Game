@@ -13,7 +13,8 @@
      - animation CSS mise en pause au gel (essai .k-vrai du §3.2, point 6, reproduit ici par une règle de la page) :
        en capture, elle reste à son début (0 %), Chrome ne calculant presque aucune image avant le gel en temps virtuel ;
        l'essai est donc écarté du kit ;
-     - K.anim : avancement exact à l'instant du gel (50 %).
+     - K.anim : avancement exact à l'instant du gel (50 %) ; courbe 'lineaire', celle des deux barres CSS, puisque la
+       barre mesure le temps écoulé.
      Chaque barre affiche l'avancement lu dans son style calculé, 500 ms après le gel. À droite, les matières : un
      tampon et une fiche, sans puis avec .k-encre et .k-papier. */
   .ctl .scan, .ctl .grain, .ctl .vig, .ctl .flick, .ctl .track { display: none; }   /* image propre pour la mesure */
@@ -89,7 +90,7 @@
     loop: false,
     beats: [{ label: 'contrôle', min: 3000, cues: [[0, K => {
       ['b-v1', 'b-pause', 's1', 's2'].forEach(id => K.on(id))
-      K.anim(k => { $('b-anim').firstElementChild.style.transform = `scaleX(${k})` }, 2000)
+      K.anim(k => { $('b-anim').firstElementChild.style.transform = `scaleX(${k})` }, 2000, { courbe: 'lineaire' })
     }]] }],
   })
   // Mesure 500 ms après le gel, par un minuteur natif (ceux du kit s'arrêtent au gel) : avancement de chaque barre lu

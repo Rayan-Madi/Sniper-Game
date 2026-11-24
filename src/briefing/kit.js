@@ -156,18 +156,26 @@ export function createKit({ root, audio = null, freeze = null, reducedMotion = f
   // ── commun : anim ──
   // Outils communs aux deux kits (src/briefing/kit.js et docs/superpowers/maquettes/cinematiques/kit.js), identiques au
   // caractère près entre ces deux marques (garde G7, tests/briefing/kit-commun.test.js) : les retoucher des deux côtés.
-  // K.anim(dessin, duree, { attenue }) : dessin(k, o) reçoit l'avancement k de 0 à 1 en duree ms, au pas des images,
-  // et l'opacité o = 1 ; au gel, l'avancement exact de l'instant du gel, puis plus rien (inscrit parmi les compteurs).
+  // K.anim(dessin, duree, { attenue, courbe }) : dessin(k, o) reçoit l'avancement k de 0 à 1 en duree ms, au pas des
+  // images, et l'opacité o = 1 ; au gel, l'avancement exact de l'instant du gel, puis plus rien (inscrit parmi les
+  // compteurs). k suit la courbe nommée (spec cinématiques v2 §3.3) : 'douce' par défaut, k² (3 − 2k) ; 'sortie' pour
+  // une arrivée, 1 − (1 − k)³ ; 'lineaire' seulement pour ce qui mesure un temps vrai (REC, durée d'appel, tête de
+  // lecture, compte à rebours, chariot d'impression). Une courbe inconnue est une erreur.
   // Effets atténués (k-reduced sur #st) : attenue: 'fin', dessin(1, 1) d'emblée ; attenue: 'fondu', k = 1 d'emblée et
-  // o de 0 à 1 en 300 ms (fondu vers l'état final, au dessin d'appliquer o) ; sans attenue, il joue pareil.
-  K.anim = (dessin, duree, { attenue = null } = {}) => {
+  // o de 0 à 1 en 300 ms sur la même courbe (fondu vers l'état final, au dessin d'appliquer o) ; sans attenue, il joue
+  // pareil.
+  const COURBES = new Map([['douce', t => t * t * (3 - 2 * t)], ['sortie', t => 1 - (1 - t) ** 3], ['lineaire', t => t]])
+  K.anim = (dessin, duree, { attenue = null, courbe = 'douce' } = {}) => {
+    const c = COURBES.get(courbe)
+    if (!c) throw new Error(`K.anim : courbe inconnue « ${courbe} » (douce, sortie ou lineaire)`)
     const reduit = st.classList.contains('k-reduced')
     if (reduit && attenue === 'fin') { dessin(1, 1); return }
     const fondu = reduit && attenue === 'fondu', d = fondu ? 300 : duree, s = performance.now()
+    // t : part du temps écoulée, qui dit quand le dessin est fini ; c(t) : ce que le dessin reçoit
     const show = () => {
-      const k = d > 0 ? Math.min(1, (performance.now() - s) / d) : 1
-      if (fondu) dessin(1, k); else dessin(k, 1)
-      return k
+      const t = d > 0 ? Math.min(1, (performance.now() - s) / d) : 1
+      if (fondu) dessin(1, c(t)); else dessin(c(t), 1)
+      return t
     }
     const f = () => {
       if (K.frozen) return

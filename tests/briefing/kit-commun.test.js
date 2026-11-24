@@ -99,13 +99,24 @@ describe('kit des maquettes, K.anim et K.graine', () => {
     const K = maquette('?freeze=505')
     const recus = []
     K.run({ beats: [{ min: 3000 }] })
-    K.anim(k => recus.push(k), 1000)   // lancé à t = 0 : images à 16, 32… 496 ms, puis gel à 505 ms
+    K.anim(k => recus.push(k), 1000, { courbe: 'lineaire' })   // lancé à t = 0 : images à 16, 32… 496 ms, puis gel à 505 ms
     await vi.advanceTimersByTimeAsync(600); await flush()
     expect(K.frozen).toBe(true)
     expect(recus.at(-1)).toBeCloseTo(0.505, 3)
     const n = recus.length
     await vi.advanceTimersByTimeAsync(2000); await flush()
     expect(recus).toHaveLength(n)
+  })
+
+  // Courbe par défaut (CIN-1 de l'audit de design ; détail côté jeu dans tests/briefing/kit.test.js) : douce, k² (3 − 2k).
+  it('gelé au quart de la durée (?freeze=250), dessin reçoit 0,156 par défaut (courbe douce), pas l\'avancement brut 0,25', async () => {
+    const K = maquette('?freeze=250')
+    const recus = []
+    K.run({ beats: [{ min: 3000 }] })
+    K.anim(k => recus.push(k), 1000)
+    await vi.advanceTimersByTimeAsync(300); await flush()
+    expect(K.frozen).toBe(true)
+    expect(Math.abs(recus.at(-1) - 0.156)).toBeLessThanOrEqual(0.02)
   })
 
   it('« rejouer » arrête le dessin du passage précédent ; le nouveau va jusqu\'au bout', async () => {
