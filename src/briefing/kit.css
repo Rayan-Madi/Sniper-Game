@@ -51,7 +51,7 @@
 .st .wave { display: flex; align-items: center; gap: .45cqw; height: 11cqw; margin: 2.2cqw 0; }
 .st .wave i { flex: 1; background: #e04848; height: 6%; border-radius: 1px; opacity: .85; transition: height .09s; }
 .st .trans { font-size: 2.6cqw; min-height: 3.4cqw; color: #f1f4ea; letter-spacing: .03em; }
-.st .who { font-size: 1.6cqw; color: rgba(215,220,207,.5); margin-top: 1.2cqw; letter-spacing: .15em; }
+.st .who { font-size: 1.6cqw; color: rgba(215,220,207,.62); margin-top: 1.2cqw; letter-spacing: .15em; }
 
 /* ── dossier ── */
 .st .dossier { position: absolute; top: 7.1cqw; left: 20cqw; width: 60cqw; padding: 1.8cqw 2cqw; border: 1px solid rgba(215,220,207,.28);
@@ -81,7 +81,7 @@
 .st .idtag.on { opacity: 1; }
 .st .fields { flex: 1; padding-top: .4cqw; }
 .st .fl { font-size: 1.6cqw; line-height: 2.05; white-space: nowrap; min-height: 3.3cqw; }
-.st .fl .k { color: rgba(215,220,207,.5); }
+.st .fl .k { color: rgba(215,220,207,.62); }
 .st .redact { display: inline-block; height: 1.6cqw; width: 0; background: #d7dccf; vertical-align: middle; transition: width .45s cubic-bezier(.7,0,.2,1); }
 .st .redact.on { width: 14cqw; }
 .st .stamp { position: absolute; font-size: 3.2cqw; font-weight: bold; letter-spacing: .18em; color: #e04848; text-shadow: none;
@@ -191,5 +191,5 @@
 #briefing-root[hidden] { display: none; }
 #briefing-root .st { width: min(100vw, calc(100vh * 16 / 9)); border-radius: 0; }
 #briefing-root .kctrl { display: none; }
-#briefing-root .k-skip { position: absolute; right: 2.2vw; bottom: 2.2vh; font: 11px 'Courier New', monospace; letter-spacing: .14em; color: rgba(255,255,255,.35); z-index: 31; pointer-events: none; }
+#briefing-root .k-skip { position: absolute; right: 2.2vw; bottom: 2.2vh; font: 11px 'Courier New', monospace; letter-spacing: .14em; color: rgba(255,255,255,.6); z-index: 31; pointer-events: none; }
 #briefing-root.k-leaving > * { opacity: 0; transition: opacity .4s; }   /* le fond noir du conteneur reste : fondu au noir, pas vers l'image du jeu */
