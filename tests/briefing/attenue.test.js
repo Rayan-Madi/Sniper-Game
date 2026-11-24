@@ -16,6 +16,8 @@ import { SCENES, KITS, SCRIPTS_DU_KIT, lireScene, lireModule, lireCss, animation
 //   doit la jouer (témoin : la garde voit ce qu'elle garde) ; avec, plus jamais. Une famille par effet (§3.7). Plus
 //   l'onde de l'écoute, que le script du kit mène (K.wave).
 // - Flashs : plafonnés à 0,3 d'opacité en effets atténués (spec du lot 1 §4.5 et §3.7 ici).
+// - Frappes (k-frappe du kit, spec §3.3 ; relecture de C5 bis) : jouées une fois, elles ont pourtant leur jumelle, qui
+//   pose k-frappe-attenue (un fondu, sans la chute de l'échelle 2,4) ; une règle atténuée ne pose jamais k-frappe.
 
 // Liste blanche : animations répétées qui jouent en effets atténués (règle sans jumelle, ou règle .k-reduced qui en
 // pose une), chacune justifiée. N'y ajouter une entrée que par une décision écrite dans la spec (§3.1, G4).
@@ -86,15 +88,38 @@ function analyser(source, exemptions = [...LISTE_BLANCHE, ...EN_ATTENTE]) {
       repetees.push(e)
     }
   }
-  return { regles, keyframes, repetees, attenueesRepetees, attenuees }
+  // Frappes des tampons neufs (k-frappe du kit, spec §3.3) : jouées une fois, mais leur chute de l'échelle 2,4 est un
+  // mouvement. Chaque règle qui en pose une a sa jumelle, qui pose k-frappe-attenue (un fondu seul) et pas k-frappe ;
+  // une règle atténuée ne pose jamais k-frappe. Pas de liste blanche ici.
+  const frappes = []
+  for (const r of regles) {
+    if (!(animationsDe(r.declarations) || []).some(x => x.nom === 'k-frappe')) continue
+    for (const selecteur of r.selecteurs) {
+      const e = { source: source.cle, nom: source.nom, selecteur, animation: 'k-frappe', frappe: true, ligne: r.ligne }
+      const j = cleDeJumelle(selecteur)
+      if (selecteur.includes('k-reduced')) e.attenuee = true
+      else if (!j.premiers.includes('.' + source.classe)) e.erreur = `son premier composé ne porte pas .${source.classe} (k-reduced, posée sur #st, ne peut s'y ajouter)`
+      else {
+        const bonne = (attenuees.get(j.cle) || []).find(c => {
+          const noms = (animationsDe(c.regle.declarations) || []).map(x => x.nom)
+          return noms.includes('k-frappe-attenue') && !noms.includes('k-frappe')
+        })
+        e.jumelle = bonne ? bonne.selecteur : null
+      }
+      frappes.push(e)
+    }
+  }
+  return { regles, keyframes, repetees, attenueesRepetees, attenuees, frappes }
 }
 const enTours = e => (e.tours === Infinity ? 'infinite' : `${e.tours} tours`)
 const manquantes = analyse => [
   ...analyse.repetees.filter(e => !e.exemption && (e.erreur || !e.jumelle)).map(e => [e, e.erreur ||
     (e.jumelleMuette ? 'sa règle atténuée ne met ni animation: none ni une autre animation' : 'aucune règle jumelle .k-reduced')]),
   ...analyse.attenueesRepetees.filter(e => !e.exemption).map(e => [e, 'animation répétée en effets atténués, hors liste blanche']),
+  ...analyse.frappes.filter(e => e.erreur || e.attenuee || !e.jumelle).map(e => [e, e.erreur ||
+    (e.attenuee ? 'k-frappe en effets atténués (sa jumelle est k-frappe-attenue)' : 'aucune jumelle .k-reduced qui pose k-frappe-attenue (spec §3.3)')]),
 ].sort(([a], [b]) => a.ligne - b.ligne)
-  .map(([e, raison]) => `${e.nom}, ligne ${e.ligne} : ${e.selecteur} { animation: ${e.animation} … ${enTours(e)} } : ${raison}`)
+  .map(([e, raison]) => `${e.nom}, ligne ${e.ligne} : ${e.selecteur} { animation: ${e.animation}${e.frappe ? '' : ` … ${enTours(e)}`} } : ${raison}`)
 
 const SOURCES = [
   ...KITS.map(k => ({ nom: k.nom, cle: 'kit', classe: 'st', css: k.css })),
@@ -156,6 +181,23 @@ describe('outils de la garde (témoins sur des feuilles écrites ici)', () => {
     expect(manquantes(analyser(feuille(css), [...blanche, { source: 'm9', selecteur: '.m9.k-reduced .d', animation: 'm9-z' }]))).toEqual([])
   })
 
+  it('une frappe (k-frappe, jouée une fois) a sa jumelle qui pose k-frappe-attenue ; k-frappe ne se joue pas en effets atténués', () => {
+    const css = '.m9 .t1.on { --k-rot: -4deg; animation: k-frappe .3s backwards }\n' +
+      '.m9 .t2.on { animation: k-frappe .3s .2s backwards }\n.m9.k-reduced .t2.on { animation: none }\n' +
+      '.m9 .t3.on { animation-name: k-frappe; animation-duration: .3s }\n.k-reduced.m9 .t3.on { animation: k-frappe-attenue .15s backwards }\n' +
+      '.m9.k-reduced .t4.on { animation: k-frappe .3s backwards }\n' +
+      '.m9 .t5 { animation: k-frappe .3s backwards }\n.m9.k-reduced .t5 { animation: k-frappe-attenue .15s backwards, k-frappe .3s }\n' +
+      '.shot .t6 { animation: k-frappe .3s backwards }'
+    expect(manquantes(analyser(feuille(css)))).toEqual([
+      'essai, ligne 1 : .m9 .t1.on { animation: k-frappe } : aucune jumelle .k-reduced qui pose k-frappe-attenue (spec §3.3)',
+      'essai, ligne 2 : .m9 .t2.on { animation: k-frappe } : aucune jumelle .k-reduced qui pose k-frappe-attenue (spec §3.3)',
+      'essai, ligne 6 : .m9.k-reduced .t4.on { animation: k-frappe } : k-frappe en effets atténués (sa jumelle est k-frappe-attenue)',
+      'essai, ligne 7 : .m9 .t5 { animation: k-frappe } : aucune jumelle .k-reduced qui pose k-frappe-attenue (spec §3.3)',
+      'essai, ligne 8 : .m9.k-reduced .t5 { animation: k-frappe } : k-frappe en effets atténués (sa jumelle est k-frappe-attenue)',
+      'essai, ligne 9 : .shot .t6 { animation: k-frappe } : son premier composé ne porte pas .m9 (k-reduced, posée sur #st, ne peut s\'y ajouter)',
+    ])
+  })
+
   it('animations hors des feuilles : attribut style du HTML, script (propriété de style, clé d\'objet, setProperty, chaîne CSS)', () => {
     expect(animationsDuHtml('<div style="opacity:.5; --i: 2"></div><svg><text id="t" style="fill:red;animation: m9-x 1s infinite">x</text></svg>' +
       '<p style="-webkit-animation-name: m9-y">y</p>')).toEqual([
@@ -177,7 +219,7 @@ describe('outils de la garde (témoins sur des feuilles écrites ici)', () => {
 })
 
 describe.each(SOURCES.map(s => [s.nom, s]))('G4 : %s', (nom, source) => {
-  it('toute animation répétée a sa règle jumelle atténuée, et rien ne se répète en effets atténués (hors liste blanche et attente)', () => {
+  it('toute animation répétée a sa règle jumelle atténuée, et rien ne se répète en effets atténués (hors liste blanche et attente) ; toute frappe (k-frappe) a sa jumelle k-frappe-attenue', () => {
     expect(manquantes(analyser(source))).toEqual([])
   })
 })
