@@ -1,4 +1,4 @@
-import { camera, renderer, scene } from './scene.js'
+import { camera, renderer, scene } from '../scene.js'
 
 // ─── Cinématique d'intro du mode PvP ─────────────────────────────────
 // Contrairement aux cinématiques du mode histoire (cinematic3d.js), qui

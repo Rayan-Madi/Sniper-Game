@@ -10,7 +10,7 @@ import * as THREE from 'three'
 // manche PvP reviennent au profil hors mission : plans de 0,1 à 200 m, soleil en (20, 40, 10) visé vers l'origine,
 // cadre d'ombre de ±60 m, et la brume du menu (celle de l'arène pour le PvP). La fin de l'enquête est gardée sur la
 // vraie enquête par tests/prologue/stop.test.js, et son câblage dans main.js par tests/gfx/main.cameraProfile.test.js.
-// Vrais décors (src/maps/menu.js, src/pvpMap.js), vraie manche PvP (pvp.js, net.js sur un faux WebSocket) ; la caméra,
+// Vrais décors (src/maps/menu.js, src/pvp/pvpMap.js), vraie manche PvP (src/pvp/, net.js sur un faux WebSocket) ; la caméra,
 // la scène et le soleil sont ceux de src/scene.js, créés comme initScene les crée. setLighting n'y fait rien : la remise à
 // zéro doit venir du décor lui-même (le soleil par défaut de setLighting est gardé par tests/gfx/scene.lighting.test.js).
 //
@@ -36,7 +36,7 @@ vi.mock('../../src/scene.js', async () => {
   }
 })
 const intro = vi.hoisted(() => ({ active: false, onDone: null }))
-vi.mock('../../src/pvpIntro.js', () => ({
+vi.mock('../../src/pvp/pvpIntro.js', () => ({
   playPvpIntro(role, arena, onTick, onDone) { intro.active = true; intro.onDone = onDone },
   isPvpIntroActive: () => intro.active,
   stopPvpIntro() { intro.active = false; intro.onDone = null },
@@ -78,7 +78,7 @@ beforeAll(async () => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   ;({ scene, camera, sun } = await import('../../src/scene.js'))
   ;({ buildMenuDecor } = await import('../../src/maps/index.js'))
-  pvp = await import('../../src/pvp.js')
+  pvp = await import('../../src/pvp/index.js')
   pvp.initMultiplayerMenu()
 })
 

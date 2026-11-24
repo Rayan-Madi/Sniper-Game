@@ -18,7 +18,7 @@ vi.mock('../src/scene.js', async () => {
   }
 })
 const intro = vi.hoisted(() => ({ onDone: null }))
-vi.mock('../src/pvpIntro.js', () => ({
+vi.mock('../src/pvp/pvpIntro.js', () => ({
   playPvpIntro(role, arena, onTick, onDone) { intro.onDone = onDone },
   isPvpIntroActive: () => !!intro.onDone,
   stopPvpIntro() { intro.onDone = null },
@@ -135,7 +135,7 @@ describe('sons du PvP', () => {
     vi.stubGlobal('cancelAnimationFrame', () => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const audio = await import('../src/audio.js')
-    const pvp = await import('../src/pvp.js')
+    const pvp = await import('../src/pvp/index.js')
     pvp.initMultiplayerMenu()
     audio.audioContext()   // le contexte du jeu (sons du menu, cinématiques)
     $('btn-mp-create').onclick()
@@ -163,8 +163,8 @@ describe('sons du PvP', () => {
     expect(master.inputs.size).toBeGreaterThan(3)   // musique, sonnerie, bips de l'alarme
   })
 
-  it('garde sur le source : pvp.js n\'instancie aucun AudioContext', () => {
-    const src = readFileSync(resolve(__dirname, '../src/pvp.js'), 'utf8')
+  it('garde sur le source : pvp/index.js n\'instancie aucun AudioContext', () => {
+    const src = readFileSync(resolve(__dirname, '../src/pvp/index.js'), 'utf8')
     expect(src).not.toMatch(/AudioContext\s*\|\||new\s*\(?\s*(window\.)?(webkit)?AudioContext/)
   })
 })

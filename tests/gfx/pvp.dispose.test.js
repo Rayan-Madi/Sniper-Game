@@ -19,7 +19,7 @@ vi.mock('../../src/scene.js', async () => {
   }
 })
 const intro = vi.hoisted(() => ({ active: false, onDone: null }))
-vi.mock('../../src/pvpIntro.js', () => ({
+vi.mock('../../src/pvp/pvpIntro.js', () => ({
   playPvpIntro(role, arena, onTick, onDone) { intro.active = true; intro.onDone = onDone },
   isPvpIntroActive: () => intro.active,
   stopPvpIntro() { intro.active = false; intro.onDone = null },
@@ -63,7 +63,7 @@ const $ = (id) => document.getElementById(id)
 const HTML = readFileSync(resolve(__dirname, '../../index.html'), 'utf8')
 
 // Modules neufs à chaque test (cache des modèles, ressources déjà libérées par dispose.js, état de la manche) ; le
-// DOM du jeu est remis à neuf, les écouteurs de pvp.js réenregistrés.
+// DOM du jeu est remis à neuf, les écouteurs du PvP (src/pvp/index.js) réenregistrés.
 let pvp, scene, buildMenuDecor
 beforeEach(async () => {
   vi.resetModules()
@@ -79,7 +79,7 @@ beforeEach(async () => {
   ;({ scene } = await import('../../src/scene.js'))
   ;({ buildMenuDecor } = await import('../../src/maps/index.js'))
   await (await import('../../src/characters.js')).preloadCharacters()
-  pvp = await import('../../src/pvp.js')
+  pvp = await import('../../src/pvp/index.js')
   pvp.initMultiplayerMenu()
   scene.clear()
   buildMenuDecor()   // le décor du menu (src/maps/menu.js), comme au démarrage

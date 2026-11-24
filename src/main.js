@@ -9,7 +9,7 @@ import { playShot, playSilencedShot, playShotSounds, playAlert, playGameOver, pl
 import { spawnTrail, retargetTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
 import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources, loadedModel } from './characters.js'
-import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
+import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp/index.js'
 import { playCinematic } from './briefing/index.js'
 import { aimAngles, stepStress, clampPitch, bornesDuZoom, zoomApresCran } from './aim.js'
 import { STRESS, APNEE, SILLAGE, BALLE, TELEMETRE, FUITE, OCCLUSION } from './shot/tuning.js'

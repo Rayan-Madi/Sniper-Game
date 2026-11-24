@@ -6,7 +6,7 @@ import { analyse, callsIn, topLevelCalls, readSource } from './gfx/mainSource.js
 // Le menu a son décor à lui (spec du lot 3, §2 a, et §2 3b, choix « Menu », approche B ; plan du lot 3a, tâche A1) :
 // la rue de M1 d'avant le lot 3, figée dans src/maps/menu.js (buildMenuDecor), se monte derrière le menu au démarrage
 // et au retour d'une mission (main.js : appel de premier niveau, showMenu), et au retour du PvP (QUITTER, quitToMenu de
-// pvp.js). La carte de M1 (MAP_BUILDERS[0], src/maps/m1-rue.js) ne sert plus qu'à M1 : le sous-lot 3b peut la réécrire
+// src/pvp/index.js). La carte de M1 (MAP_BUILDERS[0], src/maps/m1-rue.js) ne sert plus qu'à M1 : le sous-lot 3b peut la réécrire
 // sans toucher au menu, qui garde ses références du memtest du lot 1 et les immeubles autour desquels tourne sa caméra.
 // À l'écran, rien ne distingue encore les deux décors (même rue, captures identiques à l'octet) : cette garde lit donc
 // le source du jeu (src/), comme celles de tests/gfx/main.*.test.js. Elle voit les chemins écrits en clair : les trois
@@ -20,8 +20,7 @@ import { analyse, callsIn, topLevelCalls, readSource } from './gfx/mainSource.js
 // index.js) ont chacun leur témoin plus bas, vu rouge sur la garde d'avant la relecture de A1.
 
 const ROOT = resolve(__dirname, '..')
-const MAPS = './maps/index.js'
-const MAIN = 'src/main.js', PVP = 'src/pvp.js'
+const MAIN = 'src/main.js', PVP = 'src/pvp/index.js'
 const INDEX = 'src/maps/index.js', MENU = 'src/maps/menu.js'
 
 // Le code du jeu (src/), avec son chemin depuis la racine.
@@ -40,7 +39,12 @@ function sourcesDuJeu() {
 const SOURCES = sourcesDuJeu()
 
 const appelle = (a, fn, callee) => (callsIn(a, fn) || []).some(c => c.callee === callee)
-const importe = (a, nom) => a.imports.get(nom)?.from === MAPS
+// nom importé de src/maps/index.js, par un chemin relatif écrit depuis le fichier depuis (./maps/index.js dans main.js,
+// ../maps/index.js dans src/pvp/index.js).
+const importe = (a, depuis, nom) => {
+  const spec = a.imports.get(nom)?.from
+  return typeof spec === 'string' && spec.startsWith('.') && posix.join(posix.dirname(depuis), spec) === INDEX
+}
 
 // Nœuds de l'arbre qui vérifient garder, sans descendre dans ceux que saute sauter.
 function noeuds(racine, garder, sauter = () => false) {
@@ -66,17 +70,17 @@ const versM1 = (depuis, spec) => spec.startsWith('.') &&
 function defauts(sources) {
   const out = []
   const main = analyse(sources.get(MAIN)), pvp = analyse(sources.get(PVP))
-  if (!importe(main, 'buildMenuDecor')) out.push(`main.js : buildMenuDecor n'est pas importé de ${MAPS}`)
+  if (!importe(main, MAIN, 'buildMenuDecor')) out.push(`main.js : buildMenuDecor n'est pas importé de ${INDEX}`)
   if (!topLevelCalls(main).some(c => c.callee === 'buildMenuDecor')) {
     out.push("main.js : le décor du menu n'est pas monté au démarrage")
   }
   if (!appelle(main, 'showMenu', 'buildMenuDecor')) out.push("main.js : showMenu n'appelle pas buildMenuDecor()")
-  if (!importe(pvp, 'buildMenuDecor')) out.push(`pvp.js : buildMenuDecor n'est pas importé de ${MAPS}`)
-  if (!appelle(pvp, 'quitToMenu', 'buildMenuDecor')) out.push("pvp.js : quitToMenu n'appelle pas buildMenuDecor()")
+  if (!importe(pvp, PVP, 'buildMenuDecor')) out.push(`pvp/index.js : buildMenuDecor n'est pas importé de ${INDEX}`)
+  if (!appelle(pvp, 'quitToMenu', 'buildMenuDecor')) out.push("pvp/index.js : quitToMenu n'appelle pas buildMenuDecor()")
   // La carte de M1 ne sert qu'à M1.
   // - Une carte de mission ne se monte que par son numéro de mission (mountLevel, sonde de lisibilité) : un indice
   //   écrit en dur, appelé ou gardé de côté, c'est le menu qui emprunte la carte de M1.
-  // - Seul src/maps/index.js importe m1-rue.js (import, ré-export, import dynamique) : ni main.js, ni pvp.js, ni un
+  // - Seul src/maps/index.js importe m1-rue.js (import, ré-export, import dynamique) : ni main.js, ni le PvP, ni un
   //   menu.js qui lui déléguerait son décor.
   for (const [path, text] of sources) {
     if (!text.includes('MAP_BUILDERS') && !text.includes('m1-rue')) continue
@@ -103,12 +107,12 @@ function defauts(sources) {
 }
 
 describe('le menu a son décor à lui', () => {
-  it('main.js et pvp.js montent le décor du menu (src/maps/menu.js), la carte de M1 ne sert qu\'à M1', () => {
+  it('main.js et pvp/index.js montent le décor du menu (src/maps/menu.js), la carte de M1 ne sert qu\'à M1', () => {
     expect(defauts(SOURCES)).toEqual([])
   })
 })
 
-// Témoins : remettre la carte de M1 derrière le menu à un seul des trois endroits, ou remplacer l'import de pvp.js par
+// Témoins : remettre la carte de M1 derrière le menu à un seul des trois endroits, ou remplacer l'import de pvp/index.js par
 // une copie locale, rougit la garde. Une mutation qui ne changerait rien au source est refusée (le témoin ne prouverait
 // rien).
 describe('témoins de la garde', () => {
@@ -144,17 +148,17 @@ describe('témoins de la garde', () => {
     const c = appelDans(PVP, 'quitToMenu')
     expect(c, "quitToMenu n'appelle déjà plus buildMenuDecor() : témoin impossible").toBeDefined()
     const d = defauts(carteDeM1(PVP, c))
-    expect(d).toContain("pvp.js : quitToMenu n'appelle pas buildMenuDecor()")
+    expect(d).toContain("pvp/index.js : quitToMenu n'appelle pas buildMenuDecor()")
     expect(d).toContain(`${PVP} : le menu emprunte la carte de M1 (MAP_BUILDERS[0])`)
   })
 
-  it('pvp.js avec une copie locale de buildMenuDecor : rouge', () => {
+  it('pvp/index.js avec une copie locale de buildMenuDecor : rouge', () => {
     const s = analyse(SOURCES.get(PVP)).imports.get('buildMenuDecor')?.node
-    expect(s, "pvp.js n'importe déjà plus buildMenuDecor : témoin impossible").toBeDefined()
+    expect(s, "pvp/index.js n'importe déjà plus buildMenuDecor : témoin impossible").toBeDefined()
     const src = SOURCES.get(PVP)
     const next = src.slice(0, s.start) + 'buildMenuDecor as buildMenuDecorImporte' + src.slice(s.end) +
       '\nfunction buildMenuDecor() {}\n'
-    expect(defauts(avec(PVP, next))).toContain(`pvp.js : buildMenuDecor n'est pas importé de ${MAPS}`)
+    expect(defauts(avec(PVP, next))).toContain(`pvp/index.js : buildMenuDecor n'est pas importé de ${INDEX}`)
   })
 
   // La carte de M1 remontée derrière le menu par un autre chemin que l'appel MAP_BUILDERS[0]() (relecture de A1).
@@ -174,8 +178,8 @@ describe('témoins de la garde', () => {
   })
 
   it.each([
-    ['import sans extension dans pvp.js', PVP, './maps/m1-rue',
-      () => "import { buildMapStreet } from './maps/m1-rue'\n" + puisLaRue(PVP, 'quitToMenu', 'buildMapStreet()')],
+    ['import sans extension dans pvp/index.js', PVP, '../maps/m1-rue',
+      () => "import { buildMapStreet } from '../maps/m1-rue'\n" + puisLaRue(PVP, 'quitToMenu', 'buildMapStreet()')],
     ['import dynamique dans showMenu', MAIN, './maps/m1-rue.js',
       () => puisLaRue(MAIN, 'showMenu', "import('./maps/m1-rue.js').then(m => m.buildMapStreet())")],
     ['menu.js qui ré-exporte la carte de M1', MENU, './m1-rue.js',

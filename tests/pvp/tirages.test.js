@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 // Ordre des tirages du PvP, à graine fixe (spec du lot 3, §2 d et tests 3a ; plan du lot 3a, tâche A6). Les deux
-// machines d'une manche tirent la foule et l'avatar du contre-tueur avec la même graine (pvp.js, withSeed) : la même
+// machines d'une manche tirent la foule et l'avatar du contre-tueur avec la même graine (src/pvp/index.js, withSeed) : la même
 // suite de Math.random doit donner chez chacune les mêmes modèles, les mêmes tailles, les mêmes teintes et les mêmes
 // places. Le casting des missions (spawnCharacter et NPC avec options, tâche A6) ne doit donc rien changer quand aucune
 // option n'est passée, ni tirage de plus, ni objet three de plus (three tire au hasard l'identifiant de chaque objet,
@@ -31,7 +31,7 @@ vi.mock('../../src/scene.js', async () => {
     setLighting() {},
   }
 })
-vi.mock('../../src/pvpIntro.js', () => ({
+vi.mock('../../src/pvp/pvpIntro.js', () => ({
   playPvpIntro() {},
   isPvpIntroActive: () => false,
   stopPvpIntro() {},
@@ -65,7 +65,7 @@ beforeAll(async () => {
   ;({ scene } = await import('../../src/scene.js'))
   const characters = await import('../../src/characters.js')
   await characters.preloadCharacters()
-  pvp = await import('../../src/pvp.js')
+  pvp = await import('../../src/pvp/index.js')
 })
 
 const fichier = url => url.split('/').pop().replace(/\.glb$/, '')
@@ -120,7 +120,7 @@ describe('PvP : la foule et l\'avatar tirés à graine fixe, comme avant le cast
 
   it('témoin : un tirage de plus pendant la foule change l\'empreinte', () => {
     const ref = JSON.parse(readFileSync(REFERENCE, 'utf8'))
-    // withSeed (pvp.js) pose un générateur à graine sur Math.random, puis remet l'ancien : l'arène d'abord (1re pose,
+    // withSeed (src/pvp/index.js) pose un générateur à graine sur Math.random, puis remet l'ancien : l'arène d'abord (1re pose,
     // puis le retour), la foule ensuite (3e pose), l'avatar enfin. Pendant la foule, son 40e tirage en consomme deux.
     const desc = Object.getOwnPropertyDescriptor(Math, 'random')
     const vrai = Math.random

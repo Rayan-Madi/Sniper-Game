@@ -1,8 +1,8 @@
 import * as THREE from 'three'
-import { scene, camera, sun, setLighting } from './scene.js'
-import { clearMap } from './maps/index.js'
-import { disposeObject } from './gfx/dispose.js'
-import { PROFIL_HORS_MISSION, applyCameraProfile } from './gfx/cameraProfile.js'
+import { scene, camera, sun, setLighting } from '../scene.js'
+import { clearMap } from '../maps/index.js'
+import { disposeObject } from '../gfx/dispose.js'
+import { PROFIL_HORS_MISSION, applyCameraProfile } from '../gfx/cameraProfile.js'
 
 // ─── Arène PvP dédiée : grande fête d'appartement nocturne ───────────
 // Auto-contenue (ne partage pas le tableau d'objets de src/maps/) pour ne
