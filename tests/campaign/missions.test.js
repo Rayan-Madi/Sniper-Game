@@ -191,7 +191,9 @@ function defautsDeForme(m) {
     f.dureeS > 0 && echeance(f.echeance)) && new Set(m.fenetres.map(f => f.nom)).size === m.fenetres.length, 'fenetres')
   exige(Array.isArray(m.radio) && m.radio.every(l => !!l && evenement(l.evenement) && nom(l.texte) &&
     (l.apresS === undefined || (fini(l.apresS) && l.apresS >= 0)) && (l.fois === undefined || (Number.isInteger(l.fois) && l.fois >= 1))), 'radio')
-  exige(!!m.fin && fini(m.fin.calmeS) && m.fin.calmeS >= 0 && (m.fin.tantQue === undefined || CONDITIONS_DE_FIN.includes(m.fin.tantQue)), 'fin')
+  // tantQue : une condition de CONDITIONS_DE_FIN que la mission peut tenir (le cadenas : son choix moral)
+  exige(!!m.fin && fini(m.fin.calmeS) && m.fin.calmeS >= 0 && (m.fin.tantQue === undefined ||
+    (CONDITIONS_DE_FIN.includes(m.fin.tantQue) && (m.fin.tantQue !== 'cadenas' || m.choixMoral !== undefined))), 'fin')
   exige(fini(m.zero) && m.zero > 0, 'zero')
   if (m.choixMoral !== undefined) {
     const x = m.choixMoral || {}
@@ -237,12 +239,15 @@ describe('chaque mission a tous ses champs, de la forme attendue', () => {
     ['une ligne sans texte', { radio: [{ evenement: 'calme', texte: '' }] }, 'radio'],
     ['une ligne dite zéro fois', { radio: [{ evenement: 'calme', texte: 'Calme.', fois: 0 }] }, 'radio'],
     ['une fin tant qu\'une condition inconnue', { fin: { calmeS: 12, tantQue: 'pluie' } }, 'fin'],
+    // sans choix moral, aucun cadenas (moralLockMesh reste null) : le calme finirait dès sa première image (relecture de A8)
+    ['une fin tant que le cadenas tient, sans choix moral', { fin: { calmeS: 12, tantQue: 'cadenas' } }, 'fin'],
   ])('témoin des règles : %s : relevé', (_, champs, attendu) => {
     expect(defautsDeForme({ ...M, ...champs })).toEqual([attendu])
   })
 
+  // Sur M3, qui a le cadenas que tantQue nomme
   it('la forme complète des règles, telle que les sous-lots la rempliront, est acceptée', () => {
-    expect(defautsDeForme({ ...M, sorties: ['ruelle'], abris: ['igloo'], reaction: { stupeurS: 0.4, rayonChuteM: 15 }, perteDeVueS: 3,
+    expect(defautsDeForme({ ...MISSIONS[2], sorties: ['ruelle'], abris: ['igloo'], reaction: { stupeurS: 0.4, rayonChuteM: 15 }, perteDeVueS: 3,
       fuiteMessages: { ruelle: 'Luc a filé par la ruelle.' },
       fenetres: [{ nom: 'triple', depart: 'premier-tir', dureeS: 6, echeance: { echec: 'Un officier a gagné un igloo.' } },
         { nom: 'lente', depart: 'tir', dureeS: 2, echeance: { penalite: 50, fil: 'Trop lent' } },

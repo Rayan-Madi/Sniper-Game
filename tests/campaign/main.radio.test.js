@@ -55,6 +55,33 @@ describe('la radio : un événement, les lignes d\'Anton', () => {
   })
 })
 
+// La pause, menée comme dans le jeu (relecture de A8) : pauseGame et resumeGame de main.js exécutés tels quels, la boucle
+// arrêtée entre les deux (ni règles, ni horloge de la mission). Témoin : radio.js de la tâche A8 (f60fb99), où le canal
+// ne se libérait que par un avancer pendant la suspension, que la boucle ne fait jamais : la suivante attendait la fin
+// prévue de la ligne coupée (vu rouge).
+describe('la pause : Anton se tait, la ligne en cours coupée ; à la reprise, le canal est libre', () => {
+  const lignes = h => [...h.killFeed.querySelectorAll('.kill-entry.radio')].map(e => e.lastChild.textContent)
+
+  it('pauseGame coupe la ligne et ses bips ; resumeGame : la suivante dès la première image', () => {
+    const longue = 'Une ligne assez longue pour durer bien plus que la pause.'
+    const { h, tir, mener } = jeu({ radio: [{ evenement: 'tir', texte: longue }, { evenement: 'tir', texte: 'La suivante.' }] })
+    tir(); mener(0.5)
+    expect(lignes(h)).toEqual([longue])
+    h.s.fns.pauseGame()
+    expect(h.s.etat().gamePhase).toBe('paused')
+    expect(h.journal.radioCoupee).toBe(1)
+    const t = h.s.etat().missionClock
+    mener(5)
+    expect(h.s.etat().missionClock).toBe(t)
+    expect(lignes(h)).toEqual([longue])
+    h.s.fns.resumeGame()
+    expect(h.s.etat().missionClock).toBeLessThan(dureeDeLigne(longue))
+    mener(1 / 60)
+    expect(lignes(h)).toEqual([longue, 'La suivante.'])
+    expect(h.journal.radio).toEqual([dureeDeLigne(longue), dureeDeLigne('La suivante.')])
+  })
+})
+
 describe('les fenêtres de tir : ouvertes au premier tir, leur échéance', () => {
   const fenetre = echeance => [{ nom: 'f', depart: 'premier-tir', dureeS: 2, echeance }]
 

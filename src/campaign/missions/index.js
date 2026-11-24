@@ -88,7 +88,7 @@
 //                secondes de calme après la mort de la dernière cible, en jeu, avant le ralenti et la réussite ; 0 : la fin
 //                d'aujourd'hui, le ralenti tout de suite. Avec un calme, les corps restent dès la première mort.
 //                tantQue, facultatif : une condition de CONDITIONS_DE_FIN (phase.js) ; le calme finit dès qu'elle tombe
-//                ('cadenas' : le cadenas du choix moral tiré)
+//                ('cadenas' : le cadenas du choix moral tiré ; une mission sans choixMoral ne peut pas la nommer)
 //   choixMoral   (M3 seulement) { cadenas, indice { apresS, texte }, points, victimes } : l'ancre du cadenas, l'indice
 //                que le fil donne apresS secondes après le départ, les points et les victimes libérées par un tir sur
 //                le cadenas

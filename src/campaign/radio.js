@@ -6,8 +6,9 @@
 // lignes qui l'attendent, apresS secondes plus tard (0 par défaut), au plus fois fois dans la mission (une par défaut).
 // Une ligne à la fois : la suivante attend que la précédente soit dite, le temps de ses bips (dureeDeLigne). Les lignes
 // en attente passent dans l'ordre de leurs instants.
-// suspendre() la fait taire (la pause du jeu ; la kill-cam du lot 4) : rien n'est dit, la ligne en cours est coupée ;
-// reprendre() la rend.
+// suspendre() la fait taire (la pause du jeu ; la kill-cam du lot 4) : rien n'est dit, la ligne en cours est coupée et
+// le canal libéré ; reprendre() la rend, et la ligne suivante passe dès qu'elle est due. Pendant la pause, la boucle ne
+// mène pas les règles : la libération ne peut pas attendre un avancer (relecture de A8).
 
 // Le temps d'une ligne (s) : la règle des cinématiques, 350 ms et 62 ms par caractère (estimate, src/briefing/kit.js,
 // module de DOM que ce module pur n'importe pas ; tests/campaign/radio.test.js garde l'égalité).
@@ -37,10 +38,7 @@ export function creerRadio(lignes = []) {
     // Les lignes à dire maintenant (t, horloge de la mission) : [{ evenement, texte, dureeS }], une au plus quand le canal
     // est libre.
     avancer(t) {
-      if (suspendue) {
-        if (t < libreA) libreA = t   // la ligne en cours est coupée : le canal est libre à la reprise
-        return []
-      }
+      if (suspendue) return []
       const out = []
       while (file.length && file[0].a <= t && libreA <= t) {
         const { ligne } = file.shift()
@@ -50,7 +48,7 @@ export function creerRadio(lignes = []) {
       }
       return out
     },
-    suspendre() { suspendue = true },
+    suspendre() { suspendue = true; libreA = -Infinity },   // la ligne en cours est coupée : le canal est libre
     reprendre() { suspendue = false },
     get suspendue() { return suspendue },
     // Les lignes demandées pas encore dites (vérifications) : [{ texte, a }].

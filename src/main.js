@@ -1354,9 +1354,14 @@ function fleeNearby(pos, radius) {
   return fuyards
 }
 
+// Fige (react) les PNJ vivants à moins de `radius` de `pos`, à l'instant de l'impact. Dans une mission à sorties ou abris,
+// les cibles n'y réagissent pas : elles se figent au plus tôt du son du départ et de la chute vue d'un collègue (leur
+// réaction au coup, src/campaign/alarm.js), jamais à l'arrivée de la balle, ni au silencieux sans chute vue (relecture
+// de A8).
 function reactNearby(pos, radius) {
+  const ciblesAPart = fuiteParSorties(currentMission)
   for (const npc of npcs) {
-    if (!npc.alive || npc.state === 'flee') continue
+    if (!npc.alive || npc.state === 'flee' || (ciblesAPart && npc.isTarget)) continue
     if (npc.mesh.position.distanceTo(pos) < radius) {
       npc.react(pos)
     }

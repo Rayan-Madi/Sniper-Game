@@ -9,7 +9,8 @@
 //
 // Seules réagissent ainsi les cibles d'une mission qui déclare des sorties ou des abris (fuiteParSorties) : sans eux,
 // la fuite immédiate autour du point d'impact et le cône d'avant le lot 3 restent la règle (main.js : fleeNearby,
-// checkFledTargets). Les civils et les gardes gardent partout la réaction d'avant le lot 3.
+// checkFledTargets). Avec eux, l'impact ne fait ni fuir ni se figer ces cibles (fleeNearby, reactNearby) : seule leur
+// réaction le fait. Les civils et les gardes gardent partout la réaction d'avant le lot 3.
 import { SON } from '../shot/tuning.js'
 import { fuiteParSorties } from './escape.js'
 

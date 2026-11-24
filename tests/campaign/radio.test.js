@@ -77,6 +77,18 @@ describe('creerRadio', () => {
     expect(r.avancer(0.6).map(l => l.texte)).toEqual(['La suivante.'])
   })
 
+  // La pause du jeu (pauseGame, main.js) : la boucle ne mène plus les règles, avancer n'est pas appelé pendant la
+  // suspension, et l'horloge de la mission ne bouge pas (relecture de A8). Témoin : le canal libéré seulement par un
+  // avancer pendant la suspension (radio.js de la tâche A8), vu rouge.
+  it('suspendue sans être avancée (la pause du jeu) : à la reprise, au même instant, la suivante tout de suite', () => {
+    const r = creerRadio([L('tir', 'Une ligne assez longue.'), L('tir', 'La suivante.')])
+    r.signaler('tir', 0)
+    expect(r.avancer(0.5).map(l => l.texte)).toEqual(['Une ligne assez longue.'])
+    r.suspendre()
+    r.reprendre()
+    expect(r.avancer(0.5).map(l => l.texte)).toEqual(['La suivante.'])
+  })
+
   it('sans ligne (les six missions d\'aujourd\'hui) : silence', () => {
     const r = creerRadio([])
     r.signaler('depart', 0); r.signaler('calme', 1)

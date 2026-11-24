@@ -131,6 +131,61 @@ describe('le son du départ : un tir manqué fait réagir les cibles d\'une miss
   })
 })
 
+// L'impact ne fige pas les cibles d'une mission à sorties (relecture de A8) : au plus tôt du son du départ et de la chute
+// vue d'un collègue (l'instant brut), la cible se fige, jamais à l'arrivée de la balle (reactNearby, dans killTarget et
+// dans resolveBullet sur un tir manqué). Les civils et les gardes gardent la réaction d'avant autour de l'impact.
+// Témoin : le main.js de la tâche A8 (f60fb99), où reactNearby fige toute cible à 28 ou 30 m de l'impact (vu rouge).
+describe('l\'impact ne fige pas les cibles d\'une mission à sorties : seule leur réaction les fige', () => {
+  // Un mur entre les frères, de 3 m de haut : de ses yeux, Luc ne voit pas le torse de Marc.
+  function murEntreLesFreres() {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 4), new THREE.MeshLambertMaterial())
+    m.position.set(-2.6, 1.5, -19.5)
+    m.userData.solid = true; m.userData.surface = 'pierre'
+    m.updateMatrixWorld(true)
+    return m
+  }
+  // Un civil à 24,2 m de Marc : hors de la fuite autour de l'impact (18 m), dans la réaction (30 m).
+  function civil() {
+    const c = new NPC({ isCivilian: true, color: 0x888888, allure: RUELLE.allure, x: 21, z: -19.5, bounds: { minX: -30, maxX: 30, minZ: -40, maxZ: 10 } })
+    c.lockState = STATES.IDLE; c.state = STATES.IDLE
+    return c
+  }
+
+  it('au silencieux, Marc abattu derrière un mur : Luc ne voit rien, n\'entend rien, et reste immobile ; le civil réagit, comme avant', () => {
+    const { luc, marc } = freres(RUELLE)
+    const passant = civil()
+    const h = harnais({ mission: RUELLE, lieux: LIEUX, cibles: [luc, marc], autres: [passant], camera: cameraM2(),
+      objets: [murEntreLesFreres()], silencieux: true })
+    h.s.fns.killTarget(marc)
+    expect(luc.state).toBe(STATES.IDLE)
+    expect(passant.state).toBe(STATES.REACT)
+    const etats = new Set()
+    mener(h, 3, () => etats.add(luc.state))
+    expect([...etats]).toEqual([STATES.IDLE])
+    expect(h.journal.echecs).toEqual([])
+  })
+
+  it('un tir manqué sans silencieux, la balle (0,06 s) avant le son (0,13 s) : Luc se fige au son, pas à l\'impact', () => {
+    const { luc, marc } = freres(RUELLE)
+    const h = harnais({ mission: RUELLE, lieux: LIEUX, cibles: [luc, marc], camera: cameraM2() })
+    h.s.poser({ statShots: 1 })
+    h.s.fns.coupEntendu({ silenced: false })
+    const son = luc.mesh.position.clone().setY(0).distanceTo(cameraM2().position) / SON.vitesse
+    for (let i = 0; i < 4; i++) h.image()
+    expect(h.s.etat().missionClock).toBeLessThan(son)
+    // L'impact dans le décor, à 60 cm de Luc, comme resolveBullet le traite sans silencieux
+    const impact = new THREE.Vector3(-2.5, 0, -19.2)
+    h.s.fns.fleeNearby(impact, 20)
+    h.s.fns.reactNearby(impact, 28)
+    expect([luc.state, marc.state]).toEqual([STATES.IDLE, STATES.IDLE])
+    const etats = []
+    mener(h, 1, t => etats.push([t, luc.state]))
+    const premier = etats.find(([, s]) => s === STATES.REACT)?.[0]
+    expect(premier).toBeGreaterThanOrEqual(son - 1e-9)
+    expect(premier).toBeLessThan(son + 1 / 60)
+  })
+})
+
 describe('non-régression : M2 d\'aujourd\'hui, sans sortie', () => {
   it('Marc abattu : Luc fuit dès le coup, à l\'opposé de Marc, et la mission échoue par le cône', () => {
     const { luc, marc } = freres(M2)

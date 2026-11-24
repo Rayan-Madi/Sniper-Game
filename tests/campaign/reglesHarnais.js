@@ -12,7 +12,7 @@ import { creerAlarme, reagir } from '../../src/campaign/alarm.js'
 import { creerFuite, fuiteParSorties, issueLaPlusProche } from '../../src/campaign/escape.js'
 import { creerFenetres } from '../../src/campaign/window.js'
 import { creerRadio } from '../../src/campaign/radio.js'
-import { canFinish, canFail, creerFin } from '../../src/campaign/phase.js'
+import { canFinish, canFail, canPause, creerFin } from '../../src/campaign/phase.js'
 import { solidHit } from '../../src/shot/occlusion.js'
 import { FUITE, OCCLUSION, STRESS } from '../../src/shot/tuning.js'
 
@@ -20,7 +20,7 @@ export const NOMS_REGLES = [
   'monterRegles', 'signaler', 'coupEntendu', 'surUneMort', 'garderLesCorps', 'planifierReactions', 'voitLaChute',
   'enVueDuTireur', 'ligneDeVue', 'fuirVersLaSortie', 'avancerRegles', 'echeanceDeFenetre', 'direALaRadio',
   'killTarget', 'killCivilian', 'hitGuard', 'checkWin', 'lancerFin', 'startKillcam',
-  'checkFledTargets', 'isInCameraFOV', 'fleeNearby', 'reactNearby', 'checkGuardAlert',
+  'checkFledTargets', 'isInCameraFOV', 'fleeNearby', 'reactNearby', 'checkGuardAlert', 'pauseGame', 'resumeGame',
 ]
 
 // mission, lieux : la mission en cours et ses lieux (resoudreAncres) ; cibles, gardes, autres : ses PNJ ; camera : à
@@ -28,7 +28,7 @@ export const NOMS_REGLES = [
 // journal, image(dt) (une image de la boucle, dans son ordre), killFeed }.
 export function harnais({ mission, lieux, cibles = [], gardes = [], autres = [], camera, objets = [], silencieux = false, source = MAIN_SRC }) {
   const a = analyse(source)
-  const journal = { echecs: [], fuitesCone: 0, fil: [], radio: [], killcam: 0, reussites: 0, alertes: [], barrees: [] }
+  const journal = { echecs: [], fuitesCone: 0, fil: [], radio: [], radioCoupee: 0, killcam: 0, reussites: 0, alertes: [], barrees: [] }
   const killFeed = document.createElement('div')
   let s = null
   const etat = () => s.etat()
@@ -59,6 +59,9 @@ export function harnais({ mission, lieux, cibles = [], gardes = [], autres = [],
     triggerAlert: raison => journal.alertes.push(raison), triggerLevelClear: () => journal.reussites++,
     playCivilKill: () => {}, playRadio: dureeS => journal.radio.push(dureeS), updateHUD: () => {}, killFeed,
     guardHit: () => ({ meurt: true, feed: 'Garde abattu', gardesReagissent: false, alerte: false }),
+    // la pause (pauseGame, resumeGame) : son écran, la lunette et la souris, les bips coupés
+    canPause, renderLost: false, pauseEl: document.createElement('div'), settingsEl: document.createElement('div'),
+    hideScope: () => {}, releaseMouse: () => {}, stopRadio: () => journal.radioCoupee++, clock: { getDelta: () => 0 },
   }, source)
   if (s.fns.monterRegles) s.fns.monterRegles()
   else s.poser({ fuite: creerFuite(mission, lieux), fenetres: creerFenetres(mission.fenetres), radio: creerRadio(mission.radio), fin: creerFin(mission.fin) })
