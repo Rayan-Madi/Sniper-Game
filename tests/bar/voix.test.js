@@ -4,7 +4,7 @@ import { VOIX, ECOUTE } from '../../src/bar/reglages.js'
 import { PERSONNES } from '../../src/bar/textes.js'
 import { BOITES, FOYERS, PLACES, TABLES } from '../../src/bar/plan.js'
 import { audibilite, transmission } from '../../src/bar/ecoute.js'
-import { fauxAudio, valeur, frequence, aAtteint, branches, enCours } from './fauxAudio.js'
+import { fauxAudio, valeur, frequence, aAtteint, premier, branches, enCours } from './fauxAudio.js'
 
 // Les voix bipées du Bivouac (spec docs/superpowers/specs/2026-10-28-m5-bar-design.md §3.2, §3.4 et §8 ; plan
 // docs/superpowers/plans/2026-10-28-m5-bar.md, tâche B7). Chaque test de comportement a été vu rouge sur le témoin écrit
@@ -188,6 +188,58 @@ describe('la chaîne d\'une voix', () => {
     expect(valeur(bande.frequency)).toBe(t.bande.hz)
     expect(valeur(bande.Q)).toBe(t.bande.q)
     v.dispose()
+  })
+
+  it('le colonel a le lit de ligne du timbre « phone » (bruit à 1,8 kHz, sound.js:42-46) tant qu\'il parle ; les autres, non', () => {
+    const f = fauxAudio(); const sortie = f.ctx.createGain()
+    const t = timbre('colonel')
+    expect(t.ligne).toEqual({ hz: 1800, q: 1, niveau: 0.022 })   // le crépitement de « phone » (sound.js:44-45)
+    const v = creerVoix(f.audio, { ...t, sortie })
+    const lits = f.ctx.createBufferSource.mock.results.map(r => r.value)
+    expect(lits).toHaveLength(1)                            // témoin : le colonel sans lit de ligne, comme une voix de la salle
+    const [lit] = lits
+    expect(lit.loop).toBe(true)
+    expect(lit.start).toHaveBeenCalled()
+    const filtre = premier(lit, n => n.genre === 'filtre')
+    expect([filtre.type, valeur(filtre.frequency), valeur(filtre.Q)]).toEqual(['bandpass', 1800, 1])
+    const porte = premier(lit, n => n.genre === 'gain')
+    // le lit entre dans la chaîne à son entrée (niveau × gain de l'écoute, puis coupure et panoramique), sans passer par
+    // le timbre des syllabes, comme le crépitement de sound.js va droit au gain de la voix
+    const [pan] = panoramiques(f)
+    const coupure = f.noeuds.find(n => n.genre === 'filtre' && n.sorties.has(pan))
+    const entree = f.noeuds.find(n => n.genre === 'gain' && n.sorties.has(coupure))
+    expect([...porte.sorties]).toEqual([entree])
+    expect(aAtteint(lit, sortie)).toBe(true)
+    avance(f, v, 0.5, { gain: 0.8 })
+    expect(valeur(porte.gain)).toBe(0)                      // silencieux : la ligne se tait
+    v.parler(1); avance(f, v, 0.5, { gain: 0.8 })
+    expect(valeur(porte.gain)).toBeCloseTo(t.ligne.niveau, 9)   // témoin : un lit qui ne s'ouvre jamais
+    expect(valeur(entree.gain)).toBeCloseTo(t.niveau * 0.8, 9)
+    avance(f, v, 0.6, { gain: 0.8 })
+    expect(valeur(porte.gain)).toBe(0)                      // témoin : un lit qui reste ouvert après la réplique
+    v.parler(1); avance(f, v, 0.2, { gain: 0.8 }); v.taire(); avance(f, v, 0.1, { gain: 0.8 })
+    expect(valeur(porte.gain)).toBe(0)                      // taire() ferme la ligne
+    v.dispose()
+    expect(lit.stop).toHaveBeenCalled()                     // témoin : lit en boucle jamais arrêté
+    expect(branches(f).filter(n => n !== sortie)).toEqual([])
+    // une voix de la salle n'a pas de ligne
+    const g = fauxAudio(); const s = creerVoix(g.audio, timbre('sorel'))
+    s.parler(1); avance(g, s, 1)
+    expect(g.ctx.createBufferSource).not.toHaveBeenCalled()
+    s.dispose()
+  })
+
+  it('le lit de ligne est tiré à graine : jamais Math.random', () => {
+    vi.spyOn(Math, 'random').mockImplementation(() => { throw new Error('Math.random appelé') })
+    const echantillons = graine => {
+      const f = fauxAudio(); const v = creerVoix(f.audio, timbre('colonel', { graine }))
+      const d = f.ctx.createBufferSource.mock.results[0].value.buffer.getChannelData(0)
+      v.dispose()
+      return [...d.slice(0, 32)]
+    }
+    expect(echantillons(3)).toEqual(echantillons(3))        // témoin : le bruit du lit tiré par Math.random (sound.js:17)
+    expect(echantillons(3)).not.toEqual(echantillons(4))    // témoin : graine ignorée
+    expect(echantillons(3).some(x => x !== 0)).toBe(true)
   })
 
   it('les syllabes finies se débranchent au fil du temps audio, sans attendre dispose()', () => {

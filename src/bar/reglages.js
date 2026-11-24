@@ -63,6 +63,8 @@ const VOIX_SALLE = {    // une voix de la salle, sans filtre de radio : le timbr
   bande: { hz: 950, q: 0.8 },   // passe-bande du timbre : là où la voix sonne
   passeBas: 2600,       // passe-bas du timbre (Hz) : plus bas, plus sourd
   niveau: 0.45,         // niveau de la voix entendue de près, sans mur (gain de l'écoute à 1)
+  ligne: null,          // lit de ligne d'une voix au téléphone, { hz, q, niveau } : un bruit passe-bande sous les syllabes,
+                        // ouvert tant qu'elle parle, avant le niveau et l'écoute (le crépitement de voice, sound.js:42-46)
 }
 const voix = plus => ({ ...VOIX_SALLE, ...plus })
 export const VOIX = {
@@ -81,8 +83,9 @@ export const VOIX = {
     sorel: voix({ f0Min: 95, f0Max: 120, pauses: 0.05, saut: 0.1, syllabeS: [0.08, 0.12] }),   // régulier
     lise: voix({ f0Min: 190, f0Max: 260, debit: 1.3, bande: { hz: 1150, q: 0.8 } }),           // rapide, la seule voix de femme
     albert: voix({ f0Min: 90, f0Max: 120 }),
-    // le combiné du téléphone : le timbre « phone », plus grave (100 à 175 Hz dans sound.js), bande étroite et nasillarde
-    colonel: voix({ f0Min: 70, f0Max: 100, bande: { hz: 1000, q: 1.6 } }),
+    // le combiné du téléphone : le timbre « phone », plus grave (100 à 175 Hz dans sound.js), bande étroite et nasillarde,
+    // avec le lit de ligne de « phone » (bruit à 1 800 Hz, 0,022 : sound.js:44-45), à juger à l'écoute (B19)
+    colonel: voix({ f0Min: 70, f0Max: 100, bande: { hz: 1000, q: 1.6 }, ligne: { hz: 1800, q: 1, niveau: 0.022 } }),
     'ouvrier-1': voix({ f0Min: 95, f0Max: 150, bande: { hz: 700, q: 0.7 }, passeBas: 900 }),   // bruit de salle, comme le brouhaha
     'ouvrier-2': voix({ f0Min: 110, f0Max: 180, bande: { hz: 700, q: 0.7 }, passeBas: 900 }),
     // Viktor : la voix intérieure des cinématiques (« inner », sound.js:54-58), qu'aucun mur n'assourdit
@@ -303,6 +306,7 @@ export const SON = {
     frappesParS: 20,    // coups de marteau par seconde
     niveau: 0.05,       // niveau d'un coup
     reste: 0.15,        // ce que la cloche garde de son niveau entre deux coups
+    traineS: 0.25,      // après la dernière frappe, la cloche sonne encore ce temps en s'éteignant (s)
   },
   coeur: {              // le battement du kit (heart, sound.js:122), dès SOUPÇON
     coups: [            // les deux coups d'un battement : hauteur, glissée jusqu'à finHz, durée, crête, retard (s)

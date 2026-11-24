@@ -8,6 +8,8 @@
 // creerVoix(audio, { ...timbre, graine, sortie, reverberation }) : la voix d'une personne, avec sa propre chaîne
 //   syllabes → passe-bande et passe-bas du timbre → entrée (niveau × gain) → coupure (passe-bas) → panoramique → sortie
 //   (la destination du jeu, audio.dest, par défaut) et la réverbération de la salle si on la donne (src/bar/son.js).
+//   Une voix au téléphone (timbre avec ligne : le colonel) a aussi son lit de ligne, un bruit passe-bande en boucle qui
+//   entre dans la chaîne à l'entrée, ouvert tant qu'elle parle, comme le crépitement de voice (sound.js:42-46).
 //   parler(dureeS) : elle parle ce temps de jeu (une réplique : son estimation, src/briefing/kit.js:10) ; taire() ;
 //   update(dt, { gain, coupure, pan }) : le temps avance et les syllabes dues partent, au gain, à la coupure et au
 //   panoramique de l'écoute (reglageBips) ; sous VOIX.seuilGain, elle ne bipe pas mais sa réplique avance ; dispose() ;
@@ -18,19 +20,15 @@
 // reglageBips(oreille, regard, source, boites) : ce que l'écoute laisse entendre des bips d'une source.
 //
 // Sans contexte audio (tests, son indisponible), tout est muet et rien ne lève. Contexte suspendu (avant le geste du
-// joueur) : aucune syllabe, qui partiraient toutes d'un coup à la reprise. Les outils du bas du fichier (contexte, bruit
-// à graine, nœuds des sons finis, réglage en douceur) servent aussi à src/bar/son.js.
+// joueur) : aucune syllabe, qui partiraient toutes d'un coup à la reprise. Les outils du bas du fichier (instants, pas de
+// temps, tirages, marges des sons finis, contexte, bruit à graine, nœuds des sons finis, réglage en douceur) servent
+// aussi à src/bar/son.js.
 import { VOIX, ECOUTE } from './reglages.js'
 import { audibilite, transmission } from './ecoute.js'
 import { generateur } from '../shot/acoustics.js'
 
-// Les instants se comparent à un milliardième près, comme dans la jauge et la soirée.
-const EPS = 1e-9
-// un pas de temps invalide (NaN, absent, négatif, infini) compte pour zéro, comme dans la jauge
-const secondes = d => (Number.isFinite(d) && d > 0 ? d : 0)
-const borne = (v, a, b) => Math.min(b, Math.max(a, v))
-// un tirage entre deux bornes
-const entre = (hasard, [a, b]) => a + hasard() * (b - a)
+// le tampon du lit de ligne, en boucle (s) : assez long pour qu'on n'entende pas la boucle
+const LIGNE_S = 1
 
 export function creerVoix(audio, options = {}) {
   const o = { ...VOIX.defaut, ...options }
@@ -42,7 +40,7 @@ export function creerVoix(audio, options = {}) {
   let t = 0, fin = 0, prochain = 0, silenceJusque = -Infinity, gain = 0, mort = false
 
   // la chaîne de la personne, créée d'emblée ; les syllabes s'y branchent
-  let chaine = null, ephemeres = null, regler = null
+  let chaine = null, ephemeres = null, regler = null, ligne = null
   if (c && sortie) {
     const bande = c.createBiquadFilter(); bande.type = 'bandpass'; bande.frequency.value = o.bande.hz; bande.Q.value = o.bande.q
     const timbre = c.createBiquadFilter(); timbre.type = 'lowpass'; timbre.frequency.value = o.passeBas
@@ -53,7 +51,16 @@ export function creerVoix(audio, options = {}) {
     const bout = pan ? (coupure.connect(pan), pan) : coupure
     bout.connect(sortie)
     if (o.reverberation) bout.connect(o.reverberation)
-    chaine = { bande, entree, coupure, pan, noeuds: [bande, timbre, entree, coupure, pan].filter(Boolean) }
+    // le lit de ligne d'une voix au téléphone : un bruit à graine, en boucle, fermé tant qu'elle ne parle pas
+    if (o.ligne) {
+      const source = c.createBufferSource(); source.buffer = bruitBlanc(c, LIGNE_S, graineDe('ligne', o.graine ?? 1)); source.loop = true
+      const filtre = c.createBiquadFilter(); filtre.type = 'bandpass'; filtre.frequency.value = o.ligne.hz; filtre.Q.value = o.ligne.q ?? 1
+      const porte = c.createGain(); porte.gain.value = 0
+      source.connect(filtre); filtre.connect(porte); porte.connect(entree)
+      source.start()
+      ligne = { source, porte, noeuds: [source, filtre, porte] }
+    }
+    chaine = { bande, entree, coupure, pan, noeuds: [bande, timbre, entree, coupure, pan, ...(ligne ? ligne.noeuds : [])].filter(Boolean) }
     ephemeres = creerEphemeres(c)
     regler = creerReglage(c, VOIX.lissageS)
   }
@@ -66,8 +73,8 @@ export function creerVoix(audio, options = {}) {
     env.gain.setValueAtTime(0.001, t0); env.gain.linearRampToValueAtTime(crete, t0 + o.attaqueS)
     env.gain.exponentialRampToValueAtTime(0.001, t0 + duree)
     osc.connect(env); env.connect(chaine.bande)
-    osc.start(t0); osc.stop(t0 + duree + 0.02)
-    ephemeres.ajouter([osc, env], t0 + duree + 0.05)
+    osc.start(t0); osc.stop(t0 + duree + ARRET_S)
+    ephemeres.ajouter([osc, env], t0 + duree + DEBRANCHE_S)
   }
 
   // Le pas dû à l'instant p (temps de la voix), traité à l'image qui finit en t1. Les tirages ne dépendent que de la
@@ -106,6 +113,8 @@ export function creerVoix(audio, options = {}) {
       const t1 = t + pasDeTemps
       while (prochain <= t1 + EPS && prochain < fin - EPS) { unPas(prochain, t1); prochain += pas }
       t = t1
+      // la ligne s'ouvre tant que la réplique dure (en pause, sans update, elle reste comme elle était)
+      if (ligne) regler(ligne.porte.gain, fin > t + EPS ? o.ligne.niveau : 0)
     },
     dispose() {
       if (mort) return
@@ -113,8 +122,10 @@ export function creerVoix(audio, options = {}) {
       fin = t
       if (!chaine) return
       ephemeres.vider()
+      if (ligne) arreter([ligne.source])
       debrancher(chaine.noeuds)
       regler.oublier()
+      ligne = null
     },
   }
 }
@@ -178,6 +189,18 @@ export function reglageBips(oreille, regard, source, boites) {
 }
 
 // ─── Outils communs aux voix et à la salle (src/bar/son.js) ─────────
+
+// Les instants se comparent à un milliardième près, comme dans la jauge et la soirée.
+export const EPS = 1e-9
+// un pas de temps invalide (NaN, absent, négatif, infini) compte pour zéro, comme dans la jauge
+export const secondes = d => (Number.isFinite(d) && d > 0 ? d : 0)
+export const borne = (v, a, b) => Math.min(b, Math.max(a, v))
+// un tirage entre deux bornes
+export const entre = (hasard, [a, b]) => a + hasard() * (b - a)
+// Un son fini (syllabe, note, son ponctuel) : sa source s'arrête ARRET_S après la fin de son enveloppe (tone et noise,
+// src/briefing/sound.js:21-35), et ses nœuds se débranchent à l'update qui suit DEBRANCHE_S après (creerEphemeres).
+export const ARRET_S = 0.02
+export const DEBRANCHE_S = 0.05
 
 // Le contexte d'un audio du jeu ({ ctx, dest }), ou null : muet.
 export function contexteDe(audio) {

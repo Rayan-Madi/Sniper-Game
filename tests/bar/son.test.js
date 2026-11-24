@@ -320,6 +320,24 @@ describe('les sons ponctuels (§3.12)', () => {
     expect(f.oscillateurs(n)).toHaveLength(3 * SON.sonnerie.partielsHz.length)   // trois sonneries : trois appels (B6)
     son.stop()
   })
+  it('sonnerie : la cloche sonne encore SON.sonnerie.traineS après la dernière frappe, un réglage du ressenti', () => {
+    const avant = SON.sonnerie.traineS
+    try {
+      SON.sonnerie.traineS = 0.6                            // une autre traîne que celle de départ
+      const f = fauxAudio(); const son = creerSon(f.audio)
+      const n = f.oscillateurs().length
+      f.avancer(2); son.sonnerie()
+      const oscs = f.oscillateurs(n), fin = 2 + SON.sonnerie.dureeS + 0.6
+      for (const o of oscs) expect(o.stop.mock.calls[0][0]).toBeCloseTo(fin + 0.02, 9)   // témoin : traîne de 0,25 s écrite en dur
+      const g = premier(oscs[0], x => x.genre === 'gain').gain
+      expect(g.exponentialRampToValueAtTime.mock.calls.at(-1)).toEqual([0.0001, expect.closeTo(fin, 9)])
+      f.avancer(SON.sonnerie.dureeS + 0.6 + 0.04); son.update(DT, CALME)
+      expect(branches(f).filter(x => oscs.includes(x))).toHaveLength(oscs.length)   // encore branchée : elle sonne
+      f.avancer(0.02); son.update(DT, CALME)
+      expect(branches(f).filter(x => oscs.includes(x))).toEqual([])                  // débranchée après sa traîne
+      son.stop()
+    } finally { SON.sonnerie.traineS = avant }
+  })
   it('NOTÉ : le papier et un grattement de crayon (bruit à 3,5 kHz, 0,3 s) ; un pas sur le parquet', () => {
     const f = fauxAudio(); const son = creerSon(f.audio)
     const s0 = f.ctx.createBufferSource.mock.results.length

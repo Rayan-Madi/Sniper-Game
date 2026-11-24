@@ -5,12 +5,14 @@
 // salle par son.reverberation.
 //
 // creerSon(audio, { sortie, graine }) rend :
-// - update(dt, { pause, presents, soupcon, palier, jukebox, tele }) à chaque image, en pause comprise (avec le temps réel :
-//   la musique continue, 10 dB plus bas, et rien d'autre n'avance, ni syllabe, ni verre, ni battement). presents : les
-//   personnes dans la salle (le brouhaha suit présents / 8) ; soupcon : S de la jauge ; palier : le sien (PALIERS de
-//   src/bar/soupcon.js) ; jukebox et tele : { T, pan, gain } de chacun pour l'oreille de Viktor (T : ce que laissent passer
-//   les boîtes du plan, transmission de src/bar/ecoute.js ; pan : sin(azimut), reglageBips de src/bar/voix.js ; gain : 1
-//   par défaut) ;
+// - update(dt, { pause, presents, soupcon, palier, jukebox, tele }) à chaque image, en pause comprise (avec le temps réel,
+//   borné à 0,05 s comme le pas de la boucle, main.js:1421 : la musique continue, 10 dB plus bas, et rien d'autre
+//   n'avance, ni syllabe, ni verre, ni battement ; un pas plus long ne rattrape pas ce qu'il a sauté, au-delà de
+//   VOIX.retardMaxS de retard, ou de 0,15 s par image pour les notes du juke-box, programmées SON.jukebox.avanceS à
+//   l'avance). presents : les personnes dans la salle (le brouhaha suit présents / 8) ; soupcon : S de la jauge ;
+//   palier : le sien (PALIERS de src/bar/soupcon.js) ; jukebox et tele : { T, pan, gain } de chacun pour l'oreille de
+//   Viktor (T : ce que laissent passer les boîtes du plan, transmission de src/bar/ecoute.js ; pan : sin(azimut),
+//   reglageBips de src/bar/voix.js ; gain : 1 par défaut) ;
 // - les sons ponctuels clochette() (et la porte), sonnerie() (une sonnerie du téléphone : la soirée en émet trois),
 //   note() (NOTÉ : un renseignement appris), pas() (onStep du contrôleur) ;
 // - reverberation : le nœud où envoyer les voix (null sans son, ou une fois arrêtée) ; etat() pour le débogage ;
@@ -33,13 +35,12 @@ import { PALIERS } from './soupcon.js'
 import { impulseResponse, generateur } from '../shot/acoustics.js'
 import {
   creerVoix, contexteDe, enMarche, panoramique, bruitBlanc, creerEphemeres, creerReglage, arreter, debrancher,
+  EPS, secondes, borne, entre, ARRET_S, DEBRANCHE_S,
 } from './voix.js'
 
-const EPS = 1e-9
-const secondes = d => (Number.isFinite(d) && d > 0 ? d : 0)
-const borne = (v, a, b) => Math.min(b, Math.max(a, v))
-const entre = (hasard, [a, b]) => a + hasard() * (b - a)
 const dB = v => 10 ** (v / 20)
+// le tampon de bruit blanc des sons ponctuels et du lit du brouhaha, en boucle (s), comme celui de sound.js:16
+const BRUIT_S = 2
 const RANG_SOUPCON = PALIERS.indexOf('soupcon')
 const RANG_DEMASQUE = PALIERS.indexOf('demasque')
 
@@ -69,7 +70,7 @@ export function creerSon(audio, { sortie, graine = SON.graine } = {}) {
   if (actif) {
     ephemeres = creerEphemeres(c)
     regler = creerReglage(c, SON.lissageS)
-    bruit = bruitBlanc(c, 2, sousGraine())
+    bruit = bruitBlanc(c, BRUIT_S, sousGraine())
     general = garde(c.createGain()); general.connect(dest)
 
     // la réverbération : la réponse « interieur » des acoustiques du jeu, dans une ConvolverNode à elle
@@ -120,7 +121,7 @@ export function creerSon(audio, { sortie, graine = SON.graine } = {}) {
     return tampon
   }
 
-  // ─── Recettes des sons ponctuels (tone et noise du kit des cinématiques, src/briefing/sound.js:23-40) ───
+  // ─── Recettes des sons ponctuels (tone et noise du kit des cinématiques, src/briefing/sound.js:21-35) ───
   const joue = () => actif && !mort && enMarche(c)
 
   // Un ton : f (glissé jusqu'à finHz), montée jusqu'à crête en attaqueS puis chute en dureeS (exponentielle, ou
@@ -134,21 +135,21 @@ export function creerSon(audio, { sortie, graine = SON.graine } = {}) {
     if (lineaire) g.gain.linearRampToValueAtTime(0.0001, t0 + dureeS)
     else g.gain.exponentialRampToValueAtTime(0.0001, t0 + dureeS)
     o.connect(g); for (const d of vers) g.connect(d)
-    o.start(t0); o.stop(t0 + dureeS + 0.02)
-    ephemeres.ajouter([o, g], t0 + dureeS + 0.05)
+    o.start(t0); o.stop(t0 + dureeS + ARRET_S)
+    ephemeres.ajouter([o, g], t0 + dureeS + DEBRANCHE_S)
     return o
   }
-  // Un bruit filtré (fréquence glissée jusqu'à finHz), même enveloppe qu'un ton.
-  function souffle(dureeS, crete, hz, type, t0, vers, { q = 1, finHz = null } = {}) {
+  // Un bruit filtré (fréquence glissée jusqu'à finHz), même enveloppe qu'un ton ; il part d'un point tiré dans le tampon.
+  function souffle(dureeS, crete, hz, type, t0, vers, { q = 1, finHz = null, attaqueS = 0.006 } = {}) {
     const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain()
     s.buffer = bruit; s.loop = true
     f.type = type; f.frequency.setValueAtTime(hz, t0); f.Q.value = q
     if (finHz) f.frequency.exponentialRampToValueAtTime(finHz, t0 + dureeS)
-    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(crete, t0 + 0.006)
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(crete, t0 + attaqueS)
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dureeS)
     s.connect(f); f.connect(g); for (const d of vers) g.connect(d)
-    s.start(t0, hasardBruits() * 1.9); s.stop(t0 + dureeS + 0.02)
-    ephemeres.ajouter([s, f, g], t0 + dureeS + 0.05)
+    s.start(t0, hasardBruits() * (BRUIT_S - 0.1)); s.stop(t0 + dureeS + ARRET_S)
+    ephemeres.ajouter([s, f, g], t0 + dureeS + DEBRANCHE_S)
   }
 
   // ─── Le brouhaha ───
@@ -212,7 +213,7 @@ export function creerSon(audio, { sortie, graine = SON.graine } = {}) {
       verreDans += entre(hasard, V.intervalleS)
       if (retard > VOIX.retardMaxS + EPS || !enMarche(c)) continue
       const t0 = c.currentTime, p = panoramique(c)
-      if (p) { p.pan.value = pan; p.connect(general); p.connect(envoi); ephemeres.ajouter([p], t0 + declin + 0.05) }
+      if (p) { p.pan.value = pan; p.connect(general); p.connect(envoi); ephemeres.ajouter([p], t0 + declin + DEBRANCHE_S) }
       V.partielsHz.forEach((f, i) => ton(f, 'sine', declin, V.niveau * V.amplitudes[i], t0, p ? [p] : [general, envoi], { attaqueS: 0.002 }))
     }
   }
@@ -262,24 +263,24 @@ export function creerSon(audio, { sortie, graine = SON.graine } = {}) {
       souffle(G.bruit.dureeS, G.bruit.niveau, G.bruit.hz, 'bandpass', t0, [general], { q: G.bruit.q, finHz: G.bruit.finHz })
       ton(G.ton.hz, 'sawtooth', G.ton.dureeS, G.ton.niveau, t0, [general], { finHz: G.ton.finHz })
     },
-    // une sonnerie du téléphone : la cloche frappée frappesParS fois par seconde, qui sonne encore un peu après
+    // une sonnerie du téléphone : la cloche frappée frappesParS fois par seconde, qui sonne encore traineS après
     sonnerie() {
       if (!joue()) return
-      const S = SON.sonnerie, t0 = c.currentTime, periode = 1 / S.frappesParS
+      const S = SON.sonnerie, t0 = c.currentTime, periode = 1 / S.frappesParS, fin = t0 + S.dureeS + S.traineS
       const g = c.createGain()
       g.gain.setValueAtTime(0.0001, t0)
       for (let k = 0; k < Math.round(S.frappesParS * S.dureeS); k++) {
         g.gain.setValueAtTime(S.niveau, t0 + k * periode)
         g.gain.exponentialRampToValueAtTime(S.niveau * S.reste, t0 + (k + 1) * periode - 0.002)
       }
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + S.dureeS + 0.25)
+      g.gain.exponentialRampToValueAtTime(0.0001, fin)
       const oscs = S.partielsHz.map(f => {
         const o = c.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(f, t0)
-        o.connect(g); o.start(t0); o.stop(t0 + S.dureeS + 0.27)
+        o.connect(g); o.start(t0); o.stop(fin + ARRET_S)
         return o
       })
       g.connect(general)
-      ephemeres.ajouter([...oscs, g], t0 + S.dureeS + 0.3)
+      ephemeres.ajouter([...oscs, g], fin + DEBRANCHE_S)
     },
     // NOTÉ : le papier, puis le crayon qui gratte en quelques traits
     note() {
