@@ -169,7 +169,8 @@ function defautsDeForme(m) {
   const a = m.allure || {}
   exige(fini(a.cibles) && fini(a.gardes) && typeof a.imprevisibles === 'boolean', 'allure')
   exige(typeof m.marqueurs === 'boolean', 'marqueurs')
-  exige(m.fiche === null || (!!m.fiche && nom(m.fiche.texte)), 'fiche')
+  // Fiche du HUD (tâche A7) : un ordre de tir ou non, une entrée par cible ; le détail est dans tests/campaign/fiche.test.js
+  exige(!!m.fiche && typeof m.fiche.ordre === 'boolean' && Array.isArray(m.fiche.entrees) && m.fiche.entrees.length > 0, 'fiche')
   exige(['opposee', 'laterale'].includes(m.fuite), 'fuite')
   for (const k of ['sorties', 'abris']) exige(Array.isArray(m[k]) && m[k].every(nom), k)
   for (const k of ['fenetres', 'radio']) exige(Array.isArray(m[k]), k)

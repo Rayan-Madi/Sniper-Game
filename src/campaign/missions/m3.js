@@ -28,8 +28,16 @@ export default {
     civils: { nombre: [3, 5], exclure: ['mafia_woman_02', 'mafia_woman_03'] },
   },
   allure: { cibles: 0.7, gardes: 0.5, imprevisibles: true },
-  marqueurs: true,
-  fiche: null,
+  marqueurs: false,   // aucun marqueur après le tutoriel (M1) : la fiche du HUD et les signes du briefing (tâche A7)
+  // Les deux visages du quai 4 (briefing : CIBLE 01 · PRIORITÉ 1, CIBLE 02 · PRIORITÉ 2, et leurs SIGNE), dans l'ordre
+  // de tir du contrat : Vosko, puis Mira.
+  fiche: {
+    ordre: true,
+    entrees: [
+      { cibleId: 0, nom: 'VOSKO', role: 'LE PASSEUR', signe: 'COSTUME SOMBRE · CHEVEUX PLAQUÉS', portrait: 'passeur-cam' },
+      { cibleId: 1, nom: 'MIRA', role: 'LA SECONDE', signe: 'T-SHIRT CLAIR · CHIGNON', portrait: 'seconde-cam' },
+    ],
+  },
 
   fuite: 'opposee',
   sorties: [],

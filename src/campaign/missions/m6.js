@@ -27,8 +27,11 @@ export default {
   },
   allure: { cibles: 0.7, gardes: 0.5, imprevisibles: true },
   marqueurs: false,
+  // Ce que sait Anton (briefing : DANSE : NON, TÉLÉPHONE : OUI, VISAGE : ????) : ni nom ni photo. « Assis », que disait
+  // la fiche d'avant la tâche A7, n'est pas au briefing (rapport M6 du lot 3).
   fiche: {
-    texte: 'Aucune photo. Aucun nom. Une seule certitude : pendant que tout le monde danse... lui reste assis à négocier au téléphone.',
+    ordre: false,
+    entrees: [{ cibleId: 0, nom: '???', role: 'COMMANDITAIRE', signe: 'NE DANSE PAS · AU TÉLÉPHONE', portrait: null }],
   },
 
   fuite: 'laterale',   // dans l'appartement, on court vers la sortie latérale la plus proche

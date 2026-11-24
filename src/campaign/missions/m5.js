@@ -25,8 +25,13 @@ export default {
     civils: { nombre: 0 },
   },
   allure: { cibles: 1.0, gardes: 0.7, imprevisibles: true },
-  marqueurs: true,
-  fiche: null,
+  marqueurs: false,   // aucun marqueur après le tutoriel (M1) : la fiche du HUD et les signes du briefing (tâche A7)
+  // La fiche du briefing (NOM, GRADE, PHOTO : AUCUNE DEPUIS 1998, PLACE) : sans photo, sa place le désigne. Le
+  // sous-lot 3d l'assoit à l'avant droit de la jeep, côté passager, comme le dessine le briefing.
+  fiche: {
+    ordre: false,
+    entrees: [{ cibleId: 0, nom: 'KESSLER', role: 'COLONEL', signe: 'VÉHICULE 2 · PASSAGER', portrait: null }],
+  },
 
   fuite: 'opposee',
   sorties: [],

@@ -28,8 +28,17 @@ export default {
     civils: { nombre: [3, 5], exclure: ['mafia_woman_02'] },   // aucun sosie de Verne
   },
   allure: { cibles: 0.8, gardes: 0.6, imprevisibles: true },
-  marqueurs: true,
-  fiche: null,
+  marqueurs: false,   // aucun marqueur après le tutoriel (M1) : la fiche du HUD et les signes du briefing (tâche A7)
+  // Les trois officiers du briefing (CIBLE 1 à 3, leur grade), dans l'ordre de ses pastilles : Verne, Halder, Rossi.
+  // Leurs signes sont ceux de leurs portraits (spec du lot 3, §3) ; la planchette de Verne s'y ajoutera avec elle (3c).
+  fiche: {
+    ordre: true,
+    entrees: [
+      { cibleId: 0, nom: 'VERNE', role: 'COMMANDANT', signe: 'TAILLEUR BLEU NUIT · CHIGNON', portrait: 'mafia-woman-02' },
+      { cibleId: 1, nom: 'HALDER', role: 'CAPITAINE', signe: 'CASQUE NOIR', portrait: 'mafia-henchman' },
+      { cibleId: 2, nom: 'ROSSI', role: 'LIEUTENANT', signe: 'CHEVEUX COURTS · CHEMISE BLANCHE', portrait: 'mafia-woman-01' },
+    ],
+  },
 
   fuite: 'opposee',
   sorties: [],

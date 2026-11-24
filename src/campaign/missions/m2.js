@@ -28,8 +28,16 @@ export default {
     civils: { nombre: [3, 5], exclure: ['gangster_man_02'] },   // aucun sosie des frères
   },
   allure: { cibles: 0.6, gardes: 0.4, imprevisibles: false },
-  marqueurs: true,
-  fiche: null,
+  marqueurs: false,   // aucun marqueur après le tutoriel (M1) : la fiche du HUD et les signes du briefing (tâche A7)
+  // Les dossiers 02-A et 02-B du briefing (NOM, RÔLE, SIGNE), sans ordre de tir : « Enchaîne ». La sacoche de Luc s'y
+  // ajoutera avec elle (décision 10 de la spec du lot 3, sous-lot 3b).
+  fiche: {
+    ordre: false,
+    entrees: [
+      { cibleId: 0, nom: 'LUC SANCTECHAIR', role: 'L\'AÎNÉ', signe: 'POLO BLANC', portrait: 'freres-a' },
+      { cibleId: 1, nom: 'MARC SANCTECHAIR', role: 'LE CADET', signe: 'POLO BEIGE', portrait: 'freres-b' },
+    ],
+  },
 
   fuite: 'opposee',
   sorties: [],

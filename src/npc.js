@@ -228,9 +228,9 @@ export class NPC {
     }
     this.mesh.position.set(x, groundY, z)   // les pieds sur le sol de la carte, pas sous la dalle
     // Ombre : le rôle que montre le personnage, donné par qui le crée, sinon son rôle ; jamais le pool de son modèle
-    // (Verne, une cible au modèle du pool des civils, a l'ombre des cibles). Une cible sans marqueur, comme le
-    // commanditaire de M6, reçoit celle des civils (main.js) : sinon son ombre la distinguerait des danseurs quand seules
-    // les cibles et les gardes en ont une.
+    // (sans rôle donné, Verne, une cible au modèle du pool des civils, aurait l'ombre des cibles). Une cible sans
+    // marqueur (de M2 à M6, tâche A7 du lot 3) reçoit celle des civils (main.js) : sinon son ombre la distinguerait des
+    // civils quand seules les cibles et les gardes en ont une.
     this.shadowRole = shadowRole || (isGuard ? 'garde' : isTarget ? 'cible' : 'civil')
     this._shadowCasters = []
     this.mesh.traverse(o => { if (o.isMesh && o.castShadow) this._shadowCasters.push(o) })

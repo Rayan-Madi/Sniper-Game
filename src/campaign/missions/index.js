@@ -54,8 +54,14 @@
 //                « aucun modèle partagé » vaut par mission ; la foule de M6 partage exprès celui du commanditaire)
 //   allure       { cibles, gardes, imprevisibles } : le pas des PNJ (m/s), celui des cibles, que les civils suivent
 //                aussi, et celui des gardes ; imprevisibles : les cibles changent d'activité plus souvent (src/npc.js)
-//   marqueurs    le marqueur rouge au-dessus des cibles
-//   fiche        null, ou { texte } : la fiche de la cible dans le HUD (#target-dossier)
+//   marqueurs    le marqueur rouge au-dessus des cibles : en M1 seulement, le tutoriel (tâche A7). Sans marqueur, les
+//                cibles ont l'ombre des civils (mountLevel) : une ombre que les civils n'ont pas les désignerait
+//   fiche        { ordre, entrees } : la fiche des cibles dans le HUD (#target-dossier, src/campaign/fiche.js ; tâche
+//                A7). entrees : une par cible, { cibleId, nom, role, signe, portrait } : cibleId, l'indice de sa cible
+//                dans casting.cibles (le HUD la barre à sa mort, le lot 4 la retrouve par lui) ; nom, role et signe,
+//                ceux de son briefing ; portrait, le nom de l'image de son briefing (portrait(nom),
+//                src/campaign/portraits.js), ou null sans photo. ordre : les entrées suivent l'ordre de tir du
+//                briefing, numérotées dans le HUD (M3, M4)
 //   fuite        'opposee' : un PNJ fuit à l'opposé du tir ; 'laterale' : vers la sortie latérale la plus proche (±X)
 //   sorties, abris  noms d'ancres où une fuite fera échouer la mission (spec §2 f, tâche A8) ; aucune aujourd'hui : le
 //                cône de 80° décide (main.js, checkFledTargets)

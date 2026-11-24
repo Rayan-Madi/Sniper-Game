@@ -24,8 +24,13 @@ export default {
     civils: { nombre: [3, 5], exclure: ['mafia_woman_02'] },
   },
   allure: { cibles: 0.4, gardes: 0.3, imprevisibles: false },
-  marqueurs: true,
-  fiche: null,
+  marqueurs: true,   // le tutoriel : le marqueur rouge reste au-dessus de Markov, les autres missions n'en ont plus (tâche A7)
+  // Le dossier du briefing (NOM, ACTIVITÉ, SIGNE) : la fiche y fait le tutoriel des signes, que les missions suivantes
+  // jouent sans marqueur. « Il téléphone » s'y ajoutera avec l'appel de Markov (sous-lot 3b).
+  fiche: {
+    ordre: false,
+    entrees: [{ cibleId: 0, nom: 'MARKOV', role: 'TRAITE HUMAINE', signe: 'COSTUME BLEU NUIT', portrait: 'gangster-man-01' }],
+  },
 
   fuite: 'opposee',
   sorties: [],

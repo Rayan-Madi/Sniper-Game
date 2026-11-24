@@ -11,9 +11,9 @@ import { MAIN_SRC, executer } from '../gfx/mainSource.js'
 //   Marc et le polo sombre du commanditaire (sur leur seul maillage, Ch01_Shirt) ;
 // - les gardes de M4 sont en mafia_boss, l'armure sable de sa texture (décision 5) ; les autres, dans le pool des gardes ;
 // - aucun civil n'a le modèle d'un sosie écarté par sa mission (civils.exclure) ;
-// - l'ombre des cibles est celle d'aujourd'hui : celle des cibles en M1 à M5, qui ont leur marqueur, celle des civils
-//   pour le commanditaire de M6, sans marqueur (la tâche A7 retire les marqueurs à partir de M2) ; Verne, au modèle du
-//   pool des civils, garde celle des cibles.
+// - l'ombre des cibles suit leur marqueur (tâche A7) : celle des cibles en M1, le tutoriel, qui a le sien ; celle des
+//   civils de M2 à M6, sans marqueur (tests/campaign/main.identification.test.js). La mission donne ce rôle d'ombre à
+//   la cible (shadowRole), jamais pris au pool de son modèle (Verne : tests/gfx/npc.shadows.test.js).
 // Une mission qui cite un modèle que le jeu n'a pas ne se monte pas : l'erreur nomme le modèle.
 //
 // Témoin : sur le main.js et les missions d'avant la tâche (commit 201da61), Markov n'a son modèle qu'une fois sur
@@ -95,7 +95,7 @@ const VISAGES = {
   4: ['mafia_woman_02', 'mafia_henchman', 'mafia_woman_01'], 5: ['mafia_boss'], 6: ['gangster_man_02'],
 }
 const POLOS = { 2: [{}, { Ch01_Shirt: 'd9c19a' }], 6: [{ Ch01_Shirt: '3a3f4a' }] }
-const OMBRES = { 1: 'cible', 2: 'cible', 3: 'cible', 4: 'cible', 5: 'cible', 6: 'civil' }
+const OMBRES = { 1: 'cible', 2: 'civil', 3: 'civil', 4: 'civil', 5: 'civil', 6: 'civil' }
 const EXCLUS = { 1: ['mafia_woman_02'], 2: ['gangster_man_02'], 3: ['mafia_woman_02', 'mafia_woman_03'], 4: ['mafia_woman_02'], 5: [], 6: [] }
 const CIVILS = ['gangster_man_02', 'mafia_woman_02', 'mafia_woman_03']
 

@@ -27,6 +27,7 @@ import { rankFor, precisionOf, isHit } from './campaign/rank.js'
 import { levelShortcut } from './campaign/shortcuts.js'
 import { stepConvoy, releaseConvoy, abscisseConvoi, supportDuTir } from './campaign/convoy.js'
 import { buildMoralLock, releaseMoralLock } from './campaign/lock.js'
+import { afficherFiche, barrerCible } from './campaign/fiche.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
 import { PRESETS, presetFor, createResolutionController, npcCastsShadow } from './gfx/quality.js'
@@ -138,6 +139,7 @@ const hudTargets   = document.getElementById('hud-targets')
 const hudScore     = document.getElementById('hud-score')
 const hudLevel     = document.getElementById('hud-level')
 const killFeed     = document.getElementById('kill-feed')
+const dossierEl    = document.getElementById('target-dossier')   // la fiche des cibles (src/campaign/fiche.js)
 const instruction  = document.getElementById('instruction')
 const loadingScreen = createLoadingScreen(document.getElementById('loading-screen'))   // PRÉPARATION DU DOSSIER
 
@@ -570,15 +572,9 @@ function startLevel(n, prep = null) {
   alertBanner.style.display = 'none'
   startMissionAmbience({ rain: !!currentMapInfo.rain })   // nappe sonore de tension pendant la mission, et la pluie du port
 
-  // Fiche de la cible dans le HUD (aujourd'hui, la cible à identifier de M6)
-  const fiche = currentMission.fiche
-  const dossier = document.getElementById('target-dossier')
-  if (fiche && dossier) {
-    document.getElementById('dossier-text').textContent = fiche.texte
-    dossier.style.display = 'block'
-  } else if (dossier) {
-    dossier.style.display = 'none'
-  }
+  // Fiche des cibles dans le HUD (spec du lot 3, §2 e) : une entrée par cible, son portrait, son nom et le signe de son
+  // briefing ; sans marqueur après le tutoriel, c'est elle qui les fait reconnaître. Vierge à chaque départ.
+  afficherFiche(dossierEl, currentMission)
 
   updateHUD()
   gamePhase = 'playing'
@@ -660,7 +656,7 @@ function mountLevel(n) {
       // Son visage (spec du lot 3, §2 d) : le modèle de son portrait, cherché dans tous les pools, sans tirage ni
       // retombée (une erreur si la mission cite un modèle que le jeu n'a pas), sans teinte sauf mention
       casting: { model: c.modele, strict: true, teinte: c.teinte ?? 0xffffff, teinteMaillage: c.teinteMaillage },
-      // Sans marqueur, l'ombre des civils : une ombre que les civils n'ont pas la désignerait (le commanditaire de M6)
+      // Sans marqueur (de M2 à M6, tâche A7), l'ombre des civils : une ombre que les civils n'ont pas la désignerait
       shadowRole: m.marqueurs ? 'cible' : 'civil',
       female: c.femme,   // le personnage de secours, sans modèle chargé
     })
@@ -1103,6 +1099,8 @@ function killCivilian(npc) {
 
 function killTarget(npc, part = 'torse') {
   npc.die()
+  // Son entrée de la fiche barrée, retrouvée par son cibleId (d'un coup en effets atténués)
+  barrerCible(dossierEl, npc.cibleId, { anime: !effectsReduced() })
   // Plus de bip de confirmation : le son de l'impact sur la chair confirme la touche (resolveBullet)
   // Cible en mouvement (véhicule) = tir difficile = plus de points ; tête ×2, torse ×1, membre ×0,6 (src/shot/score.js)
   const bonus = targetScore({ onVehicle: npc.onVehicle, still: npc.isStill(), part })
