@@ -30,7 +30,8 @@ export default {
   allure: { cibles: 0.8, gardes: 0.6, imprevisibles: true },
   marqueurs: false,   // aucun marqueur après le tutoriel (M1) : la fiche du HUD et les signes du briefing (tâche A7)
   // Les trois officiers du briefing (CIBLE 1 à 3, leur grade), dans l'ordre de ses pastilles : Verne, Halder, Rossi.
-  // Leurs signes sont ceux de leurs portraits (spec du lot 3, §3) ; la planchette de Verne s'y ajoutera avec elle (3c).
+  // Leurs signes sont ceux de leurs portraits (spec du lot 3, §3), sans la planchette de Verne : le plan de 3c la lui
+  // donne (tâche 3c.10) sans changer son signe ici ; à y ajouter (spec, précisions de la tâche A7 ; plan du lot 3a, A9).
   fiche: {
     ordre: true,
     entrees: [

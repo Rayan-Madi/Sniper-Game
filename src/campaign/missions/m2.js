@@ -29,8 +29,9 @@ export default {
   },
   allure: { cibles: 0.6, gardes: 0.4, imprevisibles: false },
   marqueurs: false,   // aucun marqueur après le tutoriel (M1) : la fiche du HUD et les signes du briefing (tâche A7)
-  // Les dossiers 02-A et 02-B du briefing (NOM, RÔLE, SIGNE), sans ordre de tir : « Enchaîne ». La sacoche de Luc s'y
-  // ajoutera avec elle (décision 10 de la spec du lot 3, sous-lot 3b).
+  // Les dossiers 02-A et 02-B du briefing (NOM, RÔLE, SIGNE), sans ordre de tir : « Enchaîne ». Sans la sacoche de
+  // Luc (décision 10 de la spec du lot 3) : le plan de 3b l'écrit ici à sa tâche 3b.10, mais aucune tâche ne la pose
+  // sur Luc ; reste à attribuer (spec, précisions de la tâche A7 ; plan du lot 3a, tâche A9).
   fiche: {
     ordre: false,
     entrees: [
