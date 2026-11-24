@@ -40,6 +40,56 @@ export const ECOUTE = {
   voixBipeesMax: 3,     // au plus trois voix bipées à la fois : la sous-titrée et les deux suivantes
 }
 
+// ─── Les voix bipées (§3.2, §3.4) ──────────────────────────────────
+// Chaque personne parle en bips (src/bar/voix.js), sur la recette de la voix des cinématiques (src/briefing/sound.js:51-63),
+// mais au temps de jeu (update) et tirée à graine. À chaque pas (pasS divisé par le débit), la voix se tait un moment
+// (pauses), laisse passer le pas (saut) ou dit une syllabe : une dent de scie de hauteur tirée entre f0Min et f0Max, qui
+// part jusqu'à glissement au-dessus et retombe à chute, d'une durée et d'une crête tirées dans leurs bornes ; puis le
+// timbre de la personne (un passe-bande et un passe-bas fixes) et son niveau. Ce que l'écoute en laisse (gain selon la
+// distance et les murs, coupure, panoramique : reglageBips de src/bar/voix.js) suit, dans la chaîne de la personne.
+const VOIX_SALLE = {    // une voix de la salle, sans filtre de radio : le timbre « phone » de sound.js
+  f0Min: 100,           // hauteur la plus basse d'une syllabe (Hz)
+  f0Max: 175,           // la plus haute (Hz)
+  debit: 1,             // pas par seconde rapportés à 8 (un pas toutes les 0,125 s, sound.js:51) : plus, plus rapide
+  pauses: 0.12,         // probabilité, à chaque pas, de se taire un moment : plus, plus rare
+  pauseS: [0.25, 0.65], // durée d'un de ces silences (s)
+  saut: 0.2,            // probabilité de laisser passer un pas sans syllabe
+  syllabeS: [0.05, 0.16],   // durée d'une syllabe (s) : plus court, plus haché
+  glissement: 0.25,     // une syllabe part jusqu'à 25 % au-dessus de sa hauteur…
+  chute: 0.85,          // … et retombe à 85 % de sa hauteur…
+  chuteS: 0.11,         // … en ce temps (s) : l'intonation d'une syllabe
+  attaqueS: 0.015,      // montée d'une syllabe jusqu'à sa crête (s)
+  crete: [0.5, 0.9],    // crête d'une syllabe, tirée entre ces bornes : un écart large fait des éclats
+  bande: { hz: 950, q: 0.8 },   // passe-bande du timbre : là où la voix sonne
+  passeBas: 2600,       // passe-bas du timbre (Hz) : plus bas, plus sourd
+  niveau: 0.45,         // niveau de la voix entendue de près, sans mur (gain de l'écoute à 1)
+}
+const voix = plus => ({ ...VOIX_SALLE, ...plus })
+export const VOIX = {
+  pasS: 0.125,          // un pas, au débit 1 : une syllabe peut partir à chaque pas
+  seuilGain: 0.001,     // sous ce gain, une voix ne bipe pas (on ne l'entendrait pas), mais sa réplique avance
+  retardMaxS: 0.05,     // une syllabe due depuis plus longtemps (un grand pas de temps) ne sonne pas : jamais de rafale
+  lissageS: 0.03,       // constante de temps des réglages de la chaîne : gain, coupure, panoramique sans craquement (s)
+  coupureOuverteHz: 18000,   // la coupure d'une voix quand l'appelant n'en donne pas (Viktor : rien ne l'assourdit)
+  defaut: VOIX_SALLE,
+  timbres: {            // une voix par personne (§3.2), aux clés de PERSONNES (src/bar/textes.js)
+    fernand: voix({ f0Min: 85, f0Max: 110, debit: 0.75 }),             // lent
+    dussart: voix({ f0Min: 78, f0Max: 100, syllabeS: [0.04, 0.09] }),  // syllabes courtes
+    lenoir: voix({ f0Min: 120, f0Max: 160, debit: 1.3 }),              // rapide
+    mattei: voix({ f0Min: 100, f0Max: 130, crete: [0.3, 1] }),         // éclats
+    haas: voix({ f0Min: 60, f0Max: 80, pauses: 0.35 }),                // rare
+    sorel: voix({ f0Min: 95, f0Max: 120, pauses: 0.05, saut: 0.1, syllabeS: [0.08, 0.12] }),   // régulier
+    lise: voix({ f0Min: 190, f0Max: 260, debit: 1.3, bande: { hz: 1150, q: 0.8 } }),           // rapide, la seule voix de femme
+    albert: voix({ f0Min: 90, f0Max: 120 }),
+    // le combiné du téléphone : le timbre « phone », plus grave (100 à 175 Hz dans sound.js), bande étroite et nasillarde
+    colonel: voix({ f0Min: 70, f0Max: 100, bande: { hz: 1000, q: 1.6 } }),
+    'ouvrier-1': voix({ f0Min: 95, f0Max: 150, bande: { hz: 700, q: 0.7 }, passeBas: 900 }),   // bruit de salle, comme le brouhaha
+    'ouvrier-2': voix({ f0Min: 110, f0Max: 180, bande: { hz: 700, q: 0.7 }, passeBas: 900 }),
+    // Viktor : la voix intérieure des cinématiques (« inner », sound.js:54-58), qu'aucun mur n'assourdit
+    viktor: voix({ f0Min: 72, f0Max: 107, bande: { hz: 700, q: 0.8 }, passeBas: 1600, niveau: 0.4 }),
+  },
+}
+
 // ─── Le regard qui fixe (§3.5) ─────────────────────────────────────
 // Viktor fixe une personne (src/bar/regard.js) quand le centre de l'écran est à moins de atan(rayonTeteM / d) + margeDeg
 // de sa tête (d : la distance), qu'elle le voit et qu'elle n'est pas son interlocuteur. Son temps de fixation monte tant
@@ -180,4 +230,96 @@ export const CONVOI = {
   },
   pointsParRenseignement: 50,   // bonus du rapport par renseignement (§5.3) ; le +100 d'un bar sans MÉFIANCE vient de la
                         // couverture, hors de ce contrat (tâche B17)
+}
+
+// ─── Le son de la salle (§3.12) ────────────────────────────────────
+// La salle du Bivouac (src/bar/son.js) : brouhaha, verres, juke-box, tiercé à la télé, clochette et porte, sonnerie du
+// téléphone, cœur, NOTÉ, pas, et sa réverbération. Tout est procédural, tiré à graine, et n'avance que par update(dt) ;
+// en pause, plus de syllabes, et la musique 10 dB plus bas. Les sons ponctuels reprennent les recettes du kit des
+// cinématiques (tone et noise de src/briefing/sound.js) et de l'enquête (src/prologue/ambience.js).
+export const SON = {
+  graine: 0x0b1fa0c5,   // graine du hasard de la salle : la même soirée sonne pareil d'une partie à l'autre
+  lissageS: 0.03,       // constante de temps des réglages continus (juke-box, télé) : pas de craquement (s)
+  reverberation: {
+    acoustique: 'interieur',   // réponse impulsionnelle de src/shot/acoustics.js : une pièce, courte et sourde
+    envoiDb: -20,       // part des voix et des verres envoyée dans la réverbération (dB)
+  },
+  brouhaha: {           // la salle qui parle, continue : trois générateurs de syllabes et un lit de bruit sourd
+    timbre: voix({ f0Min: 90, f0Max: 220, bande: { hz: 700, q: 0.7 }, passeBas: 900, niveau: 0.3 }),   // un générateur
+    pans: [-0.6, 0, 0.6],   // un générateur par panoramique : la salle à gauche, devant, à droite
+    lit: { passeBas: 400, niveau: 0.05 },   // le lit de bruit sous les syllabes : coupé à 400 Hz, son niveau
+    niveau: 0.5,        // niveau du brouhaha, salle pleine, au calme
+    presentsPlein: 8,   // présents d'une salle pleine : le niveau suit présents / 8, plafonné à 1
+    canard: [           // le soupçon fait taire la salle : facteur du niveau dès que S atteint « des » (le plus haut d'abord)
+      { des: 85, facteur: 0.35 },
+      { des: SOUPCON.paliers.soupcon.monte, facteur: 0.7 },
+    ],
+    demasque: { facteur: 0.1, dureeS: 0.8 },   // démasqué : la salle se tait, à 0,1 de son niveau en 0,8 s (§3.10)
+    lissageS: 0.3,      // constante de temps des autres changements de niveau du brouhaha (s)
+  },
+  verres: {             // un verre qui tinte quelque part dans la salle
+    partielsHz: [2600, 3900, 5300],   // trois partiels sinus
+    amplitudes: [1, 0.55, 0.3],       // le plus grave domine
+    niveau: 0.04,       // niveau du premier partiel
+    declinS: [0.25, 0.4],   // déclin d'un tintement, tiré entre ces bornes (s)
+    intervalleS: [3, 8],    // d'un verre au suivant, tiré entre ces bornes (s)
+    panMax: 0.6,        // panoramique tiré entre −panMax et panMax
+  },
+  jukebox: {            // la musique du juke-box (recette de music, sound.js:78-96), continue, même en pause
+    accords: [          // quatre accords en la mineur (la m, ré m, fa, mi) : basse et nappe (Hz)
+      { basse: 110, notes: [220, 261.63, 329.63] },
+      { basse: 73.42, notes: [220, 293.66, 349.23] },
+      { basse: 87.31, notes: [220, 261.63, 349.23] },
+      { basse: 82.41, notes: [207.65, 246.94, 329.63] },
+    ],
+    bpm: 84,            // tempo de la basse : un coup par temps
+    tempsParAccord: 4,  // temps par accord : une mesure de 2,86 s
+    motif: [1, 1, 1.5, 1],   // la basse de chaque temps : fondamentale, fondamentale, quinte, fondamentale
+    nappe: 0.05,        // niveau de chaque note de la nappe (sound.js:93)
+    nappeAttaqueS: 0.9, // montée de la nappe (sound.js:89) (s)
+    basse: 0.12,        // niveau de la basse en triangle
+    basseS: 0.45,       // durée d'une note de basse (s)
+    craquements: { parS: 6, niveau: 0.3, souffle: 0.008, boucleS: 3 },   // le disque : clics par seconde, leur niveau, le souffle, la boucle (s)
+    coupure: { baseHz: 450, plageHz: 3000 },   // passe-bas 450 + 3 000 × T Hz : les murs et la salle l'assourdissent
+    niveau: 0.6,        // niveau du juke-box
+    pauseDb: -10,       // en pause, la musique continue, baissée d'autant (dB)
+    avanceS: 0.1,       // les notes se programment ce temps à l'avance sur l'horloge audio : un tempo sans à-coups (s)
+  },
+  tierce: {             // la télé à tube : le tiercé, une voix rapide et nasillarde, par bouffées
+    timbre: voix({ f0Min: 140, f0Max: 230, debit: 1.6, pauses: 0.04, saut: 0.1, bande: { hz: 1800, q: 3 }, passeBas: 3500, niveau: 0.18 }),
+    bouffeeS: [4, 9],   // durée d'une bouffée du commentateur, tirée entre ces bornes (s)
+    silenceS: [6, 15],  // silence entre deux bouffées, tiré entre ces bornes (s)
+  },
+  clochette: {          // la clochette de la porte : entrées, départ
+    partielsHz: [1900, 2600], amplitudes: [0.07, 0.045], dureeS: 0.6,   // deux partiels sinus, leur niveau, leur durée (s)
+    grincement: {       // le grincement de la porte de l'enquête (ambience.js:92)
+      bruit: { hz: 520, finHz: 240, q: 9, dureeS: 1.6, niveau: 0.07 },
+      ton: { hz: 95, finHz: 70, dureeS: 1.3, niveau: 0.03 },
+    },
+  },
+  sonnerie: {           // le téléphone mural : une sonnerie à cloche, frappée par son marteau (trois à 273 s, B6)
+    partielsHz: [1180, 1520],   // les deux timbres de la cloche
+    dureeS: 1,          // durée d'une sonnerie (s)
+    frappesParS: 20,    // coups de marteau par seconde
+    niveau: 0.05,       // niveau d'un coup
+    reste: 0.15,        // ce que la cloche garde de son niveau entre deux coups
+  },
+  coeur: {              // le battement du kit (heart, sound.js:122), dès SOUPÇON
+    coups: [            // les deux coups d'un battement : hauteur, glissée jusqu'à finHz, durée, crête, retard (s)
+      { hz: 58, finHz: 40, dureeS: 0.16, crete: 0.8, retardS: 0 },
+      { hz: 52, finHz: 36, dureeS: 0.2, crete: 0.6, retardS: 0.22 },
+    ],
+    niveau: 0.6,        // le cœur de l'enquête (HEART_GAIN, src/prologue/ambience.js)
+    intervalleS: [1.1, 0.6],   // d'un battement au suivant : 1,1 s à S = soupcon[0], 0,6 s à soupcon[1], linéaire entre
+    soupcon: [SOUPCON.paliers.soupcon.monte, SOUPCON.paliers.demasque.monte],
+  },
+  note: {               // NOTÉ : le papier (paper, sound.js:115) et le crayon qui gratte
+    papier: { hz: 2200, finHz: 3800, q: 0.8, dureeS: 0.22, niveau: 0.12 },
+    crayon: { hz: 3500, q: 2, dureeS: 0.3, traits: 3, niveau: 0.05, retardS: 0.12 },   // traits : trois coups de crayon
+  },
+  pas: {                // un pas de Viktor (amb.step, ambience.js:96), sur le parquet
+    bruit: { hz: 420, dureeS: 0.07, niveau: 0.1 },
+    ton: { hz: 68, dureeS: 0.09, niveau: 0.12 },
+    bois: { hz: 1100, q: 4, dureeS: 0.03, niveau: 0.03 },   // le parquet qui claque un peu
+  },
 }
