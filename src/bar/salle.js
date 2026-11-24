@@ -605,8 +605,9 @@ export function creerSalle({ attenue = false } = {}) {
     lueur(vertical(largeur + 0.6, 0.9, E.minX + 0.022, yc, zc, 'x+'), 0x5a2206, false)
   }
 
-  // ── les tabourets du zinc et les chaises : un siège dessiné sur chaque siège du plan ──
-  for (const s of SIEGES) {
+  // ── les tabourets du zinc et les chaises : un siège dessiné sur chaque siège du plan, sauf sur la banquette (Dussart,
+  // tâche B10), qui est elle-même l'assise ──
+  for (const s of SIEGES.filter(x => !x.banquette)) {
     const place = { x: s.x, z: s.z, ry: s.lacet }
     if (s.type === 'tabouret') {
       add(M.skai, new THREE.CylinderGeometry(0.18, 0.17, 0.07, 18).translate(0, s.hauteur - 0.035, 0), place)

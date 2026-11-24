@@ -176,6 +176,17 @@ describe('la salle du Bivouac : ce qu\'on voit est ce qui arrête', () => {
     salle.dispose()
   })
 
+  // B10 : Dussart s'assoit sur la banquette (A-sud) ; le décor y garde la banquette seule, son assise à 0,45 m
+  it('aucune chaise sur la banquette : le siège de Dussart est son assise', () => {
+    const salle = creerSalle()
+    const s = SIEGES.find(x => x.banquette)
+    expect(s.id).toBe('A-sud')
+    expect(Math.abs(hauteurSous(salle, s.x, s.z, 1.3) - 0.45)).toBeLessThan(0.03)
+    // derrière lui, là où serait le dossier d'une chaise (0,2 m, jusqu'à 0,85 m), l'assise de la banquette seule
+    expect(hauteurSous(salle, s.x, s.z + 0.2, 1.3)).toBeLessThan(0.5)        // témoin : une chaise posée sur la banquette
+    salle.dispose()
+  })
+
   it('la porte de l\'arrière-cuisine est entrouverte, sur son pivot, du côté de la cuisine', () => {
     const salle = creerSalle()
     const p = salle.porteCuisine

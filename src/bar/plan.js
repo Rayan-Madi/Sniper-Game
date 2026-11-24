@@ -71,11 +71,11 @@ export const SIEGES = Object.freeze([
   chaise('C', 'nord'), chaise('C', 'sud'), chaise('C', 'ouest'),
   chaise('D', 'ouest'),                                  // la place d'écoute de la table A, tournée vers la télé
   chaise('D', 'nord', 'albert', TELE),                   // Albert regarde la course
-  // Dussart, face à la porte, mais adossé à rien : « dos au mur, face à la porte » (spec §3.2) n'est tenu par aucune
-  // chaise de A, la porte étant dans le mur de la vitrine. Place provisoire, à reprendre avec B9 et B10 (A-sud contre
-  // la vitrine, ou une banquette), puis relancer le tableau des places (spec §3.1, « Réglé en B2 »).
-  chaise('A', 'ouest', 'dussart', PORTE),
-  chaise('A', 'nord', 'lenoir'),                         // Lenoir, dos à la salle
+  // Dussart, dos au mur : sur la banquette de skaï sous la vitrine (tâche B10), tourné vers sa table, il voit toute la
+  // salle, la place d'écoute de la table A comprise ; « face à la porte » (§3.2) n'est tenu par aucune place de A, la
+  // porte étant dans le mur de la vitrine (à 106° de sa face). Pas de chaise : la banquette est à 0,45 m.
+  Object.freeze({ ...chaise('A', 'sud', 'dussart'), banquette: 'banquette-A' }),
+  chaise('A', 'nord', 'lenoir'),                         // Lenoir, en face de lui, dos à la salle
   chaise('B', 'nord', 'haas'),                           // Haas, face à la salle
   chaise('B', 'sud', 'mattei'),                          // Mattei, dos à la salle
 ])
@@ -242,4 +242,53 @@ export function coupe(a, b, boite) {
 // Rien n'arrête la vue de a à b : ni mur, ni cloison, ni porte (un meuble, une personne la laissent passer).
 export function vueLibre(a, b, boites = BOITES) {
   return !boites.some(boite => boite.son !== 'meuble' && coupe(a, b, boite))
+}
+
+// ─── Les itinéraires de qui marche (tâche B10) ─────────────────────
+// Lise, Sorel et Fernand vont d'un arrêt à l'autre par des points de passage (src/bar/patrons.js les y fait marcher,
+// par moveCircle). Un tronçon est libre si l'emprise du marcheur (un carré de demi-côté `rayon`, comme moveCircle) ne
+// chevauche aucune boîte tout du long : le segment ne coupe aucune boîte grossie du rayon, hors celles qui contiennent
+// déjà l'un de ses bouts (on en sort toujours). Le plus court chemin passe par les points de passage ; ceux qui sont en
+// zone interdite (derrière le zinc) ne servent qu'à qui part de cette zone ou y va : Fernand, jamais Lise ni Sorel.
+
+export const PASSAGES = Object.freeze([
+  point(-3.3, -3.6, { id: 'zinc-nord' }),        // au bout nord du zinc, devant le téléphone et le sas du couloir
+  point(-5.0, -3.7, { id: 'derriere-nord' }),    // derrière le zinc, à son bout nord (zone interdite : Fernand)
+  point(0.3, -2.4, { id: 'nord' }),              // au nord de la table C
+  point(0.9, 0.0, { id: 'centre' }),             // entre le baby-foot et la table C
+  point(3.3, -1.5, { id: 'est' }),               // entre la table C et la table B
+  point(3.2, 0.3, { id: 'centre-est' }),         // entre la table C et la table d'Albert
+  point(0.6, 2.1, { id: 'centre-sud' }),         // entre le baby-foot et la table A
+  point(3.2, 2.3, { id: 'porte-salle' }),        // entre la porte et la table d'Albert
+])
+
+const grossir = (b, r) => ({ minX: b.minX - r, maxX: b.maxX + r, minZ: b.minZ - r, maxZ: b.maxZ + r })
+const dansBoite = (p, b) => p.x > b.minX && p.x < b.maxX && p.z > b.minZ && p.z < b.maxZ
+
+// Les points à suivre de `de` à `vers` ({ x, z }), sans `de`, jusqu'à `vers` ; [] si l'on y est déjà ; null si aucun
+// chemin n'existe. rayon : l'emprise du marcheur ; boites : ce qui l'arrête (les boîtes du plan par défaut).
+export function itineraire(de, vers, { rayon = 0.25, boites = BOITES } = {}) {
+  if (de.x === vers.x && de.z === vers.z) return []
+  const interdit = dansZone('interdite', de) || dansZone('interdite', vers)
+  const noeuds = [de, ...PASSAGES.filter(p => interdit || !dansZone('interdite', p)), vers]
+  const grosses = boites.map(b => grossir(b, rayon))
+  const libre = (a, b) => !grosses.some(g => !dansBoite(a, g) && !dansBoite(b, g) && coupe(a, b, g))
+  // Dijkstra sur le graphe de visibilité (une dizaine de nœuds)
+  const n = noeuds.length, dist = new Array(n).fill(Infinity), avant = new Array(n).fill(-1), fait = new Array(n).fill(false)
+  dist[0] = 0
+  for (;;) {
+    let i = -1
+    for (let k = 0; k < n; k++) if (!fait[k] && dist[k] < Infinity && (i < 0 || dist[k] < dist[i])) i = k
+    if (i < 0 || i === n - 1) break
+    fait[i] = true
+    for (let k = 0; k < n; k++) {
+      if (fait[k] || !libre(noeuds[i], noeuds[k])) continue
+      const d = dist[i] + Math.hypot(noeuds[k].x - noeuds[i].x, noeuds[k].z - noeuds[i].z)
+      if (d < dist[k]) { dist[k] = d; avant[k] = i }
+    }
+  }
+  if (dist[n - 1] === Infinity) return null
+  const chemin = []
+  for (let k = n - 1; k > 0; k = avant[k]) chemin.unshift({ x: noeuds[k].x, z: noeuds[k].z })
+  return chemin
 }

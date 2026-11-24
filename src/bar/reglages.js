@@ -371,3 +371,61 @@ export const DECOR = {
   },
   ventilateur: { toursParS: 0.7 },   // le ventilateur du plafond : tours par seconde (au temps de jeu)
 }
+
+// ─── Les patrons (§3.2) ────────────────────────────────────────────
+// Les personnes du Bivouac (src/bar/patrons.js) : qui joue qui, et comment le corps bouge par-dessus les clips des
+// modèles (les 7 GLB ont les mêmes 20 clips). La teinte remplace la couleur des matériaux de la personne (copiés), qui
+// multiplie leur texture, comme dans characters.js (blanc : la texture telle quelle) ; avec la pénombre et le tablier,
+// elles écartent les sosies (§12, risque 1) : à juger sur captures.
+export const PATRONS = {
+  graine: 0x0b1fb10a,   // graine du casting : tailles, instants et vitesses des clips, la même salle à chaque montage
+  casting: [            // dix personnes (§8 : ≤ 10, ≤ 300 000 triangles, ≤ 40 maillages animés, aucun gangster_man_01)
+    // siege : un siège de SIEGES (src/bar/plan.js) ; poste : une ancre de ANCRES où la personne se tient debout
+    { role: 'fernand', modele: 'gangster_man_02', teinte: 0xd6cfc6, poste: 'fernand', accessoire: 'verre' },   // âgé, il essuie un verre
+    { role: 'dussart', modele: 'mafia_boss', teinte: 0xd9d6d0, siege: 'A-sud' },          // dos au mur, sur la banquette
+    { role: 'lenoir', modele: 'mafia_boss', teinte: 0xffffff, siege: 'A-nord' },          // teinte claire : la texture telle quelle
+    { role: 'mattei', modele: 'mafia_boss', teinte: 0xcfcbd6, siege: 'B-sud', accessoire: 'cartes' },
+    { role: 'haas', modele: 'mafia_boss', teinte: 0xc9cec2, siege: 'B-nord', accessoire: 'cartes' },
+    { role: 'sorel', modele: 'mafia_boss', teinte: 0x8e8e98, poste: 'sorel.entree', absent: true },   // sombre ; entre à 18:30
+    { role: 'lise', modele: 'mafia_woman_03', teinte: 0xffffff, poste: 'lise.zinc', lacet: Math.PI / 2, accessoire: 'tablier' },
+    { role: 'albert', modele: 'gangster_man_02', teinte: 0xc4bcaf, siege: 'D-nord' },     // face à la télé
+    { role: 'ouvrier-1', modele: 'gangster_man_02', teinte: 0xaebccb, poste: 'ouvriers.0', accessoire: 'verre' },   // bleu de travail
+    { role: 'ouvrier-2', modele: 'gangster_man_02', teinte: 0xcbb99f, poste: 'ouvriers.1', accessoire: 'verre' },
+  ],
+  clips: {
+    assis: { chaise: 'Sit', banquette: 'Talk', tabouret: 'Talk' },   // le clip d'une personne assise, selon son siège
+    debout: 'Idle',     // debout, sur place
+    marche: 'Walk',     // en marche
+    gestes: ['Look', 'Point', 'Threaten', 'Wave'],   // sur ordre, le haut du corps seul (le bas garde sa pose)
+    vitesse: [0.92, 1.08],   // vitesse d'un clip, tirée à graine entre ces bornes : personne ne bouge en même temps
+    fonduS: 0.35,       // passage d'un clip à l'autre (s), en courbe douce, sans à-coup
+  },
+  assise: {             // le corps posé sur son siège (chaise 0,45 m, tabouret 0,75 m, banquette 0,45 m)
+    enfoncementM: 0.025,   // il s'y enfonce au plus de tant : la planche de la chaise (3 cm) cache le dessous des cuisses
+    rayonM: 0.2,        // l'assise, autour du bassin : ce qui la touche (le bas des fesses et des cuisses)
+  },
+  tete: {               // la tête tournée par-dessus le clip (os Head et Neck), vers l'interlocuteur ou vers Viktor
+    maxDeg: 70,         // jamais plus loin de la face du corps
+    tangageMaxDeg: 25,  // vers le haut ou vers le bas
+    reponseS: 0.45,     // le temps de tourner la tête vers ce qu'elle suit (ressort amorti : départ et arrivée en douceur)
+    partCou: 0.4,       // la part du cou dans la rotation, le reste à la tête
+    hochementDeg: 4,    // qui parle hoche la tête de tant…
+    hochementHz: 1.7,   // … à ce rythme
+  },
+  marche: {
+    vitesse: 1.1,       // m/s : Lise et Sorel marchent sans se presser (Viktor : 1,6 m/s)
+    vitesseClip: 1.25,  // m/s qu'avance le clip Walk à sa vitesse (estimé) : le pas suit le sol ; à juger sur la marche
+                        // de Lise (risque 5 : la marche qui glisse)
+    rayonM: 0.25,       // l'emprise au sol de qui marche (moveCircle, itinéraires)
+    virageS: 0.3,       // le temps de se tourner vers où l'on va
+    arriveeM: 0.03,     // arrivé à un point de passage à moins de tant
+    bloqueS: 0.8,       // retenu par une boîte sans avancer pendant tant : la marche s'arrête (bloque)
+  },
+  lever: { dureeS: 0.9, demi: 0.5 },   // se lever ou s'asseoir (s) ; « il se lève à demi » : la pose debout à moitié
+  ombre: {              // l'ombre de contact peinte sous chacun (aucun personnage ne projette d'ombre : §3.2, §8)
+    assis: [0.8, 1.0],  // largeur et profondeur (m) sous une personne assise, ses pieds devant elle
+    debout: [0.6, 0.6], // sous une personne debout
+    opacite: 0.5,       // au plus noir, sous le bassin : une ombre douce, pas une tache
+  },
+  capsule: { rayonM: 0.22, hauteurM: 1.0, sousTeteM: 0.4 },   // ce qu'on vise (E) : 1 m centré 0,4 m sous la tête, d'au-dessus d'elle au buste
+}

@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { moveCircle, forwardOf } from '../../src/prologue/fpsController.js'
 import {
-  SALLE, SONS, BOITES, ZONES, TYPES_SIEGE, SIEGES, TABLES, PLACES, FOYERS, ANCRES, dansZone, zonesDe, coupe, vueLibre, lacetVers,
+  SALLE, SONS, BOITES, ZONES, TYPES_SIEGE, SIEGES, TABLES, PLACES, FOYERS, ANCRES, PASSAGES, dansZone, zonesDe, coupe, vueLibre,
+  lacetVers, itineraire,
 } from '../../src/bar/plan.js'
+import { voitViktor } from '../../src/bar/regard.js'
 
 // Le plan du Bivouac (spec docs/superpowers/specs/2026-10-28-m5-bar-design.md §3.1 ; plan
 // docs/superpowers/plans/2026-10-28-m5-bar.md, tâche B2). Chaque test de comportement a été vu rouge sur le témoin écrit
@@ -152,7 +154,7 @@ describe('les sièges et les places', () => {
   })
 
   it('un siège regarde sa table, le tabouret le zinc', () => {
-    for (const s of SIEGES.filter(x => x.table !== 'zinc' && x.occupant !== 'albert' && x.occupant !== 'dussart')) {
+    for (const s of SIEGES.filter(x => x.table !== 'zinc' && x.occupant !== 'albert')) {
       const f = forwardOf(s.lacet), t = TABLES[s.table]
       const d = Math.hypot(t.x - s.x, t.z - s.z)
       expect(f.x * (t.x - s.x) / d + f.z * (t.z - s.z) / d, s.id).toBeCloseTo(1, 9)
@@ -192,5 +194,98 @@ describe('la vue et le regard', () => {
       expect(opaques.filter(b => dans(p, b)).map(b => b.id)).toEqual([])
     }
     expect(FOYERS.combine).toEqual(ANCRES.combine)
+  })
+})
+
+// La place de Dussart (spec §3.1, « Réglé en B2 » et « Fait en B9 » ; tâche B10) : « dos au mur, face à la porte »
+// (§3.2) n'est tenu par aucune chaise de la table A. Sur la banquette de skaï, dos à la vitrine, il voit toute la salle :
+// le plus vif à remarquer un regard, il voit la place d'écoute de la table A. La porte, à 106° de sa face, sort de son
+// cône (elle était devant lui en A-ouest, mais la salle dans son dos).
+describe('la place de Dussart', () => {
+  const dussart = () => SIEGES.find(s => s.occupant === 'dussart')
+  const face = s => ({ x: s.x, z: s.z, lacet: s.lacet })
+
+  it('Dussart est assis sur la banquette, au sud de la table A, tourné vers elle : aucune chaise n\'y est posée', () => {
+    const s = dussart()
+    expect(s).toMatchObject({ id: 'A-sud', type: 'chaise', table: 'A', banquette: 'banquette-A', hauteur: 0.45 })
+    const b = BOITES.find(x => x.id === 'banquette-A')
+    expect(s.x > b.minX && s.x < b.maxX && s.z > b.minZ && s.z < b.maxZ).toBe(true)
+    expect(SIEGES.filter(x => x.banquette).map(x => x.id)).toEqual(['A-sud'])
+    expect(SIEGES.some(x => x.id === 'A-ouest')).toBe(false)
+  })
+
+  it('de sa place, Dussart voit la salle et la chaise ouest de D ; la porte sort de son cône', () => {
+    const s = dussart()
+    const dOuest = SIEGES.find(x => x.id === 'D-ouest')
+    expect(voitViktor(face(s), dOuest)).toBe(true)                         // témoin : A-ouest, la salle dans le dos (92°)
+    expect(voitViktor(face(s), TABLES.B)).toBe(true)
+    expect(voitViktor(face(s), SIEGES.find(x => x.id === 'tabouret-3'))).toBe(true)
+    expect(voitViktor(face(s), ANCRES.depart)).toBe(false)                 // la porte, à 106° de sa face
+  })
+})
+
+// Les itinéraires de qui marche dans la salle (Lise, Sorel, Fernand : tâche B10, points de passage avec moveCircle).
+// Un tronçon est libre si l'emprise du marcheur (un carré de demi-côté r, comme moveCircle) ne chevauche aucune boîte
+// tout du long : le segment ne coupe aucune boîte grossie de r, hors celles qui contiennent déjà l'un de ses bouts.
+describe('les itinéraires', () => {
+  const RM = 0.25   // l'emprise d'une personne qui marche (PATRONS.marche.rayonM)
+  const grossie = (b, r) => ({ minX: b.minX - r, maxX: b.maxX + r, minZ: b.minZ - r, maxZ: b.maxZ + r })
+  const dedans = (p, b) => p.x > b.minX && p.x < b.maxX && p.z > b.minZ && p.z < b.maxZ
+  const bloquants = (a, b) => BOITES.filter(x => {
+    const g = grossie(x, RM)
+    return !dedans(a, g) && !dedans(b, g) && coupe(a, b, g)
+  }).map(x => x.id)
+  const arrets = [
+    ...Object.entries(ANCRES.lise).map(([k, p]) => [`lise ${k}`, p]),
+    ...Object.entries(ANCRES.sorel).map(([k, p]) => [`sorel ${k}`, p]),
+  ]
+
+  it('entre deux arrêts de Lise ou de Sorel, un itinéraire dont aucun tronçon ne touche une boîte', () => {
+    const bad = []
+    for (const [na, a] of arrets) for (const [nb, b] of arrets) {
+      if (a === b) continue
+      const it = itineraire(a, b, { rayon: RM })
+      if (!it) { bad.push(`${na} → ${nb} : aucun itinéraire`); continue }
+      expect(it[it.length - 1], `${na} → ${nb}`).toEqual({ x: b.x, z: b.z })
+      let p = a
+      for (const q of it) {
+        const x = bloquants(p, q)
+        if (x.length) bad.push(`${na} → ${nb} : (${p.x} ; ${p.z}) → (${q.x} ; ${q.z}) touche ${x.join(', ')}`)
+        p = q
+      }
+    }
+    expect(bad).toEqual([])                                                 // témoin : la ligne droite, [b]
+  })
+
+  it('Lise et Sorel restent devant le zinc ; Fernand passe par le bout nord pour aller au téléphone', () => {
+    for (const [na, a] of arrets) for (const [nb, b] of arrets) {
+      if (a === b) continue
+      for (const q of itineraire(a, b, { rayon: RM })) expect(dansZone('interdite', q), `${na} → ${nb}`).toBe(false)
+    }
+    const aller = itineraire(ANCRES.fernand, ANCRES.combine, { rayon: RM })
+    expect(aller).not.toBeNull()
+    let p = ANCRES.fernand
+    for (const q of aller) { expect(bloquants(p, q), `(${q.x} ; ${q.z})`).toEqual([]); p = q }
+    expect(aller.some(q => q.z < -3)).toBe(true)                            // le bout nord du zinc (z = −3)
+    const retour = itineraire(ANCRES.combine, ANCRES.fernand, { rayon: RM })
+    expect(retour[retour.length - 1]).toEqual({ x: ANCRES.fernand.x, z: ANCRES.fernand.z })
+    // une salle barrée d'est en ouest, sauf derrière le zinc : passer par là serait le seul chemin, mais il est interdit
+    const barree = [{ minX: -3.0, maxX: 6, minZ: -1.0, maxZ: -0.9, son: 'mur' }]
+    const de = { x: -3.0, z: 0.5 }, vers = { x: -3.0, z: -3.0 }
+    expect(itineraire(de, vers, { rayon: RM, boites: barree })).toBeNull()   // témoin : points de passage interdits gardés
+    expect(itineraire(ANCRES.fernand, vers, { rayon: RM, boites: barree })).not.toBeNull()   // Fernand, lui, y est
+  })
+
+  it('les points de passage sont dans la salle, hors des boîtes, emprise comprise', () => {
+    expect(PASSAGES.length).toBeGreaterThan(3)
+    for (const p of PASSAGES) {
+      expect(p.x > SALLE.minX && p.x < SALLE.maxX && p.z > SALLE.minZ && p.z < SALLE.maxZ, p.id).toBe(true)
+      expect(BOITES.filter(b => dedans(p, grossie(b, RM))).map(b => b.id), p.id).toEqual([])
+    }
+  })
+
+  it('sans chemin, null ; d\'un point à lui-même, rien à parcourir', () => {
+    expect(itineraire({ x: 0, z: 0 }, { x: 0, z: -9 }, { rayon: RM })).toBeNull()   // au-delà du mur nord
+    expect(itineraire(ANCRES.lise.A, ANCRES.lise.A, { rayon: RM })).toEqual([])
   })
 })
