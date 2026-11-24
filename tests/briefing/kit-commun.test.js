@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createKit } from '../../src/briefing/kit.js'
+import { KITS, lireCss } from './analyse-scenes.js'
 
 // Les deux kits des cinématiques (spec cinématiques v2 §3.2) : celui du jeu (src/briefing/kit.js, kit.css) et celui
 // des maquettes (docs/superpowers/maquettes/cinematiques/kit.js, kit.css), où l'on juge une scène avant de la porter.
@@ -69,6 +70,66 @@ describe.each(PAIRES)('G7 : blocs communs de %s identiques dans les deux kits', 
     for (const [nom, lignes] of jeu.blocs) {
       const copie = mq.blocs.get(nom)
       expect(copie && copie.join('\n'), `bloc « ${nom} » de ${fichier} : ${copie ? premierEcart(lignes, copie) : 'absent'}`).toBe(lignes.join('\n'))
+    }
+  })
+})
+
+// Frappe des tampons neufs (audit de design du 24 novembre 2026, CIN-7 ; spec §3.3) : un seul @keyframes k-frappe, dans
+// le bloc commun matières des deux feuilles, au lieu d'une courbe redéclarée par scène. Le tampon tombe, s'écrase au
+// contact (80 %, échelle 0,97, courbe d'accélération cubic-bezier(.6,0,.9,.4)) et revient à l'échelle 1 en 60 ms (sur
+// 300 ms) ; l'état final est le style de base (opacité non posée à 100 %), joué en backwards, la rotation lue dans
+// --k-rot. En atténué, k-frappe-attenue : un fondu seul, sans changement d'échelle (150 ms à l'emploi). Personne ne
+// l'emploie encore dans le socle ; le .stamp de la v1 garde sa frappe (k-stamp), à l'identique.
+describe('k-frappe, la frappe commune des tampons neufs', () => {
+  const lus = KITS.map(k => ({ nom: k.nom, css: k.css, ...lireCss(k.css) }))
+  const keyframes = (kit, nom) => kit.keyframes.find(kf => kf.nom === nom)
+  // étapes d'un @keyframes en { clé : { propriété : valeur } }
+  const etapes = kf => Object.fromEntries(kf.etapes.map(e => [e.cles, Object.fromEntries(e.declarations.map(([p, v]) => [p, v]))]))
+  const ROT = 'rotate(var(--k-rot, 0deg))'
+
+  it('dans le bloc commun matières des deux feuilles, identique de l\'une à l\'autre', () => {
+    for (const kit of lus) {
+      const matieres = blocsCommuns(kit.css).blocs.get('matières')
+      expect(matieres, kit.nom).toBeTruthy()
+      for (const nom of ['k-frappe', 'k-frappe-attenue']) {
+        expect(matieres.join('\n'), `${nom} dans le bloc matières (${kit.nom})`).toMatch(new RegExp(`@keyframes ${nom} \\{`))
+      }
+    }
+    for (const nom of ['k-frappe', 'k-frappe-attenue']) {
+      const [jeu, mq] = lus.map(kit => keyframes(kit, nom))
+      expect(jeu && mq, nom).toBeTruthy()
+      expect(mq.etapes, nom).toEqual(jeu.etapes)
+    }
+  })
+
+  it('tombe de 2,4, s\'écrase au contact à 0,97 (80 %), revient à 1 ; la rotation est lue dans --k-rot', () => {
+    const e = etapes(keyframes(lus[0], 'k-frappe'))
+    expect(Object.keys(e)).toEqual(['0%', '80%', '100%'])
+    expect(e['0%']).toEqual({ opacity: '0', transform: `${ROT} scale(2.4)`, 'animation-timing-function': 'cubic-bezier(.6,0,.9,.4)' })
+    expect(e['80%']).toEqual({ opacity: '.95', transform: `${ROT} scale(.97)`, 'animation-timing-function': 'ease-out' })
+    // état final : le style de base (aucune opacité posée), à l'échelle 1
+    expect(e['100%']).toEqual({ transform: `${ROT} scale(1)` })
+  })
+
+  it('en atténué, k-frappe-attenue : un fondu seul, sans changement d\'échelle, vers le style de base', () => {
+    expect(etapes(keyframes(lus[0], 'k-frappe-attenue'))).toEqual({ '0%': { opacity: '0' } })
+  })
+
+  // Invariant : le .stamp de la v1 (et tous les tampons qui le reprennent) garde sa frappe telle quelle.
+  it('le .stamp de la v1 ne change pas : k-stamp en 220 ms, sans écrasement, dans les deux feuilles', () => {
+    const STAMP = {
+      '.st .stamp': [['position', 'absolute'], ['font-size', '3.2cqw'], ['font-weight', 'bold'], ['letter-spacing', '.18em'], ['color', '#e04848'],
+        ['text-shadow', 'none'], ['border', '.4cqw solid #e04848'], ['padding', '.2cqw 1.3cqw'], ['background', 'rgba(12,14,20,.5)'], ['opacity', '0'],
+        ['transform', 'rotate(-11deg) scale(2.4)'], ['z-index', '3']],
+      '.st .stamp.on': [['animation', 'k-stamp .22s cubic-bezier(.6,0,.9,.4) forwards']],
+    }
+    const K_STAMP = { '0%': { opacity: '0', transform: 'rotate(-11deg) scale(2.4)' }, '100%': { opacity: '.95', transform: 'rotate(-11deg) scale(1)' } }
+    for (const kit of lus) {
+      for (const [sel, decls] of Object.entries(STAMP)) {
+        const regles = kit.regles.filter(r => r.selecteurs.includes(sel))
+        expect(regles.map(r => r.declarations.map(([p, v]) => [p, v])), `${sel} (${kit.nom})`).toEqual([decls])
+      }
+      expect(etapes(keyframes(kit, 'k-stamp')), `k-stamp (${kit.nom})`).toEqual(K_STAMP)
     }
   })
 })

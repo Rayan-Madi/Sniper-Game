@@ -161,6 +161,14 @@ html, body { margin: 0; background: #050608; color: #d7dccf; font-family: system
 .st .k-encre { -webkit-mask-image: var(--k-encre); mask-image: var(--k-encre); -webkit-mask-size: 10cqw 10cqw; mask-size: 10cqw 10cqw;
     filter: drop-shadow(.15cqw .1cqw 0 rgba(224,72,72,.4)); filter: drop-shadow(.15cqw .1cqw 0 color-mix(in srgb, currentColor 40%, transparent)); }
 .st .k-papier { background-image: var(--k-papier); background-size: 18cqw 18cqw; }
+/* frappe des tampons neufs (audit de design, CIN-7 ; spec §3.3) : le tampon tombe, s'écrase au contact (80 %, échelle
+   .97) et revient à 1 en 60 ms. S'emploie en .3s backwards sur un tampon dont le style de base est l'état frappé (son
+   opacité, transform: rotate(var(--k-rot))), la rotation lue dans --k-rot ; jumelle atténuée, dans la scène :
+   k-frappe-attenue en .15s backwards, un fondu sans changement d'échelle. Le .stamp de la v1 garde k-stamp. */
+@keyframes k-frappe { 0% { opacity: 0; transform: rotate(var(--k-rot, 0deg)) scale(2.4); animation-timing-function: cubic-bezier(.6,0,.9,.4) }
+    80% { opacity: .95; transform: rotate(var(--k-rot, 0deg)) scale(.97); animation-timing-function: ease-out }
+    100% { transform: rotate(var(--k-rot, 0deg)) scale(1) } }
+@keyframes k-frappe-attenue { 0% { opacity: 0 } }
 /* ── fin du commun : matières ── */
 
 /* ── commun : atténué ── */
