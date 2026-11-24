@@ -107,6 +107,37 @@ export function appelsDe(noeud, source) {
   return res
 }
 
+// Courbes de K.anim, celles du bloc commun anim des deux kit.js (spec §3.3).
+export const COURBES_K_ANIM = ['douce', 'sortie', 'lineaire']
+
+// Appels de K.anim qui ne nomment pas leur courbe (spec §3.3 : « chaque dessin de K.anim nomme sa courbe ») : le kit
+// prend 'douce' quand l'option manque, et un REC ou un compte à rebours qui l'oublierait mentirait sans bruit. Chaque
+// appel passe donc { courbe: '<nom>' } en objet écrit dans l'appel, le nom en chaîne littérale parmi COURBES_K_ANIM ;
+// K.anim ne se lit pas hors d'un appel (alias, déstructuration), où cette lecture ne le suivrait plus. Relevé :
+// [{ ligne, raison }], dans l'ordre des lignes.
+export function kAnimSansCourbe(noeud, source) {
+  const res = [], appeles = new Set()
+  const nomDe = m => (m.computed ? (m.property.type === 'Literal' ? m.property.value : null) : m.property.name)
+  const estKAnim = n => n && n.type === 'MemberExpression' && n.object.type === 'Identifier' && n.object.name === 'K' && nomDe(n) === 'anim'
+  const cleDe = p => (p.computed ? (p.key.type === 'Literal' ? p.key.value : null) : p.key.type === 'Identifier' ? p.key.name : p.key.value)
+  parcourir(noeud, n => {
+    const ligne = ligneDe(source, n.start)
+    if (n.type === 'CallExpression' && estKAnim(n.callee)) {
+      appeles.add(n.callee)
+      const options = n.arguments[2]
+      const courbe = options && options.type === 'ObjectExpression' ? options.properties.find(p => p.type === 'Property' && cleDe(p) === 'courbe') : null
+      if (options && options.type !== 'ObjectExpression') res.push({ ligne, raison: 'options hors littéral' })
+      else if (!courbe) res.push({ ligne, raison: 'sans { courbe }' })
+      else if (courbe.value.type !== 'Literal' || typeof courbe.value.value !== 'string') res.push({ ligne, raison: 'courbe non littérale' })
+      else if (!COURBES_K_ANIM.includes(courbe.value.value)) res.push({ ligne, raison: `courbe « ${courbe.value.value} » inconnue` })
+    }
+    if (estKAnim(n) && !appeles.has(n)) res.push({ ligne, raison: 'K.anim lu hors d\'un appel' })
+    if (n.type === 'VariableDeclarator' && n.id.type === 'ObjectPattern' && n.init && n.init.type === 'Identifier' && n.init.name === 'K' &&
+      n.id.properties.some(p => p.type === 'Property' && cleDe(p) === 'anim')) res.push({ ligne, raison: 'K.anim lu hors d\'un appel' })
+  })
+  return res.sort((a, b) => a.ligne - b.ligne)
+}
+
 // ── HTML ──
 
 // Textes que le HTML de #st peut afficher : nœuds texte hors <script>/<style>, et valeurs de tous les attributs (une

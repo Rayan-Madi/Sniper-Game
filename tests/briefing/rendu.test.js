@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { playCinematic } from '../../src/briefing/index.js'
-import { SCENES, KITS, lireScene, lireModule, lireCss, appelsDe, chainesDe, smilDuHtml, SMIL, animationsDe, decouper } from './analyse-scenes.js'
+import { SCENES, KITS, lireScene, lireModule, lireCss, appelsDe, chainesDe, smilDuHtml, SMIL, animationsDe, decouper, kAnimSansCourbe } from './analyse-scenes.js'
 
 // G5 (spec cinématiques v2, §3.1 et §3.3) : ce qui bouge dans une scène ne coûte pas de repeint.
 // - Un @keyframes n'anime que transform, opacity ou stroke-dashoffset (composition, ou petit tracé) ; ceux de la v1 qui
@@ -11,6 +11,9 @@ import { SCENES, KITS, lireScene, lireModule, lireCss, appelsDe, chainesDe, smil
 // - Le script d'une scène n'a aucun setInterval (que le convertisseur ne redirige pas vers K.at, ni le gel ni « rejouer »
 //   ne l'arrêteraient), aucune animation Web Animations (element.animate) ni SMIL (<animate>, <set>…), que le kit ne
 //   sait ni geler ni rejouer, et pas plus de Math.random que la v1 : tout tirage neuf passe par K.graine.
+// - Chaque appel de K.anim nomme sa courbe (§3.3, audit de design CIN-1, relecture de C5 bis) : { courbe: 'douce' },
+//   'sortie' ou 'lineaire', écrit dans l'appel. Le kit prend 'douce' quand l'option manque : un REC ou un compte à
+//   rebours qui l'oublierait mentirait, et rien d'autre ne le verrait.
 
 const PERMISES = new Set(['transform', 'opacity', 'stroke-dashoffset'])
 const HORS_ANIMATION = new Set(['animation-timing-function'])   // réglage d'une étape, pas une propriété animée
@@ -66,6 +69,11 @@ function scriptHorsRegles(corps, source, html, mathRandomPermis) {
     ...appels.smil.map(l => `ligne ${l}, élément créé par le script`),
   ]
   if (smil.length) res.push(`SMIL : ${smil.join(' ; ')}`)
+  const sansCourbe = kAnimSansCourbe(corps, source)
+  if (sansCourbe.length) {
+    res.push(`K.anim sans sa courbe nommée en chaîne littérale ('douce', 'sortie' ou 'lineaire', spec §3.3) : ` +
+      sansCourbe.map(e => `ligne ${e.ligne}, ${e.raison}`).join(' ; '))
+  }
   return res
 }
 
@@ -98,8 +106,27 @@ describe('outils de la garde (témoins sur des sources écrites ici)', () => {
     expect(scriptHorsRegles(corps, source, '', 1).some(r => r.includes('Math.random'))).toBe(false)
   })
 
-  it('K.at, K.anim et K.graine passent (le script d\'une scène v2 ordinaire)', () => {
-    const source = 'export function start(K) {\n  const g = K.graine(7)\n  K.at(300, () => K.anim(k => {}, 900))\n  K.on("set")\n}\n'
+  it('un appel de K.anim qui ne nomme pas sa courbe par une chaîne littérale du kit est relevé, comme K.anim lu hors d\'un appel', () => {
+    const source = 'export function start(K) {\n' +
+      '  K.anim(k => {}, 900)\n' +
+      '  K.at(300, () => K.anim(k => {}, 900, { attenue: "fin" }))\n' +
+      '  const c = "douce"; K.anim(k => {}, 900, { courbe: c })\n' +
+      '  K.anim(k => {}, 900, { courbe: "linéaire" })\n' +
+      '  const o = { courbe: "douce" }; K.anim(k => {}, 900, o)\n' +
+      '  const a = K.anim; const { anim } = K\n' +
+      '  K.anim(k => {}, 900, { courbe: "douce" }); K.anim(k => {}, 1e3, { attenue: "fondu", courbe: \'sortie\' }); K["anim"](k => {}, 9e3, { courbe: "lineaire" })\n' +
+      '  K["anim"](k => {}, 9e3)\n' +
+      '}\n'
+    const { corps } = lireModule(source)
+    expect(scriptHorsRegles(corps, source, '', 0)).toEqual([
+      'K.anim sans sa courbe nommée en chaîne littérale (\'douce\', \'sortie\' ou \'lineaire\', spec §3.3) : ligne 2, sans { courbe } ; ' +
+      'ligne 3, sans { courbe } ; ligne 4, courbe non littérale ; ligne 5, courbe « linéaire » inconnue ; ligne 6, options hors littéral ; ' +
+      'ligne 7, K.anim lu hors d\'un appel ; ligne 7, K.anim lu hors d\'un appel ; ligne 9, sans { courbe }',
+    ])
+  })
+
+  it('K.at, K.anim (sa courbe nommée) et K.graine passent (le script d\'une scène v2 ordinaire)', () => {
+    const source = 'export function start(K) {\n  const g = K.graine(7)\n  K.at(300, () => K.anim(k => {}, 900, { courbe: \'douce\' }))\n  K.on("set")\n}\n'
     const { corps } = lireModule(source)
     expect(scriptHorsRegles(corps, source, '<svg><circle/></svg>', 0)).toEqual([])
   })
@@ -117,7 +144,7 @@ describe.each(SOURCES.map(s => [s.nom, s]))('G5 : %s', (nom, source) => {
 })
 
 describe.each(Object.keys(SCENES))('G5 : script de %s', id => {
-  it('aucun setInterval, aucune animation Web Animations ni SMIL, pas plus de Math.random que la v1', () => {
+  it('aucun setInterval, aucune animation Web Animations ni SMIL, pas plus de Math.random que la v1, chaque K.anim nomme sa courbe', () => {
     const scene = lireScene(id)
     expect(scriptHorsRegles(scene.corps, scene.source, scene.html, MATH_RANDOM_V1[id] ?? 0)).toEqual([])
   })
