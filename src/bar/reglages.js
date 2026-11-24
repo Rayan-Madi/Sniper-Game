@@ -327,3 +327,45 @@ export const SON = {
     bois: { hz: 1100, q: 4, dureeS: 0.03, niveau: 0.03 },   // le parquet qui claque un peu
   },
 }
+
+// ─── La salle (§3.1, §8, §9) ───────────────────────────────────────
+// Le décor du Bivouac (src/bar/salle.js) : brouillard, lumières et ce qui bouge dans la salle. La géométrie (cotes des
+// meubles, couleurs des matières) reste dans salle.js, comme celle de l'appartement de l'enquête ; ici, ce qui se règle à
+// l'œil en jouant. Les intensités sont en unités physiques de three (r185) : le renderer du jeu les rend en ACES, à
+// l'exposition de 1,35 (src/scene.js).
+export const DECOR = {
+  graine: 0x0b1f5a11,   // graine du hasard du décor (bouteilles, usure, rythme du néon et de la télé) : la même salle à chaque montage
+  brouillard: { couleur: 0x1a120c, pres: 7, loin: 22 },   // Fog de la salle : brun chaud, sans effet à moins de 7 m, opaque à 22 m
+  soleil: {             // le soleil de 18 h, bas, à travers la vitrine et ses stores : la seule lumière qui projette une ombre
+    couleur: 0xffb070,
+    intensite: 7,       // sans décroissance (un soleil) : les lames de lumière au sol et sur les murs
+    vise: [2.6, 1.2, 4],   // où il vise (x, y, z) : le milieu de la vitrine ; il est posé dehors, à « distance » de ce point
+    hauteurDeg: 14,     // au-dessus de l'horizon : un soleil bas, de 18 h
+    azimutDeg: 40,      // depuis le sud (la vitrine), vers l'ouest : ses lames filent vers le nord-est de la salle
+    distance: 40,       // assez loin pour que ses rayons soient presque parallèles (m)
+    angle: 0.13,        // demi-ouverture du cône (rad) : toute la vitrine, vue de 40 m
+    penombre: 0.1,      // bord du cône adouci
+    carte: 1024,        // côté de la carte d'ombre (spec §8)
+  },
+  ciel: { haut: 0xe0b080, bas: 0x7a5030, intensite: 2.2 },   // l'hémisphère : la salle se lit sans source visible ; en bas, ce que renvoie le parquet
+  lampes: {             // les quatre PointLight sans ombre (spec §8) : couleur, intensité, portée (m)
+    zinc: { couleur: 0xffa458, intensite: 7, portee: 7 },      // les globes au-dessus du zinc
+    tele: { couleur: 0x9ab4ff, intensite: 1.4, portee: 4 },     // la télé du tiercé
+    couloir: { couleur: 0xffd090, intensite: 2.4, portee: 4.5 }, // l'ampoule nue du couloir des toilettes
+    jukebox: { couleur: 0xff7038, intensite: 1.6, portee: 3 },   // le juke-box et ses tubes de couleur
+  },
+  neon: {               // « LE BIV UAC » : le O mort essaie parfois de se rallumer (jamais plus de 3 éclats par seconde, §9)
+    mort: 0.045,         // éclat du O éteint (multiplie sa couleur) : un tube froid qu'on devine
+    allume: 1,          // éclat du O quand il se rallume
+    reposS: [7, 13],    // entre deux salves, le O reste mort, tiré entre ces bornes (s)
+    eclats: [1, 3],     // nombre d'éclats d'une salve, tiré entre ces bornes
+    eclatS: [0.06, 0.12],   // durée d'un éclat (s)
+    entreS: [0.28, 0.45],   // d'un éclat au début du suivant, toujours plus de 1/3 s (s)
+  },
+  tele: {               // le tiercé : la course défile, la lumière change à chaque plan (pas de scintillement)
+    defilement: 0.07,   // tours de la bande de la course par seconde
+    planS: [2.5, 6],    // durée d'un plan, tirée entre ces bornes (s)
+    eclat: [0.55, 1],   // éclat d'un plan, tiré entre ces bornes ; effets atténués : la moyenne, fixe
+  },
+  ventilateur: { toursParS: 0.7 },   // le ventilateur du plafond : tours par seconde (au temps de jeu)
+}

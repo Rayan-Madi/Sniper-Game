@@ -169,6 +169,9 @@ const meubles = [
   carre('mange-debout-porte', MANGE_DEBOUT_PORTE, DEMI_TABLE),
   boite('jukebox', ANCRES.jukebox.x - 0.35, ANCRES.jukebox.x + 0.35, 3.8, SALLE.maxZ, 'meuble'),
   boite('babyfoot', ANCRES.babyfoot.x - 0.75, ANCRES.babyfoot.x + 0.75, ANCRES.babyfoot.z - 0.4, ANCRES.babyfoot.z + 0.4, 'meuble'),
+  // la banquette de skaï sous la vitrine, au sud de la table A (tâche B9) : personne n'y est assis, mais elle offre à
+  // B10 la place « dos au mur » de Dussart (A-sud, spec §3.1, « Réglé en B2 ») ; on ne passe pas entre elle et la table
+  boite('banquette-A', TABLES.A.x - 0.75, TABLES.A.x + 0.75, 3.75, SALLE.maxZ, 'meuble'),
 ]
 // les patrons attablés et les ouvriers : on ne les traverse pas (ni la voix ni la vue ne s'y arrêtent)
 const personnes = [
