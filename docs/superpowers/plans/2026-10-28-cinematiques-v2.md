@@ -29,7 +29,7 @@
 | G2, après la fusion du bar de M5 dans `main` | C16 (M5 : briefing I et briefing II) | `cine-v2` rebasée sur `main` | quand `m5-bar` est fusionnée ; c'est elle qui possède `briefing-m5.html` et `briefing-m5b.html` |
 | G3, vérification contre le lot 3 | dans C17 : libellés « ZÉRO n m » contre le télémètre (tâche A4 du lot 3), poste de M1 (3b), portiques et coupe de M3, frise et cercles de M4 (3c) | `cine-v2` rebasée sur `main` | après la fusion de A4 pour les libellés ; après 3b et 3c pour les dessins. Si C17 arrive avant, ces points restent notés dans `REPRISE.md` et se vérifient à la fusion de 3b et 3c |
 | G4 | relecture finale, fusion | `cine-v2` | après C17 |
-| **Fusion intermédiaire (intégrateur)** | C0 à C5 bis | `cine-v2`, relue puis fusionnée en avance rapide dans `main` | dès C5 bis relue et `node scripts/poids.mjs --check --avec-enquete` vert (D1 = A, spec §3.9 critère 5) : la kill-cam (K7, K8) et le bar (B14, B15) écrivent ensuite leurs maquettes sous G4 à G6 et avec `K.anim` (et ses courbes), `K.graine`, `.k-encre`, `k-frappe` ; E0 du lot 5 étend `poids.mjs`. `REPRISE.md` n'est pas touché à cette fusion (seulement en C17) |
+| **Fusion intermédiaire (intégrateur)** | C0 à C5 bis | `cine-v2`, relue puis fusionnée en avance rapide dans `main` | dès C5 bis relue et `node scripts/poids.mjs --check --avec-enquete` vert (D1 = A, spec §3.9 critère 5) : la kill-cam (K7, K8) et le bar (B14, B15) écrivent ensuite leurs maquettes sous G4 à G6 (dont, depuis la relecture de C5 bis, la courbe nommée à chaque appel de `K.anim` et la jumelle `k-frappe-attenue` de toute frappe) et avec `K.anim` (et ses courbes), `K.graine`, `.k-encre`, `k-frappe` ; E0 du lot 5 étend `poids.mjs`. `REPRISE.md` n'est pas touché à cette fusion (seulement en C17) |
 
 - **Ordre dans G1** : C0, C1 et C2 d'abord (C0 indépendante ; C1 avant toute retouche de maquette) ; C3 avant C5 (mesure v1 avant hygiène) ; C4 avant les scènes ; C5 bis après C5 (audit de design du 24 novembre 2026) et avant la fusion intermédiaire, pour que les kill-cams et le bar héritent de ses outils. Puis C6 à C15 dans l'ordre de la décision D5 (reco : prologue A, prologue B, épilogue, M1, M4, M3, M2, M6 : d'abord la campagne de bout en bout que Rayan revoit en premier).
 - **Pistes parallèles possibles** une fois C0 à C5 bis faits (sous-agents distincts, maquettes disjointes, une seule régénération à la fois : le port réécrit les 9 scènes) : piste 1, prologues et épilogue ; piste 2, M1 à M3 ; piste 3, M4 et M6. Les captures et mesures restent en série (un seul Chrome).
@@ -104,12 +104,13 @@
 
 > Ajoutée le 24 novembre 2026, d'après l'audit de design du même jour (`audit-base-design.md`, section 1 « Cinématiques v2 », dans le dossier des conceptions, hors dépôt). CIN-1, CIN-6 et CIN-7 touchent les outils communs : ils passent avant la fusion intermédiaire du socle, pour que les kill-cams (K8) et le bar (B14, B15) en héritent. Les autres points de la section 1 vont aux tâches qu'ils nomment (dernier point ci-dessous).
 
-**Fichiers :** `src/briefing/kit.js` et `MQ/kit.js` (bloc commun `anim`) ; `src/briefing/kit.css` et `MQ/kit.css` (bloc commun `matières`, `.who`, `.fl .k`, et `#briefing-root .k-skip` du jeu) ; `MQ/controle-outils.html` ; `tests/briefing/kit.test.js`, `tests/briefing/kit-commun.test.js`, `tests/briefing/contrastes.test.js` (créé) ; scènes régénérées ; la spec (§3.2, §3.3, §3.8) et ce plan (C6 à C17).
+**Fichiers :** `src/briefing/kit.js` et `MQ/kit.js` (bloc commun `anim`) ; `src/briefing/kit.css` et `MQ/kit.css` (bloc commun `matières`, `.who`, `.fl .k`, et `#briefing-root .k-skip` du jeu) ; `MQ/controle-outils.html` ; `tests/briefing/kit.test.js`, `tests/briefing/kit-commun.test.js`, `tests/briefing/contrastes.test.js` (créé), et à la relecture `tests/briefing/rendu.test.js`, `tests/briefing/attenue.test.js`, `tests/briefing/analyse-scenes.js` ; scènes régénérées ; la spec (§3.2, §3.3, §3.8) et ce plan (C6 à C17).
 - [ ] CIN-1 (à corriger) : `K.anim` reçoit une option `{ courbe }` dans le bloc commun `anim` des deux `kit.js` (G7 vert, bloc identique). `'douce'` par défaut : k² (3 − 2k) ; `'sortie'` pour une arrivée : 1 − (1 − k)³ ; `'lineaire'` seulement pour ce qui mesure un temps vrai (REC, durée d'appel, tête de lecture, compte à rebours, chariot d'impression). L'opacité du fondu atténué suit la même courbe. Test : au gel au quart de la durée, `dessin` reçoit 0,156 ± 0,02 avec `'douce'` (témoin rouge : 0,25, l'avancement linéaire d'avant) ; le test de C2 au gel à mi-course reste vert (0,5 est un point fixe de la courbe).
 - [ ] Tous les appels de `K.anim` des maquettes passés en revue : ce qui mesure un temps vrai reçoit `'lineaire'` explicitement (sinon un REC ou un compteur mentirait), le reste prend la courbe par défaut ; scènes régénérées par le port, `tests/scripts/port-maquette.test.js` vert ; G1 à G3 verts au ms (les repères ne bougent pas, seule la forme du mouvement change). Spec §3.3 : « chaque dessin de K.anim nomme sa courbe », et la liste des trois courbes.
 - [ ] CIN-7 : un `@keyframes k-frappe` dans le bloc commun `matières` des deux `kit.css` (G7). L'état final est le style de base, l'animation est jouée en `backwards`, la rotation est lue dans `--k-rot`. Étapes : 0 %, opacité 0 et échelle 2,4 ; 80 %, opacité 0,95 et échelle 0,97 (le contact, courbe `cubic-bezier(.6,0,.9,.4)`) ; 100 %, échelle 1 (60 ms de retour). En atténué : un fondu de 150 ms, sans changement d'échelle. Le `.stamp` de la v1 ne change pas (invariant, prouvé par un test). Personne ne l'emploie encore dans le socle : test de présence et d'identité dans les deux kits ; la spec §3.3 dit qui l'emploiera (tampons neufs de C6 à C16, DOSSIER CLOS de K8, LEURRE de B15 ; `bar.css` recopie la courbe pour B12).
 - [ ] CIN-6, dans un commit à part : `.st .who` et `.st .fl .k` passent de 0,5 à 0,62 (5,7:1) dans les deux `kit.css` ; `#briefing-root .k-skip` passe de 0,35 à 0,6 (7,4:1) dans `src/briefing/kit.css`. Test des valeurs (témoin rouge sur les anciennes). Captures avant et après d'un dossier (M1 : `.who` à l'écoute, `.fl .k` au dossier) et de l'aide PASSER, regardées (`shots/c5bis/`).
-- [ ] Spec §3.3, recopiés de l'audit : le code couleur de CIN-2 (rouge `#e04848` : cible, danger, encre du fixeur ; jaune `#f0c040` : camp de Viktor ; jamais de troisième couleur d'accent) et la règle de CIN-6 (toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non ; sous 1,3 cqw, `text-shadow: none`). Dans ce plan, les lignes `- [ ]` de la section 1 de l'audit qui nomment C6 à C17 (CIN-2, CIN-3, CIN-4, CIN-5, CIN-6, CIN-8, CIN-9), recopiées telles quelles dans chaque tâche qu'elles nomment, sous un intertitre « Audit de design (24 novembre 2026) ». B14 et B15 sont dans le plan du bar (autre copie) : rien ici.
+- [ ] Spec §3.3, recopiés de l'audit : le code couleur de CIN-2 (rouge `#e04848` : cible, danger, encre du fixeur ; jaune `#f0c040` : camp de Viktor ; jamais de troisième couleur d'accent) et la règle de CIN-6 (toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non ; sous 1,3 cqw, `text-shadow: none`). Dans ce plan, les lignes `- [ ]` de la section 1 de l'audit qui nomment C6 à C17 (CIN-2, CIN-3, CIN-4, CIN-5, CIN-6, CIN-8, CIN-9), recopiées telles quelles dans chaque tâche qu'elles nomment, sous un intertitre « Audit de design (24 novembre 2026) » ; seul écart au texte (relecture de C5 bis) : `<title>` y est mis en code, qu'un rendu Markdown qui assainit le HTML retirerait sinon (dans l'audit, toute la ligne était en code). B14 et B15 sont dans le plan du bar (autre copie) : rien ici.
+- [ ] Relecture de C5 bis : les deux règles neuves gardées avant la fusion intermédiaire, pour que la kill-cam et le bar écrivent dessous (spec §3.1). G5 : chaque appel de `K.anim` d'une scène écrit `{ courbe: '…' }` en chaîne littérale (`'douce'`, `'sortie'` ou `'lineaire'`), et `K.anim` ne se lit pas hors d'un appel ; le kit garde `'douce'` par défaut, la garde empêche qu'un REC ou un compte à rebours s'y fie en silence. G4 : toute règle qui pose `k-frappe` a sa jumelle `.k-reduced` qui pose `k-frappe-attenue` (pas `animation: none`), aucune règle atténuée ne pose `k-frappe`. Témoins : sources et feuilles d'essai que les gardes laissaient passer, puis M1 retouchée pour l'essai (rouge), remise à l'octet (`tests/briefing/rendu.test.js`, `tests/briefing/attenue.test.js`, lecteur `kAnimSansCourbe` de `tests/briefing/analyse-scenes.js`).
 - [ ] Vérification : suite complète et `npx vite build` par le verrou des tests ; memtest vert (verrou Chrome, `BASE_URL=http://localhost:5186/`).
 - [ ] Commits, un par point au moins : `docs(plan): …` (cette tâche), `feat(cinematiques): …` (CIN-1, puis CIN-7), `fix(cinematiques): …` (CIN-6, à part), `docs(spec, plan): …` (code couleur, contraste, lignes de l'audit).
 
@@ -126,7 +127,7 @@
 Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, dans le dossier des conceptions, hors dépôt) : elles se font dans la tâche, avant son commit, et se relisent avec elle.
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C7 : prologue B, le téléphone (B1 à B13)
 
@@ -141,7 +142,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, dans le dossier des conceptions, hors dépôt) : elles se font dans la tâche, avant son commit, et se relisent avec elle.
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C8 : prologue B, le mur (B14 à B20)
 
@@ -157,7 +158,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
 - [ ] Tournée du réticule : chaque étape suit un arc (point de contrôle décalé de 2 à 4 cqw, pas un segment droit), avec accélération et décélération. Un petit recul avant le départ, un seul dépassement, à l'arrivée finale. Même départ, même arrivée, 2,6 s.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C9 : épilogue
 
@@ -172,7 +173,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, dans le dossier des conceptions, hors dépôt) : elles se font dans la tâche, avant son commit, et se relisent avec elle.
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C10 : M1
 
@@ -190,7 +191,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 - [ ] Pendant la frappe de la réplique du téléphone (T2), seuls l'onde, la cascade sous elle et le soulignement des mots-clés bougent. Le télex et la triangulation s'écrivent pendant T1 (muet) ou après la réplique, puis restent fixes.
 - [ ] Le bokeh du carton-titre ne reprend que des lumières vraies du marché : positions des lampadaires et de la guirlande dessinés en T6, même graine. Jamais de disques semés pour l'ambiance. S'il ne se lit pas comme le marché sur la capture à 40 000 ms, on le retire.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C11 : M2
 
@@ -205,7 +206,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, dans le dossier des conceptions, hors dépôt) : elles se font dans la tâche, avant son commit, et se relisent avec elle.
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C12 : M3, le panorama (T1 à T5)
 
@@ -220,7 +221,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, dans le dossier des conceptions, hors dépôt) : elles se font dans la tâche, avant son commit, et se relisent avec elle.
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C13 : M3, le duo, le conteneur, la grue (T6 à T10)
 
@@ -235,7 +236,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, dans le dossier des conceptions, hors dépôt) : elles se font dans la tâche, avant son commit, et se relisent avec elle.
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C14 : M4 (430 m)
 
@@ -251,7 +252,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Les fuites vers les abris partent après l'igloo de la frise (2 750 ms du temps « trois tirs »), jamais pendant les pastilles 1, 2 et 3 : la frise d'abord, la carte ensuite.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C15 : M6
 
@@ -267,7 +268,7 @@ Lignes recopiées telles quelles de l'audit (`audit-base-design.md`, section 1, 
 - [ ] Code couleur tenu. Rouge #e04848 : la cible, le danger et l'encre du fixeur (tampons, croix, fils). Jaune #f0c040 : le camp de Viktor (poste, ligne de tir, distances, radio d'Anton). Tout autre ajout prend l'encre du papier ou l'une des quatre lumières nommées, jamais une troisième couleur d'accent.
 - [ ] Toute étiquette neuve tient 4,5:1 au moins sur son fond, qu'elle serve à jouer ou non. Sous 1,3 cqw, elle prend text-shadow: none (comme .stamp, .dtab et les textes SVG du prologue B) : à cette taille, l'aberration de .scene double le trait.
 - [ ] Réticule qui cherche : sauts en arc, décélération à chaque non-danseur (K.anim, courbe 'sortie'), sans dépassement : il cherche, il ne verrouille pas.
-- [ ] Le <title> et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
+- [ ] Le `<title>` et les commentaires de la maquette perdent leur tiret cadratin (modèle : « Prologue B · L'appel »).
 
 ### Tâche C16 : M5, briefing I et briefing II (après la fusion du bar)
 
