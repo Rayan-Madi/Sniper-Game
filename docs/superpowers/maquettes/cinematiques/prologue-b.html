@@ -14,6 +14,8 @@
   .pro .hh { position: absolute; inset: 0; animation: pro-hh 7s ease-in-out infinite; }
   @keyframes pro-hh { 0%,100% { transform: translate(0,0) rotate(0) } 22% { transform: translate(.3cqw,-.18cqw) rotate(.22deg) }
       48% { transform: translate(-.12cqw,.24cqw) rotate(-.16deg) } 74% { transform: translate(-.3cqw,-.1cqw) rotate(.18deg) } }
+  /* effets atténués (k-reduced, posée par le kit sur #st) : caméra posée, à la pose de repos de pro-hh */
+  .pro.k-reduced .hh { animation: none; }
   .pro svg text { font-family: 'Courier New', Courier, monospace; text-shadow: none; }
 
   /* ── POV 1 : la fenêtre de nuit sous la pluie ── */
@@ -23,12 +25,16 @@
   .pro .bok { position: absolute; inset: -3cqw; filter: blur(.45cqw); }
   .pro .bok i { position: absolute; border-radius: 50%; mix-blend-mode: screen; background: radial-gradient(circle, var(--c) 0 42%, transparent 70%); }
   .pro .wplane { position: absolute; inset: 0; transform: perspective(90cqw) rotateY(-7deg) scale(1.08); transform-origin: 30% 50%; }
-  .pro .rain { position: absolute; inset: -12cqw; opacity: .6; animation: pro-rain .42s linear infinite;
+  /* la pluie glisse avec son calque (transform, composée sans repeindre) : chaque tour part d'une tuile plus haut (même
+     motif) ; calque agrandi d'une tuile en bas et de son décalage à droite, son coin haut gauche, où le motif s'ancre, à la
+     même place : motif aux mêmes places que quand background-position l'animait */
+  .pro .rain { position: absolute; inset: -12cqw -13.2cqw -21cqw -12cqw; opacity: .6; animation: pro-rain .42s linear infinite;
       background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='50' height='90'><g stroke='rgba(205,220,245,.6)' stroke-width='.7' stroke-linecap='round'><path d='M10 5 l-2 14'/><path d='M34 30 l-2.4 17'/><path d='M22 58 l-1.6 11'/><path d='M45 70 l-2 14'/></g></svg>");
       background-size: 5cqw 9cqw; }
-  .pro .rain.r2 { opacity: .32; animation: pro-rain2 .7s linear infinite; background-size: 9cqw 16cqw; filter: blur(.08cqw); }
-  @keyframes pro-rain { to { background-position: -1.2cqw 9cqw } }
-  @keyframes pro-rain2 { to { background-position: -2.2cqw 16cqw } }
+  .pro .rain.r2 { inset: -12cqw -14.2cqw -28cqw -12cqw; opacity: .32; animation: pro-rain2 .7s linear infinite; background-size: 9cqw 16cqw; filter: blur(.08cqw); }
+  @keyframes pro-rain { from { transform: translate(0, -9cqw) } to { transform: translate(-1.2cqw, 0) } }
+  @keyframes pro-rain2 { from { transform: translate(0, -16cqw) } to { transform: translate(-2.2cqw, 0) } }
+  .pro.k-reduced .rain, .pro.k-reduced .rain.r2 { animation: none; }   /* effets atténués : pluie arrêtée à sa pose de repos */
   .pro .drops { position: absolute; inset: 0; opacity: .75;
       background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90'><g fill='rgba(220,232,255,.16)' stroke='rgba(235,242,255,.38)' stroke-width='.45'><circle cx='12' cy='20' r='1.6'/><circle cx='60' cy='12' r='1.1'/><circle cx='40' cy='55' r='2.3'/><circle cx='78' cy='70' r='1.3'/><circle cx='20' cy='78' r='.9'/><ellipse cx='70' cy='40' rx='1' ry='1.7'/><circle cx='50' cy='84' r='1.5'/></g></svg>");
       background-size: 8cqw 8cqw; }
@@ -45,6 +51,7 @@
 
   /* ── la main et le téléphone (plan subjectif) ── */
   .pro .rig { position: absolute; left: 41cqw; top: 4cqw; width: 34cqw; height: 62cqw; z-index: 4; animation: pro-hh 4.6s ease-in-out infinite; pointer-events: none; }
+  .pro.k-reduced .rig { animation: none; }   /* effets atténués : la main ne bouge plus d'elle-même */
   .pro .rpose { position: absolute; inset: 0; transform-origin: 50% 70%; transition: transform .9s cubic-bezier(.2,.8,.2,1);
       transform: perspective(80cqw) translateY(56cqw) rotateX(16deg) rotateY(-20deg) rotateZ(-12deg); }
   .pro .rig.on .rpose { transform: perspective(80cqw) rotateX(6deg) rotateY(-14deg) rotateZ(-4deg); }
@@ -99,6 +106,7 @@
   .pro .mob.ant .p-nm { color: var(--amb2); }
   .pro .mob.ant .p-in { color: #ff7a7a; }
   @keyframes pro-avj { 0%,100% { transform: none } 30% { transform: translateX(.3cqw) skewX(-8deg) } 33% { transform: none } 71% { transform: translateX(-.25cqw) } 74% { transform: none } }
+  .pro.k-reduced .mob.ant .p-av em { animation: none; }   /* effets atténués : le « ? » ne saute plus, il reste rouge */
   /* journal d'appels */
   .pro .p-log { position: absolute; left: 0; right: 0; top: 3.3cqw; bottom: 0; background: #0a0f17; z-index: 4; transform: translateY(105%); transition: transform .5s cubic-bezier(.2,.8,.2,1);
       border-top: 1px solid rgba(215,220,207,.15); }
@@ -141,8 +149,10 @@
   .pro .rig svg.vib.l { left: 3.4cqw; }
   .pro .rig svg.vib.r { left: 28.2cqw; transform: scaleX(-1); }
   .pro .mob.ring ~ .vib, .pro .mob.bz ~ .vib { opacity: 1; animation: k-blink .3s steps(2) infinite; }
-  /* effets atténués (classe k-reduced posée par le kit du jeu) : ni tremblement ni clignotement, les traits restent */
+  /* effets atténués (classe k-reduced posée par le kit du jeu) : ni tremblement ni clignotement ; les traits restent, et
+     les deux anneaux de l'avatar à leur pose de repos */
   .pro.k-reduced .mob.ring, .pro.k-reduced .mob.bz, .pro.k-reduced .mob.ring ~ .vib, .pro.k-reduced .mob.bz ~ .vib { animation: none; }
+  .pro.k-reduced .mob.ring .p-av s { animation: none; }
   /* raccroché : APPEL TERMINÉ à la place de la minuterie, le reste s'éteint */
   .pro .mob.end .p-tm { opacity: 0; }
   .pro .mob.end .p-end { opacity: 1; }

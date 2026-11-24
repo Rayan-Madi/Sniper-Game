@@ -131,6 +131,7 @@
   .m4 .dr:not(.on) { opacity: 0; }
   .m4 .dr.on { stroke-dashoffset: 0; }
   .m4 .blink { animation: k-blink .7s steps(2) infinite; }
+  .m4.k-reduced .blink { animation: none; }   /* effets atténués (k-reduced, posée par le kit sur #st) : allumé fixe */
 
   /* fils rouges, punaises, repères (SVG au-dessus du tableau) */
   .m4 .strings { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; filter: drop-shadow(.15cqw .25cqw .12cqw rgba(0,0,0,.55)); }
@@ -170,7 +171,7 @@
           <p class="dbody">Le <span class="cz" style="--i:3">capitaine Morel</span> signale la disparition de <span class="cz" style="--i:4">40 fusils</span>, de <span class="cz" style="--i:5">12 caisses</span> de munitions et de <span class="cz" style="--i:6">4 mortiers</span>. Trois officiers du dépôt sont mis en cause : <span class="cz" style="--i:7">Verne, Halder, Rossi</span>. Acheteur : <span class="cz" style="--i:8">le réseau</span>.</p>
           <div class="dc"><b>CONCLUSION :</b> CLASSÉ SANS SUITE</div>
           <div class="dl">SIGNÉ : <span class="cz" style="--i:9">Col. Brandt</span></div>
-          <div class="stamp" id="stamp">CLASSIFIÉ<small>— DÉFENSE —</small></div>
+          <div class="stamp" id="stamp">CLASSIFIÉ<small>· DÉFENSE ·</small></div>
           <div class="sticky" id="sticky">Militaires<br>= tarif <b>×2</b></div>
         </div>
 

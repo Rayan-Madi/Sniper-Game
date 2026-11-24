@@ -42,14 +42,18 @@ export const SCENES = {
   epilogue: 'epilogue', 'prologue-a': 'prologue-a', 'prologue-b': 'prologue-b',
 }
 
-// Source du module de scène `id`, telle que la CLI l'écrit (repo = racine du dépôt).
+// Source du module de scène `id`, telle que la CLI l'écrit (repo = racine du dépôt). Les maquettes citent toujours
+// img/<nom>.png (servi par le serveur des maquettes) ; le jeu sert le .webp de public/briefing/img s'il existe
+// (portraits à transparence, scripts/webp.mjs), sinon le .jpg (portraits opaques), sinon le .png.
 export function generateScene(id, repo) {
   const file = SCENES[id]
   if (!file) throw new Error(`scène inconnue : ${id}`)
   const html = readFileSync(join(repo, 'docs', 'superpowers', 'maquettes', 'cinematiques', file + '.html'), 'utf8')
   const imgDir = join(repo, 'public', 'briefing', 'img')
   const imgExt = {}
-  for (const m of html.matchAll(/img\/([a-z0-9_-]+)\.png/g)) imgExt[m[1]] = existsSync(join(imgDir, m[1] + '.jpg')) ? 'jpg' : 'png'
+  for (const m of html.matchAll(/img\/([a-z0-9_-]+)\.png/g)) {
+    imgExt[m[1]] = ['webp', 'jpg'].find(ext => existsSync(join(imgDir, `${m[1]}.${ext}`))) || 'png'
+  }
   return portMaquette(html, { name: file, imgExt })
 }
 
