@@ -60,10 +60,11 @@ function surLaTete(p, oeil, direction, reglages) {
 
 // Les regards de la salle sur Viktor. personnes : [{ id, categorie, x, y, z, lacet }] ; x, y, z : sa tête (l'os Head) ;
 // lacet : sa face (recommandé : celle de son corps ou de son siège, pas celle de sa tête tournée, à trancher en B10 et
-// B11 : spec §3.5, « Réglé en B3 ») ; categorie : une clé de reglages.tolerance (escorte, civil, fernand, albert). Le
-// module garde ces objets, pas le tableau : l'appelant modifie sur place x, y, z et lacet de chacun avant chaque image,
-// sans jamais remplacer l'objet (un objet neuf ne serait pas lu). Une catégorie inconnue, ou deux fois le même id, est
-// une erreur.
+// B11 : spec §3.5, « Réglé en B3 ») ; categorie : une clé de reglages.tolerance (escorte, civil, fernand, albert) ;
+// present (facultatif) : false tant que la personne est absente (Sorel avant 18:30, src/bar/patrons.js) : elle ne voit
+// pas Viktor et n'est pas fixée ; sans le champ, elle est là. Le module garde ces objets, pas le tableau : l'appelant
+// modifie sur place x, y, z, lacet et present de chacun avant chaque image, sans jamais remplacer l'objet (un objet neuf
+// ne serait pas lu). Une catégorie inconnue, ou deux fois le même id, est une erreur.
 export function createRegards(personnes, reglages = REGARD, boites = BOITES) {
   const { tolerance, verre, oubli, alerteS, repliquesS } = reglages
   const suivis = new Map()
@@ -106,7 +107,7 @@ export function createRegards(personnes, reglages = REGARD, boites = BOITES) {
         const alertee = s.alerte > EPS               // l'alerte couvre toute l'image où elle court encore
         s.alerte = s.alerte - pas > EPS ? s.alerte - pas : 0
         s.tolerance = tolerance[p.categorie] * (assisAvecVerre ? verre : 1)
-        s.voit = voitViktor(p, oeil, boites, alertee, reglages)
+        s.voit = p.present !== false && voitViktor(p, oeil, boites, alertee, reglages)
         s.fixe = s.voit && p.id !== interlocuteur && surLaTete(p, oeil, direction, reglages)
         const avant = s.f
         s.f = s.fixe ? avant + pas : (avant - oubli * pas > EPS ? avant - oubli * pas : 0)

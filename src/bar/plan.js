@@ -41,8 +41,10 @@ const DEMI_TABLE = 0.3    // tables rondes de 0,6 m de diamètre, comptées comm
 const RECUL = 0.62        // du centre d'une table au centre d'une chaise : le carré de Viktor assis ne touche pas la table
 const DEMI_PERSONNE = 0.25   // un patron assis ou un ouvrier debout, au sol
 
-// Chaise : le groupe du personnage posé au sol, sans calage ; tabouret : relevé de 0,33 m, pieds sur le repose-pieds
-// (mesuré sur les GLB, spec §3.1). oeil : la hauteur de la caméra de Viktor assis (setPose({ y })).
+// hauteur : l'assise. decalage : la hauteur de départ du groupe d'un patron assis (chaise 0, tabouret 0,33 m, pieds sur
+// le repose-pieds, mesuré sur les GLB, spec §3.1) ; src/bar/patrons.js la cale ensuite pour que le dessous de son corps
+// s'enfonce de 0 à 2,5 cm dans l'assise (spec §3.2, « Réglé en B10 » : posés au sol sans calage, ils passaient sous la
+// planche de la chaise). oeil : la hauteur de la caméra de Viktor assis (setPose({ y })).
 export const TYPES_SIEGE = Object.freeze({
   chaise: Object.freeze({ hauteur: 0.45, oeil: 1.2, decalage: 0 }),
   tabouret: Object.freeze({ hauteur: 0.75, oeil: 1.45, decalage: 0.33 }),
@@ -169,8 +171,8 @@ const meubles = [
   carre('mange-debout-porte', MANGE_DEBOUT_PORTE, DEMI_TABLE),
   boite('jukebox', ANCRES.jukebox.x - 0.35, ANCRES.jukebox.x + 0.35, 3.8, SALLE.maxZ, 'meuble'),
   boite('babyfoot', ANCRES.babyfoot.x - 0.75, ANCRES.babyfoot.x + 0.75, ANCRES.babyfoot.z - 0.4, ANCRES.babyfoot.z + 0.4, 'meuble'),
-  // la banquette de skaï sous la vitrine, au sud de la table A (tâche B9) : personne n'y est assis, mais elle offre à
-  // B10 la place « dos au mur » de Dussart (A-sud, spec §3.1, « Réglé en B2 ») ; on ne passe pas entre elle et la table
+  // la banquette de skaï sous la vitrine, au sud de la table A (tâche B9) : Dussart y est assis, dos au mur (A-sud, tâche
+  // B10) ; on ne passe pas entre elle et la table (debout, Dussart en sort par son bout est, PASSAGES)
   boite('banquette-A', TABLES.A.x - 0.75, TABLES.A.x + 0.75, 3.75, SALLE.maxZ, 'meuble'),
 ]
 // les patrons attablés et les ouvriers : on ne les traverse pas (ni la voix ni la vue ne s'y arrêtent)
@@ -245,8 +247,8 @@ export function vueLibre(a, b, boites = BOITES) {
 }
 
 // ─── Les itinéraires de qui marche (tâche B10) ─────────────────────
-// Lise, Sorel et Fernand vont d'un arrêt à l'autre par des points de passage (src/bar/patrons.js les y fait marcher,
-// par moveCircle). Un tronçon est libre si l'emprise du marcheur (un carré de demi-côté `rayon`, comme moveCircle) ne
+// Lise, Sorel et Fernand vont d'un arrêt à l'autre par des points de passage, comme un patron attablé qui s'est levé
+// (Dussart qui vient s'accouder près de Viktor, §3.6) ; src/bar/patrons.js les y fait marcher, par moveCircle. Un tronçon est libre si l'emprise du marcheur (un carré de demi-côté `rayon`, comme moveCircle) ne
 // chevauche aucune boîte tout du long : le segment ne coupe aucune boîte grossie du rayon, hors celles qui contiennent
 // déjà l'un de ses bouts (on en sort toujours). Le plus court chemin passe par les points de passage ; ceux qui sont en
 // zone interdite (derrière le zinc) ne servent qu'à qui part de cette zone ou y va : Fernand, jamais Lise ni Sorel.
@@ -260,6 +262,7 @@ export const PASSAGES = Object.freeze([
   point(3.2, 0.3, { id: 'centre-est' }),         // entre la table C et la table d'Albert
   point(0.6, 2.1, { id: 'centre-sud' }),         // entre le baby-foot et la table A
   point(3.2, 2.3, { id: 'porte-salle' }),        // entre la porte et la table d'Albert
+  point(2.55, 3.85, { id: 'banquette' }),        // au bout est de la banquette : Dussart en sort (et y revient) par là
 ])
 
 const grossir = (b, r) => ({ minX: b.minX - r, maxX: b.maxX + r, minZ: b.minZ - r, maxZ: b.maxZ + r })

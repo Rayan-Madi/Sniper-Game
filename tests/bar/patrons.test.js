@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { PATRONS } from '../../src/bar/reglages.js'
-import { SIEGES, BOITES, ANCRES, itineraire } from '../../src/bar/plan.js'
+import { SIEGES, BOITES, ANCRES, PLACES, itineraire } from '../../src/bar/plan.js'
 import { forwardOf } from '../../src/prologue/fpsController.js'
 import { createInteract } from '../../src/prologue/interact.js'
 import { trackDisposals } from '../gfx/fakeRenderer.js'
@@ -39,6 +39,39 @@ vi.mock('three/examples/jsm/loaders/GLTFLoader.js', async importOriginal => {
         gltf.charges.push({ url, ...g })
         return g
       }
+    },
+  }
+})
+
+// Le spawnCharacter du casting strict du lot 3 (tâche A6, dans main depuis a2e3fca) ne lit plus `match` : un modèle s'y
+// impose par `model`, sinon il est tiré dans le pool de son rôle. lot3 : ce choix-là, imité sur le characters.js de la
+// branche (qui n'a que `match`, et à qui l'on passe aussi `model` : le test tient encore une fois main fusionnée). Ses
+// tirages ne sont pas ceux de main (main ne tire pas le modèle imposé) : les tailles de main sont couvertes à part, aux
+// deux bouts de heightVar (« portés par leur siège quelle que soit leur taille »).
+const casting3 = vi.hoisted(() => ({ lot3: false }))
+vi.mock('../../src/characters.js', async importOriginal => {
+  const orig = await importOriginal()
+  return {
+    ...orig,
+    spawnCharacter(type, opts = {}) {
+      if (!casting3.lot3) return orig.spawnCharacter(type, opts)
+      const fichier = opts.model === undefined ? null : String(opts.model).split('/').pop().replace(/\.glb$/i, '')
+      return orig.spawnCharacter(type, fichier ? { match: `/${fichier}.glb`, model: opts.model } : {})
+    },
+  }
+})
+// fixe : withSeed rend ce nombre à chaque tirage (Math.random constant) : la taille de characters.js à l'un des bouts de
+// heightVar (0 : la plus petite ; presque 1 : la plus grande), quel que soit l'ordre des tirages ; null : withSeed lui-même.
+const tirage = vi.hoisted(() => ({ fixe: null }))
+vi.mock('../../src/gfx/memtest.js', async importOriginal => {
+  const orig = await importOriginal()
+  return {
+    ...orig,
+    withSeed(graine, fn) {
+      if (tirage.fixe == null) return orig.withSeed(graine, fn)
+      const avant = Math.random
+      Math.random = () => tirage.fixe
+      try { return fn() } finally { Math.random = avant }
     },
   }
 })
@@ -213,18 +246,28 @@ describe('les patrons, sur les vrais modèles', () => {
     }
   })
 
-  it('les trois modèles du bar, assis sur une chaise en Sit ou sur un tabouret, portés par leur siège', () => {
+  it('les trois modèles du bar, sur une chaise, la banquette ou un tabouret, portés par leur siège quelle que soit leur taille', () => {
+    // les tailles de characters.js aux deux bouts de heightVar et au milieu, puis trois graines : main (casting strict du
+    // lot 3) tire la taille avant le reste, la branche après le modèle, et une même graine n'y donne pas la même taille
+    const CAS = [{ fixe: 0 }, { fixe: 0.5 }, { fixe: 1 - 1e-9 }, { graine: 7 }, { graine: 11 }, { graine: 12 }]
+    const faux = []
     for (const modele of REELS) {
-      for (const [id, haut] of [['C-nord', 0.45], ['tabouret-3', 0.75]]) {
+      for (const id of ['C-nord', 'A-sud', 'tabouret-3']) {
         const s = siege(id)
-        const p = m.creerPatron({ role: `essai-${modele}-${id}`, modele, siege: id, graine: 7 })
-        p.update(DT)
-        const fesses = basDesFesses(p, s)
-        expect(Math.abs(fesses - haut), `${modele} sur ${id} : fesses à ${fesses.toFixed(3)} m`).toBeLessThanOrEqual(0.03)
-        if (s.type === 'chaise') expect(basDesPieds(p), `${modele} : pieds`).toBeLessThan(0.05)
-        p.dispose()
+        for (const cas of CAS) {
+          tirage.fixe = cas.fixe ?? null
+          let p
+          try { p = m.creerPatron({ role: 'essai', modele, siege: id, graine: cas.graine ?? 7 }) } finally { tirage.fixe = null }
+          p.update(DT)
+          const nom = `${modele} sur ${id}, ${cas.fixe ?? `graine ${cas.graine}`}, échelle ${p.model.scale.y.toFixed(3)}`
+          const fesses = basDesFesses(p, s), pieds = basDesPieds(p)
+          if (Math.abs(fesses - s.hauteur) > 0.03) faux.push(`${nom} : fesses à ${fesses.toFixed(3)} m`)
+          if (s.type === 'chaise' && !(pieds > -0.03 && pieds < 0.05)) faux.push(`${nom} : pieds à ${pieds.toFixed(3)} m`)
+          p.dispose()
+        }
       }
     }
+    expect(faux).toEqual([])   // témoin : le plus petit gangster_man_02 (0,959) relevé de 4,1 cm sur sa chaise, pieds à 6,2 cm
   })
 
   it('la tête suit ce qu\'on lui donne à regarder, à 70° au plus de la face du corps', () => {
@@ -287,6 +330,27 @@ describe('les patrons, sur les vrais modèles', () => {
     expect(casting.personnes.map(x => x.id)).toEqual(casting.liste.map(x => x.role))
     expect(casting.personnes[2]).toBe(p.personne)                           // le même objet, modifié sur place (B3)
     p.regarder(null)
+  })
+
+  it('absent, Sorel n\'est ni témoin ni fixé ; entré, le même regard le compte', async () => {
+    const { createRegards } = await import('../../src/bar/regard.js')
+    const sorel = qui('sorel'), t = sorel.personne
+    const regards = createRegards(casting.personnes)                        // tout le casting, Sorel compris, au montage
+    const f = forwardOf(t.lacet)                                            // Viktor à 2 m devant lui, qui fixe sa tête
+    const oeil = { x: t.x + 2 * f.x, y: 1.65, z: t.z + 2 * f.z }
+    const vue = () => ({ oeil, direction: { x: t.x - oeil.x, y: t.y - oeil.y, z: t.z - oeil.z } })
+    let emis = []
+    for (let i = 0; i < 120; i++) emis.push(...regards.update(DT, vue()))
+    expect(regards.etat('sorel')).toMatchObject({ voit: false, fixe: false, fixation: 0 })   // témoin : témoin depuis la porte
+    expect(emis.filter(e => e.qui === 'sorel')).toEqual([])
+    expect(t.present).toBe(false)                                           // ce que le regard lit
+    sorel.setPresent(true)                                                  // il entre (18:30)
+    expect(t.present).toBe(true)
+    for (let i = 0; i < 120; i++) emis.push(...regards.update(DT, vue()))
+    expect(regards.etat('sorel').voit).toBe(true)
+    expect(emis.filter(e => e.qui === 'sorel' && e.type === 'remarque')).toHaveLength(1)
+    sorel.setPresent(false)
+    expect(t.present).toBe(false)
   })
 
   it('verre et cartes dans la main droite, sous l\'os RightHand lui-même ; le tablier de Lise sur son bassin', () => {
@@ -431,6 +495,31 @@ describe('se lever, marcher, s\'asseoir', () => {
     p.dispose()
   })
 
+  it('debout, chaque patron attablé quitte sa place et y revient : ni sa boîte ni la banquette qui le porte ne le retiennent', () => {
+    const buts = { zinc: ANCRES.lise.zinc, porte: ANCRES.sorel.sortie, 'chaise ouest de D': PLACES.chaiseOuestD,
+      'mange-debout est': PLACES.mangeDeboutEst }
+    const marche = p => { for (let t = 0; p.enMarche && t < 30; t += DT) p.update(DT) }
+    const faux = []
+    for (const s of SIEGES.filter(x => x.occupant)) {
+      const qui = s.occupant
+      // Dussart (SOUPÇON, §3.6) vient s'accouder près de Viktor : de sa place vers celles de Viktor, du zinc et de la porte
+      for (const [nom, b] of Object.entries(buts)) if (!itineraire(s, b)) faux.push(`${qui} → ${nom} : aucun itinéraire`)
+      const p = m.creerPatron({ role: qui, modele: 'mafia_boss', siege: s.id, graine: 3 })
+      p.seLever(); avance(p, 1.2)
+      const aller = itineraire(p.position, ANCRES.lise.zinc)
+      if (aller) {
+        p.marcher(aller); marche(p)
+        const d = Math.hypot(p.position.x - ANCRES.lise.zinc.x, p.position.z - ANCRES.lise.zinc.z)
+        if (p.bloque || d > 0.05) faux.push(`${qui} vers le zinc : retenu à ${d.toFixed(2)} m`)
+        p.marcher(itineraire(p.position, s)); marche(p)
+        const r = Math.hypot(p.position.x - s.x, p.position.z - s.z)
+        if (p.bloque || r > 0.05) faux.push(`${qui} vers sa place : retenu à ${r.toFixed(2)} m`)
+      } else faux.push(`${qui} → zinc, debout : aucun itinéraire`)
+      p.dispose()
+    }
+    expect(faux).toEqual([])   // témoins : Dussart sans chemin hors de la banquette ; au retour, chacun bute sur sa propre boîte
+  })
+
   it('s\'asseoir : de debout au siège donné, posé à sa hauteur', () => {
     const p = m.creerPatron({ role: 'sorel', modele: 'mafia_boss', poste: { x: -3.2, z: 1.0, lacet: Math.PI / 2 }, graine: 4 })
     p.update(DT)
@@ -478,6 +567,18 @@ describe('le modèle demandé est vérifié', () => {
     expect(() => m.creerPatron({ role: 'lenoir', modele: 'mafia_boss', siege: 'A-nord', graine: 1 }))
       .toThrow(/mafia_boss/)                                                // témoin : la retombée silencieuse de characters.js:173-175
     expect(() => m.creerPatron({ role: 'x', modele: 'inconnu', siege: 'A-nord', graine: 1 })).toThrow(/inconnu/)
+  }, 60000)
+})
+
+describe('le casting tient avec le spawnCharacter du lot 3 (main), qui ignore match', () => {
+  it('chacun impose son modèle par `model`, que le casting strict du lot 3 lit', async () => {
+    casting3.lot3 = true
+    try {
+      const m = await charger()
+      const c = m.creerCasting()   // témoin : { match } seul, le tirage dans le pool (« lenoir demande mafia_boss, … gangster_man_01 »)
+      for (const e of PATRONS.casting) expect(c.patrons.get(e.role).cfg.url.endsWith(`/${e.modele}.glb`), e.role).toBe(true)
+      c.dispose()
+    } finally { casting3.lot3 = false }
   }, 60000)
 })
 

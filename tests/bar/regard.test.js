@@ -316,6 +316,19 @@ describe('les entrées', () => {
     expect(etat()).toEqual([false, false])            // témoin : personnes copiées à la création, [true, true]
   })
 
+  it('absente (present: false), une personne ne voit pas Viktor et n\'est pas fixée ; sans le champ, elle est là', () => {
+    const sorel = enFace('sorel', 'escorte', 2, { present: false })   // Sorel monté au début de la soirée, il entre à 18:30
+    const dussart = enFace('dussart', 'escorte', 3, { x: 0.5 })
+    const r = createRegards([sorel, dussart], REGARD, [])
+    const emis = avance(r, 3, vise(sorel))
+    expect(remarques(emis)).toEqual([])                                // témoin : le regard sans présence, remarqué à 1,2 s
+    expect(r.etat('sorel')).toMatchObject({ voit: false, fixe: false, fixation: 0 })
+    expect(r.temoins).toEqual(['escorte'])                             // Dussart seul, qui n'a pas de champ present
+    sorel.present = true                                               // il entre : modifié sur place, comme sa tête
+    expect(remarques(avance(r, 1.5, vise(sorel))).map(e => e.qui)).toEqual(['sorel'])
+    expect(r.temoins).toEqual(['escorte', 'escorte'])
+  })
+
   it('un pas de temps invalide ne change rien', () => {
     const p = enFace('dussart', 'escorte')
     const r = createRegards([p], REGARD, [])

@@ -6,16 +6,18 @@
 // est ici une erreur.
 //
 // Par-dessus les clips des modèles (les 7 GLB ont les mêmes 20 clips) :
-// - assis, le corps est porté par son siège : son dessous (bas des fesses et des cuisses) est mesuré une fois par
-//   modèle et par clip, sur la peau recalculée, et le groupe est posé pour qu'il s'enfonce de 0 à 2,5 cm dans
-//   l'assise, en partant du décalage du plan (chaise 0, tabouret +0,33 m) ;
+// - assis, le corps est porté par son siège : son dessous (bas des fesses et des cuisses) et ses pieds sont mesurés une
+//   fois par modèle et par clip, sur la peau recalculée, et le groupe est posé pour que le dessous s'enfonce de 0 à
+//   2,5 cm dans l'assise, en partant du décalage du plan (chaise 0, tabouret +0,33 m) ; sur une chaise, qui est trop
+//   petit pour elle (les pieds décollés de plus de 4 cm) grandit au montage jusqu'à les poser ;
 // - les clips se fondent en courbe douce ; chaque clip est coupé en deux, le bas du corps (bassin et jambes) et le haut :
 //   un geste (Look, Point, Threaten, Wave) ne prend que le haut, et l'on menace assis sans quitter sa chaise ;
 // - après mixer.update, la tête (os Neck et Head, trouvés par leur nom exact) se tourne vers ce qu'on lui donne à
 //   regarder, à 70° au plus de la face du corps, par un ressort amorti (départ et arrivée en douceur) ; qui parle hoche
 //   la tête ;
-// - qui marche (Lise, Sorel, Fernand) suit des points de passage (itineraire de src/bar/plan.js), au pas, par moveCircle
-//   contre les boîtes du plan ; se lever et s'asseoir changent de clip et de hauteur ensemble.
+// - qui marche (Lise, Sorel, Fernand, un patron attablé qui s'est levé) suit des points de passage (itineraire de
+//   src/bar/plan.js), au pas, par moveCircle contre les boîtes du plan, sauf la sienne et la banquette qui le porte ; se
+//   lever et s'asseoir changent de clip et de hauteur ensemble.
 // La personne vue par le regard (src/bar/regard.js) a la tête sur l'os Head et la face du corps (ou du siège), jamais
 // celle de la tête tournée (spec §3.5, « Réglé en B3 ») : modifiée sur place à chaque image.
 //
@@ -128,15 +130,16 @@ function ressort(etat, cible, omega, dt) {
   etat.x = x
 }
 
-// ─── Le dessous du corps assis ─────────────────────────────────────
-// Le plus bas de la peau autour du bassin (bas des fesses et des cuisses) dans la pose assise d'un clip, mesuré sur un
-// clone (peau recalculée sur le processeur) une fois par modèle et par clip, rapporté à l'échelle du clone : un autre
-// clone du même modèle, d'une autre taille, le retrouve sans mesure.
-const dessous = new Map()   // « url|clip » → hauteur du dessous, sans l'échelle ni le décalage du clone
+// ─── Le dessous du corps assis, et ses pieds ───────────────────────
+// Le plus bas de la peau autour du bassin (bas des fesses et des cuisses) et celui des pieds, dans la pose assise d'un
+// clip, mesurés sur un clone (peau recalculée sur le processeur) une fois par modèle et par clip, rapportés à l'échelle
+// du clone : un autre clone du même modèle, d'une autre taille, les retrouve sans mesure.
+const assises = new Map()   // « url|clip » → { dessous, pieds } : hauteurs sans l'échelle ni le décalage du clone
 const PORTEURS = /(Hips|UpLeg|Spine)$/   // les os qui portent la peau du bassin (une basque de veste comprise)
-function dessousAssis(ch, model, clip, rayon) {
+const PIEDS = /(Foot|ToeBase)$/          // ceux qui portent la peau des pieds
+function mesureAssise(ch, model, clip, rayon) {
   const cle = `${ch.cfg.url}|${clip.name}`
-  if (!dessous.has(cle)) {
+  if (!assises.has(cle)) {
     const mesure = new THREE.AnimationMixer(model)
     mesure.clipAction(clip).play()
     mesure.update(0)
@@ -144,26 +147,30 @@ function dessousAssis(ch, model, clip, rayon) {
     const hanches = trouverOs(model, 'hanches').getWorldPosition(new THREE.Vector3())
     const sol = model.parent ? model.parent.getWorldPosition(new THREE.Vector3()).y : 0   // le groupe, s'il est déjà placé
     const v = new THREE.Vector3()
-    let bas = Infinity
+    let bas = Infinity, pieds = Infinity
     model.traverse(m => {
       if (!m.isSkinnedMesh) return
       const si = m.geometry.attributes.skinIndex, sw = m.geometry.attributes.skinWeight, pos = m.geometry.attributes.position
-      const porte = m.skeleton.bones.map(b => PORTEURS.test(b.name))
+      const porte = m.skeleton.bones.map(b => PORTEURS.test(b.name)), pied = m.skeleton.bones.map(b => PIEDS.test(b.name))
       for (let i = 0; i < pos.count; i++) {
         let j = 0
         for (let k = 1; k < 4; k++) if (sw.getComponent(i, k) > sw.getComponent(i, j)) j = k
-        if (!porte[si.getComponent(i, j)]) continue
+        const os = si.getComponent(i, j)
+        if (!porte[os] && !pied[os]) continue
         m.getVertexPosition(i, v)
         v.applyMatrix4(m.matrixWorld)
-        if (v.y < bas && Math.hypot(v.x - hanches.x, v.z - hanches.z) <= rayon) bas = v.y
+        if (pied[os]) pieds = Math.min(pieds, v.y)
+        else if (v.y < bas && Math.hypot(v.x - hanches.x, v.z - hanches.z) <= rayon) bas = v.y
       }
     })
     mesure.stopAllAction()
     mesure.uncacheRoot(model)
     if (!Number.isFinite(bas)) throw new Error(`patrons : rien sous le bassin de ${ch.cfg.url} en ${clip.name}`)
-    dessous.set(cle, (bas - sol - model.position.y) / model.scale.y)
+    if (!Number.isFinite(pieds)) throw new Error(`patrons : aucun pied à ${ch.cfg.url} en ${clip.name}`)
+    const brut = h => (h - sol - model.position.y) / model.scale.y
+    assises.set(cle, { dessous: brut(bas), pieds: brut(pieds) })
   }
-  return dessous.get(cle) * model.scale.y + model.position.y
+  return assises.get(cle)
 }
 
 // ─── Accessoires, ombre, capsule ───────────────────────────────────
@@ -228,7 +235,10 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
   if (!siege === !poste) throw new Error(`patrons : « ${role} » a un siège ou un poste, l'un des deux`)
   const type = typeDuModele(modele)
   const fin = `/${modele}.glb`
-  const ch = withSeed(graine, () => spawnCharacter(type, { match: fin }))
+  // match : le characters.js de la branche ; model : celui du casting strict du lot 3 (A6, dans main), qui ignore match
+  // (chacun ignore l'option de l'autre). Les tirages de main ne sont pas ceux d'ici (le modèle imposé n'y est pas tiré) :
+  // une même graine n'y donne pas la même taille, et l'assise tient à toutes les tailles (voir grandirPourSaChaise)
+  const ch = withSeed(graine, () => spawnCharacter(type, { match: fin, model: modele }))
   if (!ch) throw new Error(`patrons : « ${role} » demande ${modele}, mais les modèles du jeu ne sont pas chargés`)
   const { model, mixer } = ch
   if (!ch.cfg.url.endsWith(fin)) {
@@ -236,6 +246,10 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
     throw new Error(`patrons : « ${role} » demande ${modele}, characters.js rend ${ch.cfg.url} (modèle absent du chargement)`)
   }
   const R = reglages
+  // ce qui arrête sa marche : les boîtes du plan, sauf la sienne (le carré d'un patron attablé, à sa place) et la
+  // banquette qui le porte (Dussart) : il en part debout, et y revient
+  const banquette = siege ? siegeDe(siege).banquette : null
+  const obstacles = Object.freeze(boites.filter(b => b.id !== role && !(banquette && b.id === banquette)))
   const hasard = generateur(graine)
   const entre = ([a, b]) => a + (b - a) * hasard()
   const group = new THREE.Group()
@@ -319,15 +333,33 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
     const corps = { x: 0, v: 0 }   // le lacet du corps, en ressort
     let lacetVoulu = 0
     const clipAssis = s => R.clips.assis[s.banquette ? 'banquette' : s.type]
+    const assise = s => mesureAssise(ch, model, clips[clipAssis(s)], R.assise.rayonM)
+    const surCeClone = h => h * model.scale.y + model.position.y   // une hauteur de mesureAssise, sur ce clone
     // la hauteur du groupe sur ce siège : le dessous du corps s'enfonce de 0 à enfoncementM dans l'assise, en partant du
     // décalage du plan
     const hauteurSur = s => {
-      const d = dessousAssis(ch, model, clips[clipAssis(s)], R.assise.rayonM)
+      const d = surCeClone(assise(s).dessous)
       return borne(s.decalage, s.hauteur - R.assise.enfoncementM - d, s.hauteur - d)
+    }
+    // Sur une chaise (la banquette comprise), les pieds au sol : une personne trop petite pour elle, que l'assise
+    // relèverait au point de lui décoller les pieds de plus de piedsMaxM, grandit jusqu'à la plus petite taille qui tient
+    // les deux (enfoncée de enfoncementM, les pieds à piedsMaxM). Au montage seulement, jamais sous les yeux du joueur.
+    // Enfoncé de enfoncementM, le groupe est à y = h − e − d et les pieds à y + p : h − e − échelle × (dessous − pieds),
+    // le décalage du clone s'annulant (ses pieds au sol debout, model.position.y, suit son échelle, et grandit avec elle).
+    function grandirPourSaChaise(s) {
+      if (s.type !== 'chaise') return
+      const m = assise(s)
+      const voulue = (s.hauteur - R.assise.enfoncementM - R.assise.piedsMaxM) / (m.dessous - m.pieds)
+      if (!(model.scale.y < voulue)) return
+      const f = voulue / model.scale.y
+      model.scale.multiplyScalar(f)
+      model.position.y *= f
+      model.updateMatrixWorld(true)
     }
     if (siege) {
       const s = siegeDe(siege)
       if (!clips[clipAssis(s)]) throw new Error(`patrons : le modèle ${modele} n'a pas de clip « ${clipAssis(s)} »`)
+      grandirPourSaChaise(s)
       siegeActuel = s
       melange = new Map([[clipAssis(s), 1]])
       y = hauteurSur(s)
@@ -452,7 +484,7 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
       }
       const pas = Math.min(d, M.vitesse * dt)
       if (pas <= 0) return
-      const n = moveCircle(pos, dx / d * pas, dz / d * pas, M.rayonM, boites)
+      const n = moveCircle(pos, dx / d * pas, dz / d * pas, M.rayonM, obstacles)
       const fait = Math.hypot(n.x - pos.x, n.z - pos.z)
       pos.x = n.x; pos.z = n.z
       lacetVoulu = Math.atan2(-dx, -dz)
@@ -467,7 +499,9 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
       melange = new Map([[R.clips.debout, 1]]); appliquer()
     }
 
-    const personne = { id: role, categorie: categorieDe(role), x: 0, y: 0, z: 0, lacet: corps.x }
+    // present : faux tant que la personne est absente (Sorel avant 18:30) ; createRegards la saute alors (ni témoin, ni
+    // fixée), et la compte dès qu'elle entre, sans être recréé
+    const personne = { id: role, categorie: categorieDe(role), x: 0, y: 0, z: 0, lacet: corps.x, present: true }
     let present = true, disposed = false
     const centreOmbre = new THREE.Vector3()
     function placer(dt) {
@@ -492,7 +526,7 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
     }
 
     const patron = {
-      role, modele, cfg: ch.cfg, group, model, mixer, os, cible, ombre, personne,
+      role, modele, cfg: ch.cfg, group, model, mixer, os, cible, ombre, personne, obstacles,
       accessoire: objet,
       categorie: personne.categorie,
       get position() { return { x: pos.x, z: pos.z } },
@@ -545,7 +579,8 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
         pose = 'assis'
         partir({ x: s.x, y: hauteurSur(s), z: s.z }, 0, R.lever.dureeS, () => {})
       },
-      // debout : marcher par ces points ({ x, z }), au pas ; lacet : la face voulue à l'arrivée
+      // debout : marcher par ces points ({ x, z }), au pas, contre ses obstacles ; lacet : la face voulue à l'arrivée.
+      // Les points : itineraire(position, vers) de src/bar/plan.js (qui sort des boîtes où l'on est déjà, la sienne comprise)
       marcher(points, { lacet: fin = null } = {}) {
         if (pose === 'assis') throw new Error(`patrons : « ${role} » est assis, il doit se lever avant de marcher`)
         if (!points || points.length === 0) return
@@ -558,6 +593,7 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
       // absent (Sorel avant 18:30) : ni dessiné, ni visé
       setPresent(oui) {
         present = !!oui
+        personne.present = present
         group.visible = present
         if (present) cible.layers.set(0)
         else cible.layers.disableAll()

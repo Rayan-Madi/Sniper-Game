@@ -403,6 +403,9 @@ export const PATRONS = {
   assise: {             // le corps posé sur son siège (chaise 0,45 m, tabouret 0,75 m, banquette 0,45 m)
     enfoncementM: 0.025,   // il s'y enfonce au plus de tant : la planche de la chaise (3 cm) cache le dessous des cuisses
     rayonM: 0.2,        // l'assise, autour du bassin : ce qui la touche (le bas des fesses et des cuisses)
+    piedsMaxM: 0.04,    // sur une chaise ou la banquette, les pieds au plus à tant du sol : qui est trop petit pour sa chaise
+                        // (un petit gangster_man_02 en Sit, relevé jusqu'à l'assise, les avait à 6,2 cm) grandit au montage
+                        // jusqu'à les y poser (§10 : « pieds au sol », à moins de 5 cm)
   },
   tete: {               // la tête tournée par-dessus le clip (os Head et Neck), vers l'interlocuteur ou vers Viktor
     maxDeg: 70,         // jamais plus loin de la face du corps
