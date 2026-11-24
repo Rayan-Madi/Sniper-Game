@@ -408,10 +408,11 @@ describe('annexes : mesures versionnées du lot 2', () => {
 
 // Mesures versionnées du socle du lot 3 (plan du lot 3a, tâche A9 ; spec du lot 3, §5, risque 9 : les références du
 // memtest à republier ; README des annexes, « Lot 3 : socle vérifié »). Les cinq seuils du lot 1 restent tenus en Moyen
-// et en Bas ; M6, à la vue de départ, garde ses triangles et ses appels à ±3 % du lot 2 (seul le visage du commanditaire
-// change, spec du lot 3 §2 d) ; le menu de départ est celui du lot 2 à l'unité près, et aux retours au menu comme au PvP
-// seuls les programmes changent (shaders des modèles dessinés dès M2, gardés pour la session). Les étapes des missions,
-// elles, changent avec leurs visages et leurs marqueurs : elles ne sont comparées qu'au README.
+// et en Bas ; M6, à la vue de départ, garde ses triangles et ses appels à ±3 % du lot 2 (le commanditaire et la foule y
+// changent : casting de A6, spec du lot 3 §2 d, et hasard décalé ; README des annexes, captures) ; le menu de départ
+// est celui du lot 2 à l'unité près, et aux retours au menu comme au PvP seuls les programmes changent (shaders des
+// modèles dessinés dès M2, gardés pour la session). Les étapes des missions, elles, changent avec leurs visages et
+// leurs marqueurs : elles ne sont comparées qu'au README.
 describe('annexes : mesures versionnées du socle du lot 3', () => {
   const annexe = nom => JSON.parse(readFileSync(resolve(__dirname, '../../docs/superpowers/specs/annexes', nom), 'utf8'))
   const failed = r => r.filter(c => !c.ok).map(c => c.critere)
