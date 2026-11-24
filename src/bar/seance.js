@@ -42,7 +42,11 @@
 // dureeS, debutS } quand une réplique commence (replique : celle de textes.js ; foyer : le sien, ou celui de l'échange ;
 // debutS : l'instant de la soirée où elle commence, au plus tard la fin de l'image qui l'émet : la frappe rattrape
 // l'écart) ; { type: 'finEchange', id } à la fin de sa
-// dernière réplique ; { type: 'reporte', id, essai, prochainS } ; { type: 'perdu', id } ; { type: 'dialogue', id }
+// dernière réplique ; { type: 'reporte', id, essai, prochainS } ; { type: 'perdu', id } quand un échange ne se jouera
+// plus : un échange porteur au bout de ses reports en SOUPÇON, ou, quand le départ commence, tout échange de l'escorte
+// pas encore commencé, porteur ou non (un bonus qu'un dialogue retenait compris). 'perdu' ne dit donc pas qu'un
+// renseignement a été manqué : il s'entend souvent ailleurs, et seul le carnet (connait, appris de createCarnet,
+// src/bar/renseignements.js) dit ce que Viktor sait (seconde relecture de B6) ; { type: 'dialogue', id }
 // (D2 : l'arbre « sorel » de DIALOGUES) ; { type: 'sortie', resultat: 'sorti', auto } ; { type: 'demasque', cause }.
 // Ce qui dépend de la situation (un dialogue fini, le palier) se voit à l'image où elle est donnée : ce qu'un dialogue
 // retenait part au plus tôt au début de l'image qui le voit fini.
