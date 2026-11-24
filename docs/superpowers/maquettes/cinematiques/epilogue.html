@@ -275,11 +275,15 @@
   .epi .hf { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transition: transform 1s cubic-bezier(.5,0,.8,.4); }
   .epi .hf.out { transform: translate(16cqw, 34cqw) rotate(8deg); }
   .epi #hfB { filter: drop-shadow(.4cqw .7cqw .7cqw rgba(0,0,0,.5)); }
-  .epi .rays { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; opacity: 0; mix-blend-mode: screen; filter: blur(.6cqw); transition: opacity 5s ease-in; }
+  /* les rayons respirent sur l'opacité de leur conteneur (.souffle), que la carte graphique compose sans repeindre, plus sur
+     le g de leur svg flouté, qu'il fallait repeindre et flouter à chaque image ; leur fondu en screen sur la photo passe au
+     conteneur (une opacité animée l'isole : dedans, le svg ne se fondrait plus que dans le conteneur vide) */
+  .epi .souffle { position: absolute; inset: 0; mix-blend-mode: screen; }
+  .epi .rays { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; opacity: 0; filter: blur(.6cqw); transition: opacity 5s ease-in; }
   .epi #povB.sun .rays { opacity: 1; }
-  .epi #povB.sun .rays g { animation: epi-breathe 6s ease-in-out infinite; }
+  .epi #povB.sun .souffle { animation: epi-breathe 6s ease-in-out infinite; }
   @keyframes epi-breathe { 0%, 100% { opacity: .75 } 50% { opacity: 1 } }
-  .epi.k-reduced #povB.sun .rays g { animation: none; opacity: .75; }   /* effets atténués : rayons fixes, à la pose de repos */
+  .epi.k-reduced #povB.sun .souffle { animation: none; opacity: .75; }   /* effets atténués : rayons fixes, à la pose de repos */
   .epi .dust { position: absolute; inset: 0; opacity: 0; transition: opacity 4s 1s; }
   .epi #povB.sun .dust { opacity: 1; }
   .epi .dust i { position: absolute; width: var(--s); height: var(--s); border-radius: 50%; background: radial-gradient(circle, #fff1cf, rgba(255,226,170,0) 70%);
@@ -541,10 +545,12 @@
                 <path d="M194 46 C197 41 202 40 205 43" fill="none" stroke="rgba(200,210,230,.35)" stroke-width="1.3" stroke-linecap="round"/>
               </svg>
             </div>
-            <svg class="rays" viewBox="0 0 100 56.25" preserveAspectRatio="none">
-              <defs><linearGradient id="epi-ray" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(255,222,165,.34)"/><stop offset=".65" stop-color="rgba(255,210,150,.1)"/><stop offset="1" stop-color="rgba(255,210,150,0)"/></linearGradient></defs>
-              <g><polygon points="94,-6 106,-2 58,31 42,17" fill="url(#epi-ray)"/><polygon points="104,2 110,10 62,33 54,26" fill="url(#epi-ray)" opacity=".7"/><polygon points="84,-6 90,-6 40,16 26,14" fill="url(#epi-ray)" opacity=".6"/></g>
-            </svg>
+            <div class="souffle">
+              <svg class="rays" viewBox="0 0 100 56.25" preserveAspectRatio="none">
+                <defs><linearGradient id="epi-ray" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(255,222,165,.34)"/><stop offset=".65" stop-color="rgba(255,210,150,.1)"/><stop offset="1" stop-color="rgba(255,210,150,0)"/></linearGradient></defs>
+                <g><polygon points="94,-6 106,-2 58,31 42,17" fill="url(#epi-ray)"/><polygon points="104,2 110,10 62,33 54,26" fill="url(#epi-ray)" opacity=".7"/><polygon points="84,-6 90,-6 40,16 26,14" fill="url(#epi-ray)" opacity=".6"/></g>
+              </svg>
+            </div>
             <div class="dust" id="dust"></div>
           </div>
         </div>

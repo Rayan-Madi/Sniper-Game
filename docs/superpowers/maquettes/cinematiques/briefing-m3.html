@@ -27,12 +27,15 @@
   .m3 .rain.on { opacity: 1; }
   .m3 .rain.soft { opacity: .55; }
   .m3 .rain::before, .m3 .rain::after { content: ''; position: absolute; inset: 0; }
-  .m3 .rain::before { opacity: .32; animation: m3-rainA .42s linear infinite;
+  /* chaque pluie glisse avec son calque (transform, composée sans repeindre) : chaque tour part de trois tuiles plus haut
+     (même motif) ; calque agrandi d'autant en bas et d'une tuile à droite, son coin haut gauche, où le motif s'ancre, à la
+     même place : motif aux mêmes places que quand background-position l'animait */
+  .m3 .rain::before { inset: 0 -11cqw -33cqw 0; opacity: .32; animation: m3-rainA .42s linear infinite;
       background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><g stroke='rgb(205,225,255)' stroke-width='1.1' stroke-linecap='round'><path d='M20 5 L14 23 M64 18 L58 36 M102 8 L96 26 M38 50 L32 68 M88 58 L82 76 M12 86 L6 104 M56 92 L50 110 M110 78 L104 96'/></g></svg>") 0 0 / 11cqw 11cqw; }
-  .m3 .rain::after { opacity: .22; animation: m3-rainB .6s linear infinite;
+  .m3 .rain::after { inset: 0 -6cqw -18cqw 0; opacity: .22; animation: m3-rainB .6s linear infinite;
       background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><g stroke='rgb(170,200,245)' stroke-width='1' stroke-linecap='round'><path d='M15 8 L11.7 18 M48 30 L44.7 40 M80 12 L76.7 22 M30 62 L26.7 72 M66 70 L62.7 80 M92 46 L88.7 56 M8 84 L4.7 94'/></g></svg>") 0 0 / 6cqw 6cqw; }
-  @keyframes m3-rainA { to { background-position: -11cqw 33cqw; } }
-  @keyframes m3-rainB { to { background-position: -6cqw 18cqw; } }
+  @keyframes m3-rainA { from { transform: translate(0, -33cqw); } to { transform: translate(-11cqw, 0); } }
+  @keyframes m3-rainB { from { transform: translate(0, -18cqw); } to { transform: translate(-6cqw, 0); } }
   /* effets atténués (k-reduced, posée par le kit sur #st) : pluie arrêtée à sa pose de repos */
   .m3.k-reduced .rain::before, .m3.k-reduced .rain::after { animation: none; }
   .m3 .blinkr { animation: k-blink 1.4s steps(2) infinite; }
@@ -81,14 +84,17 @@
   .m3 #camB .tn { background: #7fc6ff; }
   .m3 .feed .gw { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, rgba(110,255,140,.16), transparent 70%); mix-blend-mode: screen; }
   .m3 #camB .gw { background: radial-gradient(ellipse at 50% 40%, rgba(130,195,255,.15), transparent 70%); }
-  .m3 .feed .sb { position: absolute; left: 0; right: 0; top: 0; height: .3cqw; background: #eafff0; box-shadow: 0 0 1cqw .35cqw rgba(140,255,170,.75); opacity: 0; }
-  .m3 #camB .sb { background: #eef7ff; box-shadow: 0 0 1cqw .35cqw rgba(140,200,255,.75); }
+  /* trait du scanner : ::before d'un calque de la hauteur du flux, que translateY(100 %) descend de tout le flux (en
+     transform, sans repeindre ; le flux change de taille en vignette, le calque le suit comme top: 100 % le suivait) */
+  .m3 .feed .sb { position: absolute; inset: 0; opacity: 0; }
+  .m3 .feed .sb::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: .3cqw; background: #eafff0; box-shadow: 0 0 1cqw .35cqw rgba(140,255,170,.75); }
+  .m3 #camB .sb::before { background: #eef7ff; box-shadow: 0 0 1cqw .35cqw rgba(140,200,255,.75); }
   .m3 .feed.enh .sb { animation: m3-sb 1.2s steps(9, end) forwards; }
-  @keyframes m3-sb { 0% { top: 0; opacity: 1 } 99% { top: 100%; opacity: 1 } 100% { top: 100%; opacity: 0 } }
+  @keyframes m3-sb { 0% { transform: translateY(0); opacity: 1 } 99% { transform: translateY(100%); opacity: 1 } 100% { transform: translateY(100%); opacity: 0 } }
   .m3 .feed .sl3 { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.35) 0 1px, transparent 1px 3px); }
   .m3 .feed .vg { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 50%, rgba(0,6,2,.8) 100%); }
   .m3 .feed .roll { position: absolute; left: 0; right: 0; height: 3cqw; top: -4cqw; background: linear-gradient(180deg, transparent, rgba(160,255,180,.1), transparent); animation: m3-roll 3.2s linear infinite; }
-  @keyframes m3-roll { to { top: 44cqw } }
+  @keyframes m3-roll { to { transform: translateY(48cqw) } }   /* de top -4cqw à 44cqw, en transform */
   .m3.k-reduced .feed .roll { animation: none; }   /* effets atténués : bande de défilement à sa pose de repos, hors cadre */
   .m3 .feed .fx { position: absolute; inset: 0; background: #f2fff4; opacity: 0; pointer-events: none; }
   .m3 .feed .fx.on { animation: m3-fx .5s ease-out forwards; }

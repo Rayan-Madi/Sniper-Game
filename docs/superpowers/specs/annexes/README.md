@@ -410,3 +410,46 @@ Ce qu'on y lit :
   Avec les animations finies et en pause (`getAnimations()` entier) : 14 à 71.
 - **Étalon** : 10,8 à 12,3 ms à ×1, 33,9 à 50,3 ms à ×4, sauf une fois 14,8 ms (m2, première passe à ×4) : le ralenti de Chrome suspend le fil principal par tranches, et une boucle de 11 ms peut tomber presque entière dans une tranche active. Cette mesure-là est bien ralentie : image du montage de 356 ms, contre 172 ms à ×1.
 - **Durée réelle** : chaque scène dure un peu plus que la formule du séquenceur (tableau « Durée » du §1 de la spec, gardé par G1) : de 27 à 165 ms de plus à ×1, de 77 à 615 ms à ×4, sauf m5 (341 et 396 ms à ×1, 1,1 et 1,2 s à ×4). Les repères partent sur des minuteurs, que les images longues retardent (celle du montage de m5 surtout).
+
+### Hygiène de rendu, tâche C5 (`2026-10-28-cine-c5-avant.json`, `2026-10-28-cine-c5-apres.json`)
+
+C5 a passé en `transform` ce qui défilait en repeignant l'image, sans changer l'image : la pluie des prologues et de M3 (`background-position`), la bande du signal du kit (`.track`, `top`), la bande qui défile et le trait du scanner des caméras de M3 (`.roll`, `.sb`, `top`) ; et la respiration des rayons de l'épilogue, qui jouait sur le `g` d'un svg flouté, joue sur l'opacité de leur conteneur (`.souffle`). Gardes : `tests/briefing/rendu.test.js` (même trajet que la v1, respiration des rayons).
+
+Mesures du 2 novembre 2026, de 19 h 52 à 20 h 06, les quatre scènes touchées (l'épilogue en variante libres), à processeur ralenti 4 fois, servies par le Vite de la copie `Sniper-Game-cine`, en passes alternées dans la même séance : v1, v2, v1, v2. La v1 est servie en remettant à leur état de `7fa375d` les cinq fichiers que le jeu lit pour ces scènes (`src/briefing/kit.css` et les quatre scènes générées), la v2 en les reposant : le champ `commit` vaut donc « 7fa375d (modifié) » dans les deux annexes, et c'est l'annexe qui dit la version (`avant` : v1, `apres` : v2). Machine partagée : deux suites de tests d'autres copies tournaient pendant la première passe de la v1.
+
+Durées en ms, « passe 1 / passe 2 », colonnes comme pour la référence de la v1 :
+
+| Cas | Version | p50 | p95 | max (à s) | images lentes | images par seconde | animations en cours au plus (à s) |
+|---|---|---|---|---|---|---|---|
+| prologue A | v1 | 11 / 5,6 | 16,7 / 11,2 | 528 (0,8) / 239 (0,5) | 58 / 29 | 98 / 141 | 13 (13,2) / 13 (13,3) |
+| prologue A | v2 | 5,6 / 5,6 | 5,7 / 5,7 | 517 (0,7) / 317 (0,5) | 18 / 18 | 163 / 165 | 13 (13,3) / 13 (13,2) |
+| prologue B | v1 | 11,1 / 5,6 | 22,2 / 11,3 | 567 (39) / 333 (0,7) | 310 / 134 | 85 / 122 | 23 (45,6) / 23 (45,5) |
+| prologue B | v2 | 5,6 / 5,6 | 5,7 / 5,7 | 383 (1,1) / 428 (0,8) | 40 / 88 | 169 / 162 | 21 (45,4) / 23 (45,5) |
+| m3 | v1 | 11,1 / 11 | 22,3 / 16,7 | 500 (0,5) / 489 (0,5) | 259 / 156 | 78 / 103 | 45 (32,4) / 45 (32,4) |
+| m3 | v2 | 5,6 / 5,6 | 11,1 / 11,1 | 378 (0,4) / 445 (0,4) | 24 / 28 | 163 / 156 | 44 (32,9) / 44 (32,9) |
+| épilogue, libres | v1 | 5,8 / 5,6 | 11,3 / 11,1 | 922 (1,9) / 589 (1,6) | 98 / 50 | 106 / 158 | 45 (26,2) / 45 (26) |
+| épilogue, libres | v2 | 5,6 / 5,6 | 5,7 / 5,7 | 617 (1,4) / 700 (1,6) | 51 / 48 | 163 / 165 | 45 (25,9) / 45 (26,2) |
+
+Ce qu'on y lit :
+
+- **La v2 gagne dans les quatre cas et dans les deux passes**, bien au-delà du bruit (qui se lit d'une passe de la v1 à l'autre) : p95 de 5,7 ms (une image par synchro de l'écran) en prologue A, prologue B et épilogue, 11,1 ms en m3, contre 11,1 à 22,3 ms pour la v1 dans la même séance ; 156 à 169 images par seconde contre 78 à 158 ; moins d'images lentes (m3 : 24 et 28 contre 259 et 156 ; prologue B : 40 et 88 contre 310 et 134). La v1 de cette séance est plus lente que la référence du 28 octobre (m3 : 78 et 103 images par seconde, contre 116 et 121) : la machine était plus chargée, et la comparaison ne vaut qu'entre passes alternées de la même séance.
+- **Animations en cours : inchangées** (13, 21 à 23, 44 et 45, 45), comme attendu : une animation de `transform` compte autant qu'une de `top` dans `getAnimations()`. m3 et l'épilogue restent à leur maximum de la v1 (spec, décision D8, lecture A).
+- **L'image la plus longue** reste presque toujours celle du montage de la scène (0,4 à 1,9 s après ; une fois à 39 s, prologue B, v1) : de 317 à 700 ms pour la v2, de 239 à 922 ms pour la v1.
+
+Captures gelées du jeu, v1 contre v2 (`scripts/shots.mjs`, `BASE_URL=http://localhost:5186/`, deux à cinq captures de chaque version au même instant, comparées pixel à pixel ; écart : la plus grande différence d'un canal, sur 255) :
+
+| Capture | v1 contre v1 (bruit) | v2 contre v2 (bruit) | v1 contre v2 |
+|---|---|---|---|
+| prologue A, 6 000 ms | 1 pixel, écart 1 | identiques à l'octet | identiques à l'octet ; 1 pixel d'écart 1 avec l'autre capture de la v1 |
+| prologue B, 4 000 ms | 2 pixels, écart 1 | identiques à l'octet | 2 et 4 pixels, écart 1 |
+| m3, 2 000 ms | 113 204 pixels, écart 87 | 143 932 pixels, écart 81 | 118 069 et 136 257 pixels, écart 83 et 85 |
+| m3, 23 000 ms | 105 870 pixels, écart 44 | 149 908 pixels, écart 40 | 130 378 et 130 785 pixels, écart 66 et 73 |
+| m3 atténué (`attenue=1`), 2 000 ms | identiques à l'octet | identiques à l'octet | 61 pixels, écart 1 |
+| m3 atténué, 23 000 ms | identiques à l'octet | identiques à l'octet | 52 pixels, écart 1 |
+| épilogue, 40 000 ms | identiques à l'octet (deux fois), 78 pixels d'écart 1 (une fois) | identiques à l'octet (trois fois), 497 pixels d'écart 1 (une fois) | 285 pixels, écart 1 |
+
+- **m3** : le bruit de la v1 (spec §1, « Gel des captures ») vient tout entier de la pluie, posée sur `::before` et `::after` de `#rain` : la règle du gel (`.st.k-frozen *`) ne désigne pas les pseudo-éléments, dont les animations continuent sous le gel, et la capture les prend où elles en sont. En effets atténués, où la jumelle arrête la pluie, deux captures d'une version sont identiques à l'octet, et v1 contre v2 ne diffère que d'un niveau sur une soixantaine de pixels : même image.
+- **Prologues** : v1 et v2 identiques à l'octet, au bruit de la v1 près.
+- **Épilogue** : 285 pixels d'écart 1, en haut de l'image, dans la lumière des rayons : l'opacité qui respire s'applique maintenant au conteneur, après le flou, au lieu du `g`, avant (mathématiquement la même image ; l'arrondi sur 8 bits diffère d'un niveau). L'épilogue a son propre bruit, de loin en loin, d'un niveau sur quelques centaines de pixels, dans la v1 comme dans la v2.
+- **Premier essai écarté** : la pluie, agrandie vers le haut (son coin haut gauche remonté d'une tuile, soit 115,2 px à 1 280 px de large, pas un nombre entier), tombait à une fraction de pixel de sa place : 104 000 pixels d'écart 9 à 11 sur les prologues (le plan de la vitre, en perspective, entier rééchantillonné), 57 000 pixels d'écart 22 sur m3 atténué. Le calque garde donc son coin haut gauche, où le motif s'ancre, grandit en bas et à droite, et chaque tour part d'une tuile plus haut (même motif).
+- **Bouts du tour** : animations arrêtées par une feuille ajoutée (page temporaire autour de la maquette, `animation-play-state: paused` et délai négatif), au début et à la fin du tour : la pluie couvre toute la vitre du prologue A et tout le panorama de m3, sans bande découverte ; à mi-tour, la bande du signal passe au milieu de l'image. Captures dans `shots/c5/` (non versionné).
