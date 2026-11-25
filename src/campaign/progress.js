@@ -1,4 +1,6 @@
 // Progression de la campagne (mode histoire) : ce qu'une mission réussie change dans l'état sauvegardé.
+import { remettreM5 } from './etapes.js'
+
 export const MAX_LEVEL = 6        // dernier niveau (la fête)
 
 // Enregistre une réussite dans l'état de campagne (muté) et renvoie { cleared, last }.
@@ -15,8 +17,10 @@ export function recordClear(state, { level, reward, score }) {
 }
 
 // Saut direct à une mission (raccourci de développement) : la campagne reprend à cette mission, elle n'est plus
-// finie. Sinon, rejouer M3 sur une campagne finie puis la réussir laisserait le menu sur VOIR LA FIN.
+// finie. Sinon, rejouer M3 sur une campagne finie puis la réussir laisserait le menu sur VOIR LA FIN. M5 reprend au
+// Bivouac, tout à zéro (spec du bar, §6 ; src/campaign/etapes.js).
 export function jumpToLevel(state, level) {
   state.currentLevel = level
   state.campaignDone = false
+  remettreM5(state)
 }

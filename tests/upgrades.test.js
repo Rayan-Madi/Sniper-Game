@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 let U
 beforeEach(async () => { localStorage.clear(); delete window.__freedVictims; vi.resetModules(); U = await import('../src/upgrades.js') })
@@ -82,6 +82,75 @@ describe('progression de la campagne', () => {
     U.markPrologueSeen(); U.saveProgress()
     U.resetProgress()
     expect(U.state.prologueSeen).toBe(false)
+    expect(localStorage.getItem('sniper-save')).toBeNull()
+  })
+})
+
+// M5 en deux temps (spec docs/superpowers/specs/2026-10-28-m5-bar-design.md §6 ; plan
+// docs/superpowers/plans/2026-10-28-m5-bar.md, tâche B13) : la sauvegarde se souvient de l'étape (le bar ou le convoi),
+// de ce que Viktor a appris au Bivouac et de sa couverture. Les transitions sont dans src/campaign/etapes.js
+// (tests/campaign/etapes.test.js). Chaque test a été vu rouge sur upgrades.js d'avant la tâche (témoin écrit à côté de
+// son assertion), puis vert.
+describe('M5 : l\'étape et les renseignements du Bivouac dans la sauvegarde', () => {
+  const RIEN = { trajet: false, vehicule: false, place: false, heure: false, leurre: false, appel: false, allie: false }
+  const NEUF = { etape: 'bar', renseignements: RIEN, couverture: null }
+  const CONVOI = { etape: 'convoi', renseignements: { ...RIEN, trajet: true, place: true, heure: true, allie: true },
+    couverture: { soupconMax: 64.5, paliers: { mefiance: true, soupcon: true }, dureeS: 412.8 } }
+
+  // Un faux localStorage, qui garde ce qu'on y écrit sous forme de texte (la vérification réelle de la tâche :
+  // aller-retour saveProgress, loadProgress).
+  function fauxStockage() {
+    const m = new Map()
+    return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)) },
+      removeItem: k => { m.delete(k) }, clear: () => m.clear(), lu: k => JSON.parse(m.get(k)) }
+  }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('une campagne neuve est au bar, rien d\'appris', () => {
+    expect(U.state.m5).toEqual(NEUF)                       // témoin : l'état d'avant la tâche, sans m5
+  })
+
+  it('aller-retour sur un faux localStorage : l\'étape, les sept renseignements et la couverture reviennent', async () => {
+    const stock = fauxStockage()
+    vi.stubGlobal('localStorage', stock)
+    U.state.currentLevel = 5
+    U.state.m5 = structuredClone(CONVOI)
+    U.saveProgress()
+    expect(stock.lu('sniper-save').m5).toEqual(CONVOI)     // témoin : saveProgress d'avant la tâche, qui n'écrit pas m5
+    const M = await reload()
+    expect(M.state.currentLevel).toBe(5)
+    expect(M.state.m5).toEqual(CONVOI)
+  })
+
+  it('une ancienne sauvegarde sans m5 reprend au bar, tout à zéro, même si la mémoire disait le convoi', () => {
+    U.state.m5 = structuredClone(CONVOI)
+    localStorage.setItem('sniper-save', JSON.stringify({ currentLevel: 5, briefingSeen: [true, true, true, true, true, false] }))
+    expect(U.loadProgress()).toBe(true)
+    expect(U.state.m5).toEqual(NEUF)                       // témoin : loadProgress d'avant la tâche, qui laisse m5 tel quel
+    expect(U.state.currentLevel).toBe(5)
+  })
+
+  it('une sauvegarde abîmée est nettoyée au chargement', async () => {
+    localStorage.setItem('sniper-save', JSON.stringify({ currentLevel: 5,
+      m5: { etape: 'convoi', renseignements: { trajet: 'true', heure: true, vehicule: 1 }, couverture: { soupconMax: 'beaucoup' } } }))
+    const M = await reload()
+    // témoin : loadProgress d'avant la tâche (m5 absent) ; puis d.m5 recopié sans nettoyage
+    expect(M.state.m5).toEqual({ etape: 'convoi', renseignements: { ...RIEN, heure: true }, couverture: null })
+    localStorage.setItem('sniper-save', JSON.stringify({ currentLevel: 5, m5: { etape: 'quai', renseignements: { trajet: true } } }))
+    const N = await reload()
+    expect(N.state.m5).toEqual(NEUF)
+  })
+
+  it('une nouvelle campagne (resetCampaignFlags) remet M5 au bar, tout à zéro', () => {
+    U.state.m5 = structuredClone(CONVOI)
+    U.resetCampaignFlags()
+    expect(U.state.m5).toEqual(NEUF)                       // témoin : resetCampaignFlags d'avant la tâche
+  })
+
+  it('effacer la sauvegarde (resetProgress) remet aussi M5 au bar', () => {
+    U.state.m5 = structuredClone(CONVOI); U.saveProgress()
+    U.resetProgress()
+    expect(U.state.m5).toEqual(NEUF)                       // témoin : resetProgress d'avant la tâche
     expect(localStorage.getItem('sniper-save')).toBeNull()
   })
 })

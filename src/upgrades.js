@@ -1,4 +1,5 @@
 import { CULASSE } from './shot/tuning.js'
+import { m5Neuf, nettoyerM5, remettreM5 } from './campaign/etapes.js'
 
 export const UPGRADES = {
   velocity:  { name: 'Vélocité',    desc: 'Balle plus rapide, moins de délai au tir', max: 4, cost: [1,2,2,3] },
@@ -19,12 +20,14 @@ export const state = {
   briefingSeen: NO_BRIEFING_SEEN(), // briefing de chaque mission déjà vu → pas rejoué au réessai
   prologueSeen: false,              // prologue (l'offre, l'appel d'Anton, le tableau) déjà vu dans cette campagne
   campaignDone: false,              // M6 réussie, épilogue pas encore vu jusqu'au bout : le menu propose la fin
+  m5: m5Neuf(),                     // M5 en deux temps : l'étape (bar, convoi), ce que Viktor a appris au Bivouac (campaign/etapes.js)
 }
 
 export function markBriefingSeen(index) { state.briefingSeen[index] = true }
 export function markPrologueSeen() { state.prologueSeen = true }
 export function resetCampaignFlags() {
   state.freedVictims = false; state.briefingSeen = NO_BRIEFING_SEEN(); state.prologueSeen = false; state.campaignDone = false
+  remettreM5(state)
 }
 
 // ─── Sauvegarde de progression (mode histoire) ─────────────────────
@@ -41,6 +44,7 @@ export function saveProgress() {
       briefingSeen: state.briefingSeen,
       prologueSeen: state.prologueSeen,
       campaignDone: state.campaignDone,
+      m5: state.m5,
     }))
   } catch (e) { /* stockage indisponible */ }
 }
@@ -57,6 +61,7 @@ export function loadProgress() {
     state.briefingSeen = NO_BRIEFING_SEEN().map((_, i) => !!(d.briefingSeen && d.briefingSeen[i]))
     state.prologueSeen = !!d.prologueSeen
     state.campaignDone = !!d.campaignDone
+    state.m5 = nettoyerM5(d.m5)       // absent (ancienne sauvegarde) ou abîmé : le bar, tout à zéro
     return true
   } catch (e) { return false }
 }
