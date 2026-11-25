@@ -414,6 +414,7 @@ export const PATRONS = {
     partCou: 0.4,       // la part du cou dans la rotation, le reste à la tête
     hochementDeg: 4,    // qui parle hoche la tête de tant…
     hochementHz: 1.7,   // … à ce rythme
+    hochementFonduS: 0.4,   // le hochement vient quand on se met à parler et s'en va quand on se tait, en tant (s)
   },
   marche: {
     vitesse: 1.1,       // m/s : Lise et Sorel marchent sans se presser (Viktor : 1,6 m/s)
@@ -423,12 +424,21 @@ export const PATRONS = {
     virageS: 0.3,       // le temps de se tourner vers où l'on va
     arriveeM: 0.03,     // arrivé à un point de passage à moins de tant
     bloqueS: 0.8,       // retenu par une boîte sans avancer pendant tant : la marche s'arrête (bloque)
+    retenuSous: 0.2,    // une image où l'on avance de moins de cette part de son pas compte comme retenue (bloqueS)
   },
-  lever: { dureeS: 0.9, demi: 0.5 },   // se lever ou s'asseoir (s) ; « il se lève à demi » : la pose debout à moitié
+  lever: {
+    dureeS: 0.9,        // se lever ou s'asseoir (s)
+    demi: 0.5,          // « il se lève à demi » : la pose debout à moitié
+    reculM: 0.47,       // debout, il recule de tant derrière sa chaise ou son tabouret (passé la moitié du lever) : sur
+                        // place, l'assise et le dossier lui traversaient les jambes. Mesuré sur les GLB en Idle, au plus
+                        // grand de heightVar : 0,45 m pour mafia_boss (armure et bras devant lui), 0,40 m pour les deux
+                        // autres ; 0,38 m sur un tabouret (revue de B10). Jamais sur la banquette, adossée au mur
+  },
   ombre: {              // l'ombre de contact peinte sous chacun (aucun personnage ne projette d'ombre : §3.2, §8)
     assis: [0.8, 1.0],  // largeur et profondeur (m) sous une personne assise, ses pieds devant elle
     debout: [0.6, 0.6], // sous une personne debout
     opacite: 0.5,       // au plus noir, sous le bassin : une ombre douce, pas une tache
+    avantAssisM: 0.18,  // assis, son centre avance de tant devant le bassin : sous les cuisses, vers les pieds
   },
   capsule: { rayonM: 0.22, hauteurM: 1.0, sousTeteM: 0.4 },   // ce qu'on vise (E) : 1 m centré 0,4 m sous la tête, d'au-dessus d'elle au buste
 }

@@ -424,6 +424,76 @@ describe('se lever, marcher, s\'asseoir', () => {
     h.dispose()
   })
 
+  it('levé d\'une chaise ou d\'un tabouret, il en est sorti : ni l\'assise ni le dossier dans ses jambes', () => {
+    // Le siège tel que src/bar/salle.js le dessine, dans son repère (face vers −z, le dossier derrière, vers +z) : la
+    // chaise, son assise (disque de 0,2 m, de 0,42 à 0,45 m) et son dossier (|x| ≤ 0,165 m, z de 0,135 à 0,215 m, de 0,42
+    // à 1 m) ; le tabouret, son assise et son repose-pieds (disque de 0,18 m, de 0,25 à 0,76 m).
+    const dansLeSiege = (w, s) => {
+      const dx = w.x - s.x, dz = w.z - s.z, c = Math.cos(s.lacet), sn = Math.sin(s.lacet)
+      const x = c * dx - sn * dz, z = sn * dx + c * dz, r = Math.hypot(x, z)
+      if (s.type === 'tabouret') return r <= 0.18 && w.y >= 0.25 && w.y <= 0.76
+      return (r <= 0.2 && w.y >= 0.42 && w.y <= 0.45) || (Math.abs(x) <= 0.165 && z >= 0.135 && z <= 0.215 && w.y >= 0.42 && w.y <= 1)
+    }
+    const faux = []
+    for (const modele of REELS) {
+      for (const id of ['B-sud', 'B-nord', 'A-nord', 'D-nord', 'tabouret-3']) {
+        for (const fixe of [0, 1 - 1e-9]) {   // les deux bouts de heightVar : le plus grand déborde le plus
+          const s = siege(id)
+          tirage.fixe = fixe
+          let p
+          try { p = m.creerPatron({ role: 'essai', modele, siege: id, graine: 7 }) } finally { tirage.fixe = null }
+          p.update(DT)
+          p.seLever(); avance(p, 1.5)
+          const n = sommets(p, w => dansLeSiege(w, s)).length
+          if (p.assis || n > 0) faux.push(`${modele} sur ${id}, échelle ${p.model.scale.y.toFixed(3)} : ${n} sommets dans son siège`)
+          p.dispose()
+        }
+      }
+    }
+    expect(faux).toEqual([])   // témoin : debout sur place, le corps dans l'assise et le dossier (Mattei, revue de B10)
+  })
+
+  it('se lever ne le fait jamais reculer dans un mur ; sur la banquette, Dussart reste devant elle', () => {
+    // une chaise à 0,5 m du mur nord, tournée vers le sud : derrière elle, la place manque
+    const s = { id: 'essai-mur', type: 'chaise', table: null, x: 2.5, z: -4.0, lacet: Math.PI, occupant: null, hauteur: 0.45, oeil: 1.2, decalage: 0 }
+    const p = m.creerPatron({ role: 'essai', modele: 'mafia_boss', siege: s, graine: 7 })
+    p.update(DT)
+    p.seLever(); avance(p, 1.5)
+    expect(p.assis).toBe(false)
+    expect(p.position.z).toBeGreaterThanOrEqual(-4.5 + PATRONS.marche.rayonM - 1e-6)   // témoin : le recul sans moveCircle
+    p.dispose()
+    const a = siege('A-sud')
+    const d = m.creerPatron({ role: 'dussart', modele: 'mafia_boss', siege: 'A-sud', graine: 3 })
+    d.update(DT)
+    d.seLever(); avance(d, 1.5)
+    expect(Math.hypot(d.position.x - a.x, d.position.z - a.z)).toBeLessThan(1e-6)   // témoin : le recul sur la banquette
+    d.dispose()
+  })
+
+  it('il se lève d\'abord, puis recule : rien ne bouge au sol avant la moitié du lever, ni quand il se lève à demi', () => {
+    const s = siege('B-sud')
+    const p = m.creerPatron({ role: 'mattei', modele: 'mafia_boss', siege: 'B-sud', graine: 3 })
+    p.update(DT)
+    const loin = () => Math.hypot(p.position.x - s.x, p.position.z - s.z)
+    p.seLever({ demi: true }); avance(p, 1.5)
+    expect(loin()).toBeLessThan(1e-6)                                      // à demi, il reste à sa place
+    p.seLever()
+    avance(p, 0.15)                                                         // de la moitié à debout : il part tout de suite
+    expect(loin()).toBeGreaterThan(0.005)
+    avance(p, 1.5)
+    expect(loin()).toBeCloseTo(PATRONS.lever.reculM, 6)
+    p.dispose()
+    const q = m.creerPatron({ role: 'mattei', modele: 'mafia_boss', siege: 'B-sud', graine: 3 })
+    q.update(DT)
+    const loinQ = () => Math.hypot(q.position.x - s.x, q.position.z - s.z)
+    q.seLever()
+    avance(q, PATRONS.lever.dureeS * 0.4)                                   // le lever est au tiers : assis encore à moitié
+    expect(loinQ()).toBeLessThan(1e-6)                                      // témoin : le corps glisse dès le départ
+    avance(q, 1.5)
+    expect(loinQ()).toBeCloseTo(PATRONS.lever.reculM, 6)
+    q.dispose()
+  })
+
   it('Lise suit son itinéraire du zinc à la table A sans jamais entrer dans une boîte ni s\'y frotter, puis s\'arrête', () => {
     const p = m.creerPatron({ role: 'lise', modele: 'mafia_woman_03', poste: 'lise.zinc', graine: 5, accessoire: 'tablier' })
     const r = PATRONS.marche.rayonM - 0.01, v = PATRONS.marche.vitesse

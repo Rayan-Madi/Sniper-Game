@@ -17,7 +17,8 @@
 //   la tête ;
 // - qui marche (Lise, Sorel, Fernand, un patron attablé qui s'est levé) suit des points de passage (itineraire de
 //   src/bar/plan.js), au pas, par moveCircle contre les boîtes du plan, sauf la sienne et la banquette qui le porte ; se
-//   lever et s'asseoir changent de clip et de hauteur ensemble.
+//   lever et s'asseoir changent de clip et de hauteur ensemble ; levé d'une chaise ou d'un tabouret, on recule derrière
+//   lui, la banquette exceptée.
 // La personne vue par le regard (src/bar/regard.js) a la tête sur l'os Head et la face du corps (ou du siège), jamais
 // celle de la tête tournée (spec §3.5, « Réglé en B3 ») : modifiée sur place à chaque image.
 //
@@ -455,7 +456,7 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
       ressort(tete.poids, tete.regard ? 1 : 0, omegaTete, dt)
       tete.lacet.x = borne(tete.lacet.x, -T.maxDeg * RAD, T.maxDeg * RAD)
       const poids = borne(tete.poids.x, 0, 1)
-      tete.parleK = borne(tete.parleK + (tete.parle ? dt : -dt) / 0.4, 0, 1)
+      tete.parleK = borne(tete.parleK + (tete.parle ? dt : -dt) / T.hochementFonduS, 0, 1)
       tete.phase = (tete.phase + dt * T.hochementHz * Math.PI * 2) % (Math.PI * 2)
       const hochement = T.hochementDeg * RAD * doux(tete.parleK) * Math.sin(tete.phase)
       const dLacet = poids * (tete.lacet.x - lacetClip), dTangage = poids * (tete.tangage.x - tangageClip)
@@ -469,9 +470,11 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
 
     // ── marche, lever, s'asseoir ──
     let route = null, etape = 0, bloque = false, retenu = 0, lacetFinal = null
-    let transition = null   // { t, duree, de: { x, y, z }, vers: { x, y, z }, levee: [de, vers], fin }
-    function partir(vers, leveeVoulue, duree, fin) {
-      transition = { t: 0, duree, de: { x: pos.x, y, z: pos.z }, vers, levee: [levee, leveeVoulue], fin }
+    // { t, duree, de: { x, y, z }, vers: { x, y, z }, levee: [de, vers], depuis, fin } ; depuis : la part de la transition
+    // passée avant que le corps ne quitte sa place au sol (0 : il glisse tout du long)
+    let transition = null
+    function partir(vers, leveeVoulue, duree, fin, depuis = 0) {
+      transition = { t: 0, duree, de: { x: pos.x, y, z: pos.z }, vers, levee: [levee, leveeVoulue], depuis, fin }
     }
     function marcher(dt) {
       const M = R.marche
@@ -488,7 +491,7 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
       const fait = Math.hypot(n.x - pos.x, n.z - pos.z)
       pos.x = n.x; pos.z = n.z
       lacetVoulu = Math.atan2(-dx, -dz)
-      retenu = fait < 0.2 * pas ? retenu + dt : 0
+      retenu = fait < M.retenuSous * pas ? retenu + dt : 0
       if (retenu >= M.bloqueS) arreter(true)
     }
     function arreter(retenue) {
@@ -520,7 +523,7 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
       // ombre : au sol, sous les cuisses de qui est assis, sous les pieds de qui est debout
       const k = doux(borne(levee, 0, 1))
       const [la, pa] = R.ombre.assis, [ld, pd] = R.ombre.debout
-      centreOmbre.set(0, 0.004 - y, 0.18 * (1 - k))
+      centreOmbre.set(0, 0.004 - y, R.ombre.avantAssisM * (1 - k))
       ombre.position.copy(centreOmbre)
       ombre.scale.set(la + (ld - la) * k, 1, pa + (pd - pa) * k)
     }
@@ -552,7 +555,7 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
         fondu = R.clips.fonduS
         appliquer()
       },
-      // assis : se lever, sur place (demi : à moitié, « il se lève à demi »)
+      // assis : se lever (demi : à moitié, « il se lève à demi », sur place ; debout, il recule derrière son siège)
       seLever({ demi = false } = {}) {
         if (pose !== 'assis') return
         const but = demi ? R.lever.demi : 1
@@ -562,9 +565,15 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
         melange = new Map([[assis, 1 - but], [R.clips.debout, but]].filter(([, w]) => w > 0))
         appliquer()
         const haut = hauteurSur(siegeActuel)
-        partir({ x: pos.x, y: haut * (1 - but), z: pos.z }, but, R.lever.dureeS * (but - levee), () => {
+        // debout, il sort de son siège : passé la moitié du lever, il recule de reculM derrière sa chaise ou son tabouret,
+        // contre ses obstacles (sur place, l'assise et le dossier lui traversaient les jambes) ; ni à demi, ni sur la
+        // banquette, adossée au mur (Dussart en sort par son bout est : PASSAGES de src/bar/plan.js)
+        const d = but === 1 && !siegeActuel.banquette ? R.lever.reculM : 0
+        const f = forwardOf(siegeActuel.lacet)
+        const vers = d > 0 ? moveCircle(pos, -f.x * d, -f.z * d, R.marche.rayonM, obstacles) : pos
+        partir({ x: vers.x, y: haut * (1 - but), z: vers.z }, but, R.lever.dureeS * (but - levee), () => {
           if (but === 1) { pose = 'debout'; siegeActuel = null }
-        })
+        }, d > 0 ? borne((R.lever.demi - levee) / (but - levee), 0, 1) : 0)
       },
       // debout : s'asseoir sur ce siège (on y va d'abord : le corps glisse jusqu'à lui pendant qu'il s'assoit)
       asseoir(ref) {
@@ -604,9 +613,10 @@ export function creerPatron({ role, modele, teinte = 0xffffff, siege = null, pos
         if (route) marcher(dt)
         if (transition) {
           transition.t += dt
-          const k = doux(borne(transition.t / transition.duree, 0, 1))
-          pos.x = transition.de.x + (transition.vers.x - transition.de.x) * k
-          pos.z = transition.de.z + (transition.vers.z - transition.de.z) * k
+          const k = doux(borne(transition.t / transition.duree, 0, 1)), d0 = transition.depuis
+          const kSol = d0 > 0 ? doux(borne((k - d0) / (1 - d0), 0, 1)) : k
+          pos.x = transition.de.x + (transition.vers.x - transition.de.x) * kSol
+          pos.z = transition.de.z + (transition.vers.z - transition.de.z) * kSol
           y = transition.de.y + (transition.vers.y - transition.de.y) * k
           const [l0, l1] = transition.levee
           levee = l0 + (l1 - l0) * k
