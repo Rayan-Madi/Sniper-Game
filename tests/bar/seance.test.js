@@ -363,6 +363,18 @@ describe('la fin de la soirée', () => {
     expect(() => createSeance().sortir(NaN)).toThrow()
   })
 
+  // tranché en B11 (spec §3.9, « Réglé en B6 ») : la porte refermée sur le départ, personne de l'escorte n'est là pour
+  // suivre Viktor ; passer la porte en SOUPÇON est une sortie comme une autre
+  it('l\'escorte partie, sortir en SOUPÇON ne démasque plus : personne ne suit Viktor', () => {
+    const s = createSeance()
+    jouer(s, 389 + dureeEchange('R3') + 2 * DT)
+    expect(s.escortePartie).toBe(true)
+    expect(s.sortir(80)).toEqual([{ type: 'sortie', resultat: 'sorti', auto: false }])   // témoin : Sorel le suit encore
+    const avant = createSeance()
+    jouer(avant, 390)                                       // le départ commencé, la porte pas encore refermée
+    expect(avant.sortir(80)[1]).toEqual({ type: 'demasque', cause: 'sortieSoupcon' })
+  })
+
   it('les toilettes sont occupées de 240 à 300 s', () => {
     const s = createSeance()
     const vu = []

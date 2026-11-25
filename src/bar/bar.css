@@ -1,0 +1,103 @@
+/* Le Bivouac (bar de M5) : interface par-dessus le rendu 3D, style « dossier du fixeur » de l'enquête (enquete.css).
+   Tout est préfixé .bar. Tâche B11 : ce qui rend la soirée jouable (carte, pause, noir, lignes de texte, dialogue, invite,
+   carnet, heure) ; la tâche B12 lui donne sa forme (jauge, anneau, arcs, vignette, tampon NOTÉ, bilan, téléphone).
+   Base design (audit du 24 novembre 2026) : boutons de 44 px de haut au moins et textes à 4,5:1 (BAR-1) ; text-wrap:
+   balance sur les textes fixes de plusieurs lignes, jamais sur une ligne tapée (BAR-7) ; toute animation répétée a sa
+   jumelle .bar-reduced (BAR-6). */
+.bar { position: fixed; inset: 0; z-index: 150; pointer-events: none; font-family: 'Courier New', Courier, monospace; color: #d7dccf; }
+.bar [hidden] { display: none !important; }
+.bar .bar-card, .bar .bar-pause h2 { text-shadow: .09vw 0 rgba(255,40,60,.35), -.09vw 0 rgba(0,210,255,.35); }
+.bar .bar-fx { position: absolute; inset: 0; overflow: hidden; }
+.bar .bar-scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.12) 0 1px, transparent 1px 3px); }
+.bar .bar-vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.6) 100%); }
+
+/* ── en jeu : heure, carnet, point de visée, invite, lignes de texte (chacune sur sa plaque noire) ── */
+.bar .bar-heure { position: absolute; top: 2.6vh; right: 2.2vw; font-size: clamp(11px, 1.05vw, 15px); letter-spacing: .3em; color: #d7dccf;
+  background: rgba(0,0,0,.7); padding: .3em .6em; }
+.bar .bar-carnet { position: absolute; top: 2.6vh; left: 2.2vw; font-size: clamp(10px, .9vw, 13px); letter-spacing: .2em; color: #d7dccf;
+  background: rgba(0,0,0,.7); padding: .5em .8em; }
+.bar .bar-carnet h4 { margin: 0 0 .4em; font-weight: normal; letter-spacing: .3em; color: #f1f4ea; }
+.bar .bar-carnet ul { margin: 0; padding: 0; list-style: none; }
+.bar .bar-carnet li { color: #9aa094; }
+.bar .bar-carnet li.su { color: #f1f4ea; }
+.bar .bar-cross { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(241,244,234,.5); }
+.bar .bar-cross.on { background: #f0c040; }
+.bar .bar-prompt { position: absolute; left: 50%; top: calc(50% + 6vh); transform: translateX(-50%); white-space: nowrap; font-size: clamp(10px, .9vw, 13px);
+  letter-spacing: .3em; color: #f1f4ea; background: rgba(0,0,0,.7); padding: .3em .6em; opacity: 0; }
+.bar .bar-prompt.on { opacity: 1; }
+/* le maintien de E (sortir, une pièce) : un trait ambré qui se remplit sous l'invite (--p, de 0 à 1) */
+.bar .bar-prompt::after { content: ''; position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: #f0c040;
+  transform-origin: left; transform: scaleX(var(--p, 0)); }
+.bar .bar-pensee, .bar .bar-reaction, .bar .bar-sub { position: absolute; left: 6vw; right: 6vw; text-align: center; line-height: 1.4; opacity: 0; }
+.bar .bar-pensee { bottom: 17vh; font-size: clamp(13px, 1.5vw, 21px); color: #e8dcc0; font-style: italic; }
+.bar .bar-reaction { bottom: 11.5vh; font-size: clamp(13px, 1.5vw, 21px); color: #f1f4ea; }
+.bar .bar-sub { bottom: 6vh; font-size: clamp(14px, 1.7vw, 24px); color: #f1f4ea; min-height: 1.4em; }
+.bar .bar-pensee.on, .bar .bar-reaction.on, .bar .bar-sub.on { opacity: 1; }
+.bar .bar-pensee .spk, .bar .bar-reaction .spk, .bar .bar-sub .spk { color: #cfd6e6; letter-spacing: .25em; font-size: .72em; margin-right: .9em; font-style: normal;
+  background: rgba(0,0,0,.7); padding: .15em .5em; }
+.bar .bar-pensee .tx, .bar .bar-reaction .tx, .bar .bar-sub .tx { background: rgba(0,0,0,.7); padding: .1em .5em; }
+.bar .bar-pensee .tx:empty, .bar .bar-reaction .tx:empty, .bar .bar-sub .tx:empty { padding: 0; }
+.bar .bar-aide { position: absolute; left: 50%; top: 9vh; transform: translateX(-50%); font-size: clamp(11px, 1vw, 14px); letter-spacing: .2em;
+  color: #f1f4ea; background: rgba(0,0,0,.7); padding: .4em .8em; opacity: 0; }
+.bar .bar-aide.on { opacity: 1; }
+
+/* ── le dialogue : panneau bas, onglet du rôle, choix numérotés ── */
+.bar .bar-dialogue { position: absolute; left: 50%; bottom: 5vh; width: min(74vw, 940px); transform: translateX(-50%); padding: 3vh 2vw 2vh;
+  border: 1px solid rgba(215,220,207,.28); background: rgba(10,12,18,.94); }
+.bar .bar-onglet { position: absolute; top: -3.2vh; left: -1px; font-size: clamp(11px, 1.05vw, 15px); letter-spacing: .25em; padding: .6vh 1.2vw;
+  background: #e04848; color: #0b0c10; font-weight: bold; }
+.bar .bar-replique { font-size: clamp(14px, 1.55vw, 22px); line-height: 1.5; color: #f1f4ea; min-height: 1.5em; }
+.bar .bar-replique .did { font-style: italic; color: #c9c0a8; }
+.bar .bar-choix { margin: 2vh 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1.2vh; font-size: clamp(13px, 1.3vw, 18px); }
+.bar .bar-choix li { padding: .3em .6em; border-left: 2px solid transparent; color: #d7dccf; }
+.bar .bar-choix li.on { border-left-color: #f0c040; color: #f1f4ea; }
+.bar .bar-choix b { font-weight: normal; color: #f0c040; margin-right: .8em; }
+.bar .bar-minuterie { margin-top: 1.6vh; height: 2px; background: rgba(215,220,207,.15); }
+.bar .bar-minuterie i { display: block; height: 100%; background: #d7dccf; transform-origin: left; }
+
+/* ── carte de départ : le carton daté, puis les commandes ── */
+.bar .bar-card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.2vh;
+  background: rgba(3,4,7,.82); pointer-events: auto; cursor: pointer; }
+.bar .bar-card > * { opacity: 0; animation: bar-in .7s ease-out forwards; }
+.bar .bar-card .d { font-size: clamp(22px, 3.2vw, 46px); letter-spacing: .22em; padding-left: .22em; color: #f1f4ea; animation-delay: .3s; }
+.bar .bar-card .l { width: 22vw; height: 2px; background: #e04848; opacity: 1; transform: scaleX(0); animation: bar-line .8s cubic-bezier(.7,0,.2,1) .7s forwards; }
+.bar .bar-card .texte, .bar .bar-card .consigne { text-wrap: balance; }
+.bar .bar-card .texte { margin: 0; max-width: 46em; text-align: center; font-size: clamp(14px, 1.45vw, 21px); line-height: 1.5; color: #f1f4ea; animation-delay: .9s; }
+.bar .bar-card .consigne { margin: 0; text-align: center; font-size: clamp(12px, 1.1vw, 16px); letter-spacing: .3em; color: #d7dccf; animation-delay: 1s; }
+.bar .bar-card .k { margin-top: 2.6vh; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1.1vh 2.2vw; max-width: 80vw;
+  font-size: clamp(11px, .95vw, 14px); letter-spacing: .25em; color: #b9beb2; text-align: center; animation-delay: 1.1s; }
+.bar .bar-card .k > span { display: inline-flex; align-items: center; gap: .7em; white-space: nowrap; }
+.bar .bar-card .k > i { width: 4px; height: 4px; border-radius: 50%; background: rgba(215,220,207,.3); }
+.bar .bar-card kbd { font: inherit; letter-spacing: 0; display: inline-block; min-width: 1.9em; padding: .3em .45em; text-align: center; color: #f1f4ea;
+  border: 1px solid rgba(215,220,207,.4); border-bottom-width: 2px; border-radius: 3px; background: rgba(215,220,207,.06); }
+.bar .bar-card kbd + kbd { margin-left: -.35em; }
+.bar .bar-card .go { margin-top: 2.6vh; font-size: clamp(12px, 1.1vw, 16px); letter-spacing: .4em; padding-left: .4em; color: #f0c040;
+  animation: bar-in .6s ease-out 1.6s forwards, bar-pulse 1.6s ease-in-out 2.2s infinite; }
+/* sortie de secours (verrou du pointeur refusé) : au pied de la carte, 44 px de haut au moins (BAR-1), inerte tant
+   qu'elle est invisible (le clic traverse alors jusqu'à la carte, qui demande le verrou) */
+.bar .bar-card .partir { position: absolute; left: 0; right: 0; bottom: 5vh; width: max-content; margin: 0 auto; font: inherit; font-size: clamp(11px, .85vw, 13px);
+  letter-spacing: .3em; min-height: 44px; min-width: 44px; padding: 0 1.6vw; background: transparent; color: #b9beb2; border: 1px solid rgba(215,220,207,.4);
+  cursor: pointer; pointer-events: none; animation: bar-in .7s ease-out 2.2s forwards, bar-live .01s linear 2.9s forwards; }
+.bar .bar-card .partir:hover { border-color: #f0c040; color: #f0c040; }
+@keyframes bar-in { 0% { opacity: 0; transform: translateY(.8vh) } 100% { opacity: 1; transform: none } }
+@keyframes bar-line { to { transform: scaleX(1) } }
+@keyframes bar-live { from, to { pointer-events: auto } }   /* sans remplissage « backwards » : pendant le délai, le pointer-events: none de la règle */
+@keyframes bar-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .3 } }
+
+/* ── pause : au-dessus du noir, comme la carte ── */
+.bar .bar-pause { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.4vh;
+  background: rgba(3,4,7,.86); pointer-events: auto; }
+.bar .bar-pause h2 { margin: 0 0 1.6vh; font-weight: normal; font-size: clamp(20px, 2.6vw, 36px); letter-spacing: .5em; padding-left: .5em; color: #f1f4ea; }
+.bar .bar-pause button { font: inherit; font-size: clamp(12px, 1.15vw, 16px); letter-spacing: .3em; min-height: 44px; padding: 1.4vh 2.4vw; min-width: 26vw;
+  background: transparent; color: #d7dccf; border: 1px solid rgba(215,220,207,.4); cursor: pointer; }
+.bar .bar-pause button:hover { border-color: #f0c040; color: #f0c040; }
+/* REPRENDRE refusé par le navigateur (moins d'une seconde après Échap) */
+.bar .bar-retry { margin: -.8vh 0 0; font-size: clamp(11px, .95vw, 14px); letter-spacing: .3em; padding-left: .3em; color: #f0c040; animation: bar-pulse 1.6s ease-in-out infinite; }
+.bar .bar-black { position: absolute; inset: 0; background: #000; opacity: 1; transition: opacity .9s; }
+.bar .bar-black.off { opacity: 0; }
+.bar .bar-black.end { transition-duration: .6s; }
+.bar .bar-stats { position: absolute; left: 2.2vw; bottom: 2.4vh; font-size: 11px; color: #8fd19e; }
+
+/* effets atténués (§9) : rien ne pulse, seule la couleur reste (jumelles des animations répétées, BAR-6) */
+.bar.bar-reduced .bar-card .go { animation: bar-in .6s ease-out 1.6s forwards; }
+.bar.bar-reduced .bar-retry { animation: none; }

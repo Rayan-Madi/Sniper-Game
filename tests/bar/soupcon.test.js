@@ -127,6 +127,36 @@ describe('ce qui la fait redescendre', () => {
     }
   })
 
+  // tâche B11 : la baisse que la coquille règle à chaque image (spec §3.14) : divisée par deux après « Je vous ai à
+  // l'œil » (D2, effet surveille, SOUPCON.surveilleBaisse), et 2 par seconde de plus assis à la table d'Albert
+  // (COUVERTURE.albertBaisse), toujours jusqu'au plancher, jamais en même temps qu'une montée
+  it('la baisse se règle à l\'image : divisée par deux sous surveillance, 2 par seconde de plus à la table d\'Albert', () => {
+    expect(SOUPCON.surveilleBaisse).toBe(0.5)
+    expect(COUVERTURE.albertBaisse).toBe(2)
+    const cas = [                                           // [situation sans montée, baisse par seconde]
+      [{ pose: 'debout', temoins: ['escorte'], facteurBaisse: 0.5 }, 1.5],   // témoin : réglage ignoré, 3 par seconde
+      [{ pose: 'debout', temoins: [], facteurBaisse: 0.5 }, 2.5],
+      [{ pose: 'assis', temoins: ['escorte'], baisseEnPlus: 2 }, 5],
+      [{ pose: 'assis', temoins: ['albert'], baisseEnPlus: 2 }, 7],          // hors de la vue de tous, plus Albert
+      [{ pose: 'pose', temoins: ['fernand'], baisseEnPlus: 2, facteurBaisse: 0.5 }, 3.5],
+    ]
+    for (const [situation, baisse] of cas) {
+      const s = createSoupcon()
+      s.evenement('choix', 50)
+      avance(s, 2, situation)
+      expect(s.S, JSON.stringify(situation)).toBeCloseTo(50 - 2 * baisse, 9)
+    }
+    const plancher = createSoupcon()
+    plancher.evenement('remarque', 'escorte')               // S 12, plancher 10
+    avance(plancher, 5, { pose: 'assis', temoins: ['albert'], baisseEnPlus: 2 })
+    expect(plancher.S).toBe(10)                             // jusqu'au plancher, pas plus bas
+    const monte = createSoupcon()
+    avance(monte, 1, { sources: ['zoneInterdite'], temoins: ['fernand'], baisseEnPlus: 2 })
+    expect(monte.S).toBeCloseTo(12 * 0.8, 9)                // une montée : la baisse en plus ne compte pas
+    expect(() => createSoupcon().update(DT, { facteurBaisse: -1 })).toThrow()
+    expect(() => createSoupcon().update(DT, { baisseEnPlus: NaN })).toThrow()
+  })
+
   it('jamais de montée et de baisse dans la même image', () => {
     const s = createSoupcon()
     s.evenement('choix', 40)

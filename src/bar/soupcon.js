@@ -75,7 +75,12 @@ export function createSoupcon(reglages = SOUPCON) {
     // zone privée, qui ne valent que debout (deboutSeulement, §3.6 et §3.7). Reste à l'appelant de choisir, debout, entre
     // zonePrivee, zonePriveePretexte et rien, selon la couverture (verre, prétexte, §3.6). temoins : la catégorie de
     // chaque personne qui voit Viktor. pose : 'debout', 'assis' (sans verre) ou 'pose' (posé, un verre à la main, §3.7).
-    update(dt, { sources = [], temoins = [], pose = 'debout' } = {}) {
+    // La baisse de l'image, que la coquille du bar règle (tâche B11, §3.14) : baisseEnPlus, ajoutée par seconde (assis à la
+    // table d'Albert, COUVERTURE.albertBaisse), puis le tout multiplié par facteurBaisse (« Je vous ai à l'œil »,
+    // SOUPCON.surveilleBaisse) ; une valeur négative ou illisible est une erreur.
+    update(dt, { sources = [], temoins = [], pose = 'debout', baisseEnPlus = 0, facteurBaisse = 1 } = {}) {
+      if (!(Number.isFinite(baisseEnPlus) && baisseEnPlus >= 0)) throw new Error(`jauge de soupçon : baisse en plus illisible (${baisseEnPlus})`)
+      if (!(Number.isFinite(facteurBaisse) && facteurBaisse >= 0)) throw new Error(`jauge de soupçon : facteur de baisse illisible (${facteurBaisse})`)
       const pas = secondes(dt)
       if (pas === 0 || rang === DEMASQUE) return []
       const vu = vuPar(temoins)
@@ -83,7 +88,7 @@ export function createSoupcon(reglages = SOUPCON) {
       const debout = pose === 'debout'
       const hausse = sources.reduce((somme, source) => somme + montee(source, debout), 0) * vu
       if (hausse > 0) S = Math.min(plafond, S + hausse * pas)
-      else S = Math.max(plancher, S - (vu > 0 ? baisse : Math.max(baisse, baisseHorsDeVue)) * pas)
+      else S = Math.max(plancher, S - ((vu > 0 ? baisse : Math.max(baisse, baisseHorsDeVue)) + baisseEnPlus) * facteurBaisse * pas)
       return suivre()
     },
 

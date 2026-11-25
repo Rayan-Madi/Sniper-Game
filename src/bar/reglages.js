@@ -156,6 +156,7 @@ export const SOUPCON = {
     pose: 5,            // posé (§3.7) : assis, ou accoudé au mange-debout, un verre à la main
   },
   baisseHorsDeVue: 5,   // par seconde quand personne ne voit Viktor (Albert ne compte pas), quelle que soit sa pose
+  surveilleBaisse: 0.5, // après « Je vous ai à l'œil » (D2, effet surveille), la baisse est multipliée par tant jusqu'à la fin
   plancherMax: 55,      // le plancher ne monte jamais plus haut ; à 52 ou plus, il garde en SOUPÇON qui l'a atteint
                         // (le §3.6 se contredit là-dessus : décision 9 de la spec, ouverte ; 55 en attendant)
   paliers: {            // entrée à « monte », sortie seulement sous « redescend » : l'écart évite le clignotement
@@ -179,6 +180,36 @@ export const COUVERTURE = {
   sansCommandeS: 60,    // sans verre au bout de ce temps : événement sansCommande de la jauge, et la réplique de Lise
   toilettesS: [240, 300],   // le routier occupe le WC de 240 à 300 s : attendre devant la porte est un prétexte
   jukeboxMaintienS: 1,  // mettre une pièce dans le juke-box (un prétexte) : E maintenu ce temps
+  albertBaisse: 2,      // assis à la table d'Albert, la jauge redescend de tant de plus par seconde (§3.14 : « −2/s »)
+}
+
+// ─── La coquille du bar (§3.7, §3.9, §3.10, tâche B11) ─────────────
+// Ce que décide la coquille (src/bar/index.js), qui assemble les modules : le pas et les poses de Viktor, les
+// déclencheurs des dialogues hors de l'horloge (D1, F3, L1, L2), ce que font les gens de la salle quand la soirée le
+// dit, la pause et le noir de fin. Les durées sont au temps de jeu, sauf celles de la pause et du noir (temps réel).
+export const COQUILLE = {
+  camera: { fov: 72, near: 0.05, far: 40 },   // la caméra de l'enquête (src/prologue/investigation.js:540)
+  oeilDebout: 1.65,     // la hauteur de l'œil de Viktor debout (m) ; assis, celle du siège (TYPES_SIEGE de plan.js)
+  tangageDepart: -0.05, // le regard en entrant, un peu sous l'horizon (rad)
+  vitesse: 1.6,         // le pas de Viktor (m/s), celui de l'enquête : on ne court pas au Bivouac
+  noirFinS: 0.7,        // la fin : le noir tombe en tant (temps réel), puis tout est démonté et le contrat rendu
+  repriseS: 0.6,        // REPRENDRE sans que le verrou revienne en tant (temps réel) : Chrome l'a refusé, « CLIQUE ENCORE »
+  maintienS: COUVERTURE.jukeboxMaintienS,   // sortir par la porte, mettre une pièce : E maintenu tant (§3.7, §3.9)
+  sousTitreS: 2.2,      // une réplique finie reste lisible tant (SUB_HOLD_MS de l'enquête), si rien ne la remplace
+  zincS: 20,            // F3 : D1 fini, tant de secondes cumulées au comptoir ouvrent « fernand-photo » (§3.14)
+  liseCommandeS: 45,    // L1 : sans rien commander depuis tant, Lise vient prendre la commande (ou au premier siège pris)
+  pretexteM: 0.8,       // à moins de tant d'une place à prétexte (mange-debout est, file des toilettes), le prétexte vaut
+  jukeboxPretexteS: 30, // la pièce mise, le juke-box sert de prétexte tant que Viktor reste devant, pendant tant
+  murmuresAlbertS: [20, 35],   // Albert murmure toutes les tant de secondes (tiré à graine) : « Allez, le 7. Allez… »
+  regardMefianceS: 1.5, // en MÉFIANCE, le coup d'œil d'un homme de l'escorte vers Viktor dure tant (toutes les 8 à 12 s)
+  approcheM: 1.4,       // Sorel (D2), Lise (D3) et Dussart (SOUPÇON) s'arrêtent à tant de Viktor : hors de « trop près »
+  liseServirAvantS: 7,  // Lise part servir la table A tant de secondes avant A4 (« Je te ressers, Dussart ? »)
+  verre: {              // le verre tenu en vue (§3.7), en repère de la caméra : à droite, sous le regard (m)
+    position: [0.2, -0.21, -0.42],
+    demi: 0xd8a02c,     // la bière
+    cafe: 0x2a160a,     // le café
+  },
+  graine: 0x0b1fc011,   // hasard de la coquille (coups d'œil de MÉFIANCE, murmures d'Albert) : la même soirée à chaque partie
 }
 
 // ─── Les dialogues à choix (§3.8) ──────────────────────────────────

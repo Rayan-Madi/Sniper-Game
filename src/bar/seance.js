@@ -28,7 +28,8 @@
 //   dialogue en cours ;
 // - la fin (Albert, « Le 7 a gagné. ») attend la fin d'un dialogue en cours ; Viktor sort de lui-même SEANCE.sortieAutoS
 //   après, ou à la fin d'un dialogue ouvert entre-temps ;
-// - sortir(S) : la sortie volontaire par la porte ; avec S à SEANCE.sortieSoupcon ou plus, Sorel le suit : démasqué.
+// - sortir(S) : la sortie volontaire par la porte ; avec S à SEANCE.sortieSoupcon ou plus, Sorel le suit : démasqué,
+//   sauf une fois la porte refermée sur le départ (l'escorte partie, personne ne le suit).
 //
 // createSeance({ programme, reglages }) rend { update(dt, situation), sortir(S), statut(id), occupe(qui), t, heure,
 // enCours, fini, sorelEntre, escortePartie, tablesMuettes, wcOccupe }. situation, lue à chaque image : { palier, dialogue,
@@ -258,12 +259,14 @@ export function createSeance({ programme = ECHANGES, reglages = SEANCE } = {}) {
       return emis
     },
 
-    // La sortie volontaire, par la porte (E maintenu, B11) ; S : la jauge à cet instant. Une seule sortie.
+    // La sortie volontaire, par la porte (E maintenu, B11) ; S : la jauge à cet instant. Une seule sortie. La porte
+    // refermée sur le départ, personne de l'escorte n'est là pour suivre Viktor : sortir en SOUPÇON est alors une sortie
+    // comme une autre (tranché en B11).
     sortir(S) {
       if (fini) return []
       if (!Number.isFinite(S)) throw new Error(`soirée du Bivouac : sortie sans soupçon lisible (${S})`)
       fini = true
-      if (S >= sortieSoupcon - EPS) return [{ type: 'reaction', id: 'sortieSoupcon' }, { type: 'demasque', cause: 'sortieSoupcon' }]
+      if (S >= sortieSoupcon - EPS && !escortePartie) return [{ type: 'reaction', id: 'sortieSoupcon' }, { type: 'demasque', cause: 'sortieSoupcon' }]
       return [{ type: 'sortie', resultat: 'sorti', auto: false }]
     },
 
