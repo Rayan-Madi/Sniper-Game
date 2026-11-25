@@ -280,7 +280,8 @@ let ambTimer = null, ambGain = null
 // nappe, en fondu aux deux bouts ; niveau et montée réglés dans src/shot/tuning.js (PLUIE).
 let rain = null
 
-// rain : la carte a sa pluie (le port, maps.js) ; REVOIR LE BRIEFING la coupe avec la nappe, le retour la relance.
+// rain : la carte a sa pluie (le port, src/maps/m3-port.js) ; REVOIR LE BRIEFING la coupe avec la nappe, le retour la
+// relance.
 export function startMissionAmbience({ rain: pluie = false } = {}) {
   if (pluie && !rain) {
     const r = createRain({ ctx: getCtx(), dest: out() })
@@ -314,6 +315,7 @@ export function startMissionAmbience({ rain: pluie = false } = {}) {
 // Fondu de sortie (s), puis le gain est débranché du maître : sans cela, chaque mission laissait un nœud branché.
 const AMB_FADE = 1.2
 export function stopMissionAmbience() {
+  stopRadio()   // la ligne d'Anton en cours se tait avec la mission
   if (rain) { rain.stop({ fonduS: AMB_FADE }); rain = null }
   if (ambTimer) { clearInterval(ambTimer); ambTimer = null }
   if (ambGain) {
@@ -324,6 +326,76 @@ export function stopMissionAmbience() {
     g.gain.linearRampToValueAtTime(0.0001, end)
     disconnectAt(c, g, end)
   }
+}
+
+// ─── Voix radio d'Anton en mission (spec du lot 3, §2 g ; tâche A8) ───
+// Les bips des cinématiques (src/briefing/sound.js, voice('radio')) le temps d'une ligne (src/campaign/radio.js) : un
+// déclic, le souffle du canal, des syllabes synthétiques, un déclic de fin. Tout est programmé d'un coup sur l'horloge
+// audio, dans un gain à elle branché au maître ; stopRadio() la coupe (la pause, une ligne suivante, et
+// stopMissionAmbience : fin de mission, menu, briefing). Son hasard vient d'un générateur à graine (une graine par
+// ligne), pas de Math.random : la voix ne tire pas dans le hasard du jeu, à graine dans les captures.
+let radioVoix = null
+let radioLignes = 0
+
+// Générateur à graine (mulberry32) : une suite de nombres dans [0, 1).
+function aGraine(graine) {
+  let s = graine | 0
+  return () => {
+    s = (s + 0x6d2b79f5) | 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+export function playRadio(dureeS) {
+  stopRadio()
+  const c = getCtx()
+  const hasard = aGraine(0x5a7e + radioLignes++)
+  const voix = c.createGain()
+  voix.gain.value = 0.5
+  voix.connect(out())
+  radioVoix = voix
+  const t0 = c.currentTime, fin = t0 + dureeS
+  // Bruit du canal : 2 s à graine, en boucle
+  const buf = c.createBuffer(1, Math.max(1, Math.floor(c.sampleRate * 2)), c.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < data.length; i++) data[i] = hasard() * 2 - 1
+  const bruit = (debut, duree, niveau, freq, type, tenu = false) => {
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain()
+    s.buffer = buf; s.loop = true
+    f.type = type; f.frequency.value = freq
+    if (tenu) g.gain.value = niveau
+    else { g.gain.setValueAtTime(niveau, debut); g.gain.exponentialRampToValueAtTime(0.001, debut + duree) }
+    s.connect(f); f.connect(g); g.connect(voix)
+    s.start(debut); s.stop(debut + duree + (tenu ? 0 : 0.01))
+  }
+  bruit(t0, 0.09, 0.25, 3000, 'highpass')           // déclic d'ouverture
+  bruit(t0, dureeS, 0.03, 2400, 'bandpass', true)   // souffle du canal
+  // Syllabes : une place toutes les 125 ms, parfois un silence (une respiration), parfois rien
+  let silenceJusqua = t0
+  for (let t = t0; t < fin - 0.05; t += 0.125) {
+    if (t < silenceJusqua) continue
+    if (hasard() < 0.12) { silenceJusqua = t + 0.25 + hasard() * 0.4; continue }
+    if (hasard() > 0.8) continue
+    const duree = Math.min(0.05 + hasard() * 0.11, fin - t)
+    const f0 = (82 + hasard() * 45) * (1 + hasard() * 0.25)
+    const o = c.createOscillator(), bande = c.createBiquadFilter(), passeBas = c.createBiquadFilter(), g = c.createGain()
+    bande.type = 'bandpass'; bande.frequency.value = 1150; bande.Q.value = 1.4
+    passeBas.type = 'lowpass'; passeBas.frequency.value = 2200
+    o.type = 'sawtooth'
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.85, t + 0.11)
+    g.gain.setValueAtTime(0.001, t)
+    g.gain.linearRampToValueAtTime(0.5 + hasard() * 0.4, t + 0.015)
+    g.gain.exponentialRampToValueAtTime(0.001, t + duree)
+    o.connect(bande); bande.connect(passeBas); passeBas.connect(g); g.connect(voix)
+    o.start(t); o.stop(t + duree + 0.02)
+  }
+  bruit(fin, 0.07, 0.18, 2600, 'highpass')          // déclic de fin
+}
+
+export function stopRadio() {
+  if (radioVoix) { radioVoix.disconnect(); radioVoix = null }
 }
 
 // Débranche node quand l'horloge audio a passé end (fin d'un fondu). Le minuteur peut tomber avant l'horloge audio, en

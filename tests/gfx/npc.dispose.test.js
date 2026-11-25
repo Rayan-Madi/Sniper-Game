@@ -35,7 +35,7 @@ async function load({ models = true } = {}) {
   characters = await import('../../src/characters.js')
   ;({ NPC } = await import('../../src/npc.js'))
   ;({ isShared } = await import('../../src/gfx/dispose.js'))
-  ;({ MAP_BUILDERS } = await import('../../src/maps.js'))
+  ;({ MAP_BUILDERS } = await import('../../src/maps/index.js'))
   ;({ withSeed } = await import('../../src/gfx/memtest.js'))
   if (models) await characters.preloadCharacters()
   scene.clear()
@@ -52,8 +52,14 @@ const KINDS = {
   'cible marquée': () => new NPC({ isTarget: true, color: 0xcc4422, x: 0, z: 0, bounds: BOUNDS }),
   'garde': () => new NPC({ isGuard: true, color: 0x334433, x: 3, z: -2, bounds: BOUNDS }),
   'civil teinté': () => civilian(),
+  // Comme mountLevel en M6 (tâche A6 du lot 3) : son modèle imposé, le polo sombre teint sur son seul maillage (ici
+  // Shirt, le nom de ce maillage dans le faux modèle), l'ombre des civils
   'commanditaire au téléphone': () => new NPC({ isTarget: true, color: 0xcc4422, x: 4, z: 4, bounds: BOUNDS,
-    hideMarker: true, lockState: 'phone', onPhone: true, modelType: 'civilian' }),
+    hideMarker: true, lockState: 'phone', onPhone: true, shadowRole: 'civil',
+    casting: { model: 'gangster_man_02', strict: true, teinte: 0xffffff, teinteMaillage: { Shirt: 0x3a3f4a } } }),
+  // Marc (M2) : son polo beige sur une copie du seul matériau de ce maillage
+  'cible au polo teinté': () => new NPC({ isTarget: true, color: 0xcc4422, x: -4, z: 4, bounds: BOUNDS,
+    casting: { model: 'gangster_man_02', strict: true, teinte: 0xffffff, teinteMaillage: { Shirt: 0xd9c19a } } }),
 }
 
 // Ressources de tous les modèles chargés : aucune ne doit émettre 'dispose'.
@@ -182,6 +188,25 @@ describe('NPC.dispose, niveau 1 : tout ce que le PNJ possède est libéré, rien
     expect(glb.labels).toEqual([])
   })
 
+  // Teinte par maillage (casting, tâche A6 du lot 3) : la copie du matériau du polo est à l'instance et part avec elle ;
+  // le matériau du corps reste celui du modèle. Témoin : une copie qui garderait la marque « partagé » recopiée par
+  // Material.clone ne serait jamais libérée (ce test rougit) ; sur le characters.js d'avant la tâche, aucune copie (vu
+  // rouge).
+  it('cible au polo teinté : la copie du matériau du polo émet dispose au NPC.dispose, le corps garde celui du modèle', () => {
+    const npc = KINDS['cible au polo teinté']()
+    const source = gltf.loaded.find(g => g.url.endsWith(npc.character.cfg.url)).scene
+    const [corps, polo] = ['Body', 'Shirt'].map(n => npc.character.model.getObjectByName(n).material)
+    expect(corps).toBe(source.getObjectByName('Body').material)
+    expect(polo).not.toBe(source.getObjectByName('Shirt').material)
+    expect(polo.color.getHex()).toBe(0xd9c19a)
+    let libere = 0
+    polo.addEventListener('dispose', () => { libere++ })
+    const glb = countDisposals(glbResources())
+    npc.dispose()
+    expect(libere).toBe(1)
+    expect(glb.labels).toEqual([])
+  })
+
   it('marqueurs de la cible et téléphone du commanditaire : possédés, donc libérés', () => {
     const target = KINDS['cible marquée']()
     const boss = KINDS['commanditaire au téléphone']()
@@ -233,16 +258,18 @@ describe('corps d\'un PNJ abattu', () => {
 })
 
 describe('NPC.dispose, niveau 2 : faux renderer', () => {
-  // Montage de M6 comme mountLevel : la fête, le commanditaire au téléphone (pool des civils), 2 gardes, 24 civils
-  // qui dansent, soit 27 PNJ ; hasard à graine (même foule, mêmes modèles à chaque montage). Démontage comme
-  // unmountLevel : chaque PNJ libéré ; la carte, elle, est libérée par la carte suivante (maps.js, tâche L2).
+  // Montage de M6 comme mountLevel : la fête, le commanditaire au téléphone (son modèle et son polo sombre, tâche A6 du
+  // lot 3), 2 gardes, 24 civils qui dansent, soit 27 PNJ ; hasard à graine (même foule, mêmes modèles à chaque montage).
+  // Démontage comme unmountLevel : chaque PNJ libéré ; la carte, elle, est libérée par la carte suivante (src/maps/,
+  // tâche L2).
   function mountM6() {
     return withSeed(1006, () => {
       const info = MAP_BUILDERS[5]()
-      const b = info.spawnBounds
+      const b = info.ancres.zone
       const at = () => ({ x: b.minX + Math.random() * (b.maxX - b.minX), z: b.minZ + Math.random() * (b.maxZ - b.minZ) })
       const npcs = [new NPC({ isTarget: true, color: 0xcc4422, x: 0, z: 0, bounds: b, hideMarker: true, lockState: 'phone',
-        onPhone: true, modelType: 'civilian' })]
+        onPhone: true, shadowRole: 'civil',
+        casting: { model: 'gangster_man_02', strict: true, teinte: 0xffffff, teinteMaillage: { Shirt: 0x3a3f4a } } })]
       for (let i = 0; i < 2; i++) npcs.push(new NPC({ isGuard: true, color: 0x334433, ...at(), bounds: b }))
       for (let i = 0; i < 24; i++) npcs.push(new NPC({ isCivilian: true, color: 0x7a6aaa, ...at(), bounds: b, partyMode: true }))
       return npcs

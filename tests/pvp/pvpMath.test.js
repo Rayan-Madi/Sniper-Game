@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { groundForward, groundRight } from '../../src/pvpMath.js'
+import { groundForward, groundRight } from '../../src/pvp/pvpMath.js'
 
 const UP = new THREE.Vector3(0, 1, 0)
 const YAWS = [0, Math.PI / 4, Math.PI / 2, 3 * Math.PI / 4, Math.PI, -Math.PI / 4, -Math.PI / 2, -2.5]

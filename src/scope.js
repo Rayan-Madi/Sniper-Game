@@ -3,6 +3,7 @@ import { stepTremble, trembleParams, mradToPixels, scopeFov } from './aim.js'
 import { createScopeAnim } from './shot/scopeAnim.js'
 import { LUNETTE, LUEUR } from './shot/tuning.js'
 import { shotFlashAlpha } from './comfort.js'
+import { texteDistance, texteZero } from './shot/telemetre.js'
 
 const canvas = document.getElementById('scope-canvas')
 const ctx = canvas.getContext('2d')
@@ -23,6 +24,10 @@ let steady = 1        // 1 = normal, <1 = apnée (visée stabilisée)
 let glow = { a: 0, t: 0 }
 // Course de la culasse (setBoltProgress, src/shot/bolt.js) : 0 au coup, 1 quand on peut tirer.
 let boltProgress = 1
+// Télémètre (spec du lot 3, §2 c) : la distance au point visé (m, au mètre, null sans mesure) que main.js relève à
+// 10 Hz, et le réglage de la lunette (m, celui de la mission, null hors mission).
+let telemetre = null
+let zero = null
 
 const smoothstep = o => o * o * (3 - 2 * o)
 
@@ -63,6 +68,11 @@ const glowAlpha = () => {
 
 // Course de la culasse, de 0 (le coup) à 1 (on peut tirer) : la jauge sous le réticule (main.js, à chaque image).
 export function setBoltProgress(p) { boltProgress = p }
+
+// Distance au point visé affichée par le télémètre (m, null : « --- m ») ; main.js la relève à 10 Hz lunette tenue.
+export function setTelemetre(d) { telemetre = d }
+// Réglage de la lunette, affiché « ZÉRO 430 m » (m, null : pas de ligne) ; main.js le pose au montage de la mission.
+export function setZero(m) { zero = m }
 
 // Champ de vision de la caméra (main.js, syncFov) : 60° fermée, 60 / zoom affiché ouverte, et entre les deux pendant
 // l'ouverture et la fermeture.
@@ -239,6 +249,18 @@ export function drawScope() {
     ctx.font = '11px Courier New'
     ctx.textAlign = 'left'
     ctx.fillText(`${anim.target.toFixed(1)}×`, cx - R + 16, cy + R - 20)
+
+    // Télémètre, en miroir du zoom, sur le noir en bas à droite : la distance au point visé, lue d'abord (plus grande,
+    // plus claire), puis le réglage de la lunette, à la taille et au ton du zoom
+    ctx.textAlign = 'right'
+    ctx.fillStyle = 'rgba(200,240,200,0.8)'
+    ctx.font = '13px Courier New'
+    ctx.fillText(texteDistance(telemetre), cx + R - 16, cy + R - 36)
+    if (zero) {
+      ctx.fillStyle = 'rgba(200,240,200,0.55)'
+      ctx.font = '11px Courier New'
+      ctx.fillText(texteZero(zero), cx + R - 16, cy + R - 20)
+    }
 
     // Graduations en bas du scope
     ctx.strokeStyle = 'rgba(200,240,200,0.35)'

@@ -1,0 +1,2239 @@
+{
+ "date": "2026-10-28T11:44:36.881Z",
+ "commit": "267ca90 (modifié)",
+ "base": "http://localhost:5173/",
+ "rendu": "SwiftShader",
+ "ecran": {
+  "width": 1920,
+  "height": 1080
+ },
+ "jpeg": 85,
+ "seuils": {
+  "silhouette": 80,
+  "signe": 10
+ },
+ "releves": [
+  {
+   "nom": "155m",
+   "zoom": 8,
+   "qualite": "moyen",
+   "fichier": "sonde-155m-x8-moyen.jpg",
+   "octets": 9998,
+   "empreinte": "e01cf908cf83ae29",
+   "url": "http://localhost:5173/?sonde=1&poste=-28,41,146&regard=0,1.345,-0.5&near=0.5&far=600&brume=exp2:0.0035&zoom=8&qualite=moyen&modele=gangster_man_01,mafia_woman_03&ecart=1.4&carte=3",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Vosko",
+     "modele": "gangster_man_01",
+     "position": [
+      -0.688,
+      0.345,
+      -0.631
+     ],
+     "distanceM": 154.35,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 96,
+      "largeur": 31
+     },
+     "tete": {
+      "hauteur": 15,
+      "largeur": 15
+     },
+     "torse": {
+      "hauteur": 29,
+      "largeur": 30
+     },
+     "attendu": {
+      "silhouette": 95.4
+     }
+    },
+    {
+     "nom": "Mira",
+     "modele": "mafia_woman_03",
+     "position": [
+      0.688,
+      0.345,
+      -0.369
+     ],
+     "distanceM": 154.36,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 92,
+      "largeur": 27
+     },
+     "tete": {
+      "hauteur": 13,
+      "largeur": 10
+     },
+     "torse": {
+      "hauteur": 28,
+      "largeur": 25
+     },
+     "attendu": {
+      "silhouette": 92.8
+     }
+    }
+   ]
+  },
+  {
+   "nom": "155m",
+   "zoom": 8,
+   "qualite": "bas",
+   "fichier": "sonde-155m-x8-bas.jpg",
+   "octets": 9590,
+   "empreinte": "ba8470a102eb049d",
+   "url": "http://localhost:5173/?sonde=1&poste=-28,41,146&regard=0,1.345,-0.5&near=0.5&far=600&brume=exp2:0.0035&zoom=8&qualite=bas&modele=gangster_man_01,mafia_woman_03&ecart=1.4&carte=3",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Vosko",
+     "modele": "gangster_man_01",
+     "position": [
+      -0.688,
+      0.345,
+      -0.631
+     ],
+     "distanceM": 154.35,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 72,
+      "largeur": 23
+     },
+     "tete": {
+      "hauteur": 11,
+      "largeur": 11
+     },
+     "torse": {
+      "hauteur": 22,
+      "largeur": 22
+     },
+     "attendu": {
+      "silhouette": 71.6
+     }
+    },
+    {
+     "nom": "Mira",
+     "modele": "mafia_woman_03",
+     "position": [
+      0.688,
+      0.345,
+      -0.369
+     ],
+     "distanceM": 154.36,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 70,
+      "largeur": 20
+     },
+     "tete": {
+      "hauteur": 11,
+      "largeur": 7
+     },
+     "torse": {
+      "hauteur": 20,
+      "largeur": 18
+     },
+     "attendu": {
+      "silhouette": 69.6
+     }
+    }
+   ]
+  },
+  {
+   "nom": "155m",
+   "zoom": 10,
+   "qualite": "moyen",
+   "fichier": "sonde-155m-x10-moyen.jpg",
+   "octets": 10454,
+   "empreinte": "68ca788fe9d53d3b",
+   "url": "http://localhost:5173/?sonde=1&poste=-28,41,146&regard=0,1.345,-0.5&near=0.5&far=600&brume=exp2:0.0035&zoom=10&qualite=moyen&modele=gangster_man_01,mafia_woman_03&ecart=1.4&carte=3",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Vosko",
+     "modele": "gangster_man_01",
+     "position": [
+      -0.688,
+      0.345,
+      -0.631
+     ],
+     "distanceM": 154.35,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 120,
+      "largeur": 39
+     },
+     "tete": {
+      "hauteur": 18,
+      "largeur": 18
+     },
+     "torse": {
+      "hauteur": 36,
+      "largeur": 37
+     },
+     "attendu": {
+      "silhouette": 119.3
+     }
+    },
+    {
+     "nom": "Mira",
+     "modele": "mafia_woman_03",
+     "position": [
+      0.688,
+      0.345,
+      -0.369
+     ],
+     "distanceM": 154.36,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 116,
+      "largeur": 34
+     },
+     "tete": {
+      "hauteur": 17,
+      "largeur": 12
+     },
+     "torse": {
+      "hauteur": 35,
+      "largeur": 31
+     },
+     "attendu": {
+      "silhouette": 116.1
+     }
+    }
+   ]
+  },
+  {
+   "nom": "155m",
+   "zoom": 10,
+   "qualite": "bas",
+   "fichier": "sonde-155m-x10-bas.jpg",
+   "octets": 9934,
+   "empreinte": "e9dc7eb32da6d863",
+   "url": "http://localhost:5173/?sonde=1&poste=-28,41,146&regard=0,1.345,-0.5&near=0.5&far=600&brume=exp2:0.0035&zoom=10&qualite=bas&modele=gangster_man_01,mafia_woman_03&ecart=1.4&carte=3",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Vosko",
+     "modele": "gangster_man_01",
+     "position": [
+      -0.688,
+      0.345,
+      -0.631
+     ],
+     "distanceM": 154.35,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 90,
+      "largeur": 29
+     },
+     "tete": {
+      "hauteur": 14,
+      "largeur": 14
+     },
+     "torse": {
+      "hauteur": 27,
+      "largeur": 28
+     },
+     "attendu": {
+      "silhouette": 89.5
+     }
+    },
+    {
+     "nom": "Mira",
+     "modele": "mafia_woman_03",
+     "position": [
+      0.688,
+      0.345,
+      -0.369
+     ],
+     "distanceM": 154.36,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 87,
+      "largeur": 26
+     },
+     "tete": {
+      "hauteur": 13,
+      "largeur": 9
+     },
+     "torse": {
+      "hauteur": 26,
+      "largeur": 23
+     },
+     "attendu": {
+      "silhouette": 87.1
+     }
+    }
+   ]
+  },
+  {
+   "nom": "155m",
+   "zoom": 12,
+   "qualite": "moyen",
+   "fichier": "sonde-155m-x12-moyen.jpg",
+   "octets": 10776,
+   "empreinte": "7e966abc02b74300",
+   "url": "http://localhost:5173/?sonde=1&poste=-28,41,146&regard=0,1.345,-0.5&near=0.5&far=600&brume=exp2:0.0035&zoom=12&qualite=moyen&modele=gangster_man_01,mafia_woman_03&ecart=1.4&carte=3",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Vosko",
+     "modele": "gangster_man_01",
+     "position": [
+      -0.688,
+      0.345,
+      -0.631
+     ],
+     "distanceM": 154.35,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 145,
+      "largeur": 47
+     },
+     "tete": {
+      "hauteur": 22,
+      "largeur": 21
+     },
+     "torse": {
+      "hauteur": 44,
+      "largeur": 46
+     },
+     "attendu": {
+      "silhouette": 143.2
+     }
+    },
+    {
+     "nom": "Mira",
+     "modele": "mafia_woman_03",
+     "position": [
+      0.688,
+      0.345,
+      -0.369
+     ],
+     "distanceM": 154.36,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 140,
+      "largeur": 41
+     },
+     "tete": {
+      "hauteur": 21,
+      "largeur": 15
+     },
+     "torse": {
+      "hauteur": 42,
+      "largeur": 37
+     },
+     "attendu": {
+      "silhouette": 139.4
+     }
+    }
+   ]
+  },
+  {
+   "nom": "155m",
+   "zoom": 12,
+   "qualite": "bas",
+   "fichier": "sonde-155m-x12-bas.jpg",
+   "octets": 10256,
+   "empreinte": "f8245b19281276a2",
+   "url": "http://localhost:5173/?sonde=1&poste=-28,41,146&regard=0,1.345,-0.5&near=0.5&far=600&brume=exp2:0.0035&zoom=12&qualite=bas&modele=gangster_man_01,mafia_woman_03&ecart=1.4&carte=3",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Vosko",
+     "modele": "gangster_man_01",
+     "position": [
+      -0.688,
+      0.345,
+      -0.631
+     ],
+     "distanceM": 154.35,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 108,
+      "largeur": 35
+     },
+     "tete": {
+      "hauteur": 17,
+      "largeur": 15
+     },
+     "torse": {
+      "hauteur": 32,
+      "largeur": 34
+     },
+     "attendu": {
+      "silhouette": 107.4
+     }
+    },
+    {
+     "nom": "Mira",
+     "modele": "mafia_woman_03",
+     "position": [
+      0.688,
+      0.345,
+      -0.369
+     ],
+     "distanceM": 154.36,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 104,
+      "largeur": 30
+     },
+     "tete": {
+      "hauteur": 15,
+      "largeur": 11
+     },
+     "torse": {
+      "hauteur": 31,
+      "largeur": 28
+     },
+     "attendu": {
+      "silhouette": 104.5
+     }
+    }
+   ]
+  },
+  {
+   "nom": "155m",
+   "zoom": 20,
+   "qualite": "moyen",
+   "fichier": "sonde-155m-x20-moyen.jpg",
+   "octets": 11975,
+   "empreinte": "fcfaf660a087fd64",
+   "url": "http://localhost:5173/?sonde=1&poste=-28,41,146&regard=0,1.345,-0.5&near=0.5&far=600&brume=exp2:0.0035&zoom=20&qualite=moyen&modele=gangster_man_01,mafia_woman_03&ecart=1.4&carte=3",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Vosko",
+     "modele": "gangster_man_01",
+     "position": [
+      -0.688,
+      0.345,
+      -0.631
+     ],
+     "distanceM": 154.35,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 240,
+      "largeur": 78
+     },
+     "tete": {
+      "hauteur": 36,
+      "largeur": 36
+     },
+     "torse": {
+      "hauteur": 73,
+      "largeur": 76
+     },
+     "attendu": {
+      "silhouette": 238.8
+     }
+    },
+    {
+     "nom": "Mira",
+     "modele": "mafia_woman_03",
+     "position": [
+      0.688,
+      0.345,
+      -0.369
+     ],
+     "distanceM": 154.36,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 232,
+      "largeur": 68
+     },
+     "tete": {
+      "hauteur": 34,
+      "largeur": 24
+     },
+     "torse": {
+      "hauteur": 69,
+      "largeur": 62
+     },
+     "attendu": {
+      "silhouette": 232.4
+     }
+    }
+   ]
+  },
+  {
+   "nom": "155m",
+   "zoom": 20,
+   "qualite": "bas",
+   "fichier": "sonde-155m-x20-bas.jpg",
+   "octets": 11280,
+   "empreinte": "d215b178b6ac2f4a",
+   "url": "http://localhost:5173/?sonde=1&poste=-28,41,146&regard=0,1.345,-0.5&near=0.5&far=600&brume=exp2:0.0035&zoom=20&qualite=bas&modele=gangster_man_01,mafia_woman_03&ecart=1.4&carte=3",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Vosko",
+     "modele": "gangster_man_01",
+     "position": [
+      -0.688,
+      0.345,
+      -0.631
+     ],
+     "distanceM": 154.35,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 180,
+      "largeur": 58
+     },
+     "tete": {
+      "hauteur": 27,
+      "largeur": 27
+     },
+     "torse": {
+      "hauteur": 55,
+      "largeur": 57
+     },
+     "attendu": {
+      "silhouette": 179.1
+     }
+    },
+    {
+     "nom": "Mira",
+     "modele": "mafia_woman_03",
+     "position": [
+      0.688,
+      0.345,
+      -0.369
+     ],
+     "distanceM": 154.36,
+     "plongeeDeg": 14.92,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 174,
+      "largeur": 51
+     },
+     "tete": {
+      "hauteur": 26,
+      "largeur": 18
+     },
+     "torse": {
+      "hauteur": 52,
+      "largeur": 47
+     },
+     "attendu": {
+      "silhouette": 174.3
+     }
+    }
+   ]
+  },
+  {
+   "nom": "138m",
+   "zoom": 8,
+   "qualite": "moyen",
+   "fichier": "sonde-138m-x8-moyen.jpg",
+   "octets": 30761,
+   "empreinte": "761fef3eb6a00db8",
+   "url": "http://localhost:5173/?sonde=1&poste=30,20.2,129.36&regard=0,1.2,-4&near=0.5&far=1000&brume=exp2:0.0016&soleil=-30,23,95&zoom=8&qualite=moyen&modele=mafia_boss&ecart=1.4&carte=5",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Kessler",
+     "modele": "mafia_boss",
+     "position": [
+      0,
+      0.2,
+      -4
+     ],
+     "distanceM": 138.02,
+     "plongeeDeg": 7.94,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 111,
+      "largeur": 39
+     },
+     "tete": {
+      "hauteur": 20,
+      "largeur": 24
+     },
+     "torse": {
+      "hauteur": 31,
+      "largeur": 39
+     },
+     "attendu": {
+      "silhouette": 109.4
+     }
+    }
+   ]
+  },
+  {
+   "nom": "138m",
+   "zoom": 8,
+   "qualite": "bas",
+   "fichier": "sonde-138m-x8-bas.jpg",
+   "octets": 28343,
+   "empreinte": "7aa1ab23ec9c9614",
+   "url": "http://localhost:5173/?sonde=1&poste=30,20.2,129.36&regard=0,1.2,-4&near=0.5&far=1000&brume=exp2:0.0016&soleil=-30,23,95&zoom=8&qualite=bas&modele=mafia_boss&ecart=1.4&carte=5",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Kessler",
+     "modele": "mafia_boss",
+     "position": [
+      0,
+      0.2,
+      -4
+     ],
+     "distanceM": 138.02,
+     "plongeeDeg": 7.94,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 83,
+      "largeur": 29
+     },
+     "tete": {
+      "hauteur": 14,
+      "largeur": 17
+     },
+     "torse": {
+      "hauteur": 23,
+      "largeur": 29
+     },
+     "attendu": {
+      "silhouette": 82
+     }
+    }
+   ]
+  },
+  {
+   "nom": "138m",
+   "zoom": 12,
+   "qualite": "moyen",
+   "fichier": "sonde-138m-x12-moyen.jpg",
+   "octets": 30239,
+   "empreinte": "861fc13404e4eb74",
+   "url": "http://localhost:5173/?sonde=1&poste=30,20.2,129.36&regard=0,1.2,-4&near=0.5&far=1000&brume=exp2:0.0016&soleil=-30,23,95&zoom=12&qualite=moyen&modele=mafia_boss&ecart=1.4&carte=5",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Kessler",
+     "modele": "mafia_boss",
+     "position": [
+      0,
+      0.2,
+      -4
+     ],
+     "distanceM": 138.02,
+     "plongeeDeg": 7.94,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 166,
+      "largeur": 59
+     },
+     "tete": {
+      "hauteur": 29,
+      "largeur": 37
+     },
+     "torse": {
+      "hauteur": 46,
+      "largeur": 59
+     },
+     "attendu": {
+      "silhouette": 164.2
+     }
+    }
+   ]
+  },
+  {
+   "nom": "138m",
+   "zoom": 12,
+   "qualite": "bas",
+   "fichier": "sonde-138m-x12-bas.jpg",
+   "octets": 28109,
+   "empreinte": "be52c92f28cc8e4a",
+   "url": "http://localhost:5173/?sonde=1&poste=30,20.2,129.36&regard=0,1.2,-4&near=0.5&far=1000&brume=exp2:0.0016&soleil=-30,23,95&zoom=12&qualite=bas&modele=mafia_boss&ecart=1.4&carte=5",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Kessler",
+     "modele": "mafia_boss",
+     "position": [
+      0,
+      0.2,
+      -4
+     ],
+     "distanceM": 138.02,
+     "plongeeDeg": 7.94,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 125,
+      "largeur": 45
+     },
+     "tete": {
+      "hauteur": 22,
+      "largeur": 26
+     },
+     "torse": {
+      "hauteur": 35,
+      "largeur": 45
+     },
+     "attendu": {
+      "silhouette": 123.1
+     }
+    }
+   ]
+  },
+  {
+   "nom": "138m",
+   "zoom": 20,
+   "qualite": "moyen",
+   "fichier": "sonde-138m-x20-moyen.jpg",
+   "octets": 34817,
+   "empreinte": "6874ec4436f1bcb8",
+   "url": "http://localhost:5173/?sonde=1&poste=30,20.2,129.36&regard=0,1.2,-4&near=0.5&far=1000&brume=exp2:0.0016&soleil=-30,23,95&zoom=20&qualite=moyen&modele=mafia_boss&ecart=1.4&carte=5",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Kessler",
+     "modele": "mafia_boss",
+     "position": [
+      0,
+      0.2,
+      -4
+     ],
+     "distanceM": 138.02,
+     "plongeeDeg": 7.94,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 277,
+      "largeur": 99
+     },
+     "tete": {
+      "hauteur": 49,
+      "largeur": 62
+     },
+     "torse": {
+      "hauteur": 77,
+      "largeur": 98
+     },
+     "attendu": {
+      "silhouette": 273.8
+     }
+    }
+   ]
+  },
+  {
+   "nom": "138m",
+   "zoom": 20,
+   "qualite": "bas",
+   "fichier": "sonde-138m-x20-bas.jpg",
+   "octets": 31968,
+   "empreinte": "4354296adc5e74cc",
+   "url": "http://localhost:5173/?sonde=1&poste=30,20.2,129.36&regard=0,1.2,-4&near=0.5&far=1000&brume=exp2:0.0016&soleil=-30,23,95&zoom=20&qualite=bas&modele=mafia_boss&ecart=1.4&carte=5",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Kessler",
+     "modele": "mafia_boss",
+     "position": [
+      0,
+      0.2,
+      -4
+     ],
+     "distanceM": 138.02,
+     "plongeeDeg": 7.94,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 207,
+      "largeur": 74
+     },
+     "tete": {
+      "hauteur": 36,
+      "largeur": 46
+     },
+     "torse": {
+      "hauteur": 58,
+      "largeur": 74
+     },
+     "attendu": {
+      "silhouette": 205.3
+     }
+    }
+   ]
+  },
+  {
+   "nom": "430m",
+   "zoom": 8,
+   "qualite": "moyen",
+   "fichier": "sonde-430m-x8-moyen.jpg",
+   "octets": 22171,
+   "empreinte": "26a5b4285394a70c",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,428.5&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=8&qualite=moyen&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.86,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 33,
+      "largeur": 10
+     },
+     "tete": {
+      "hauteur": 4,
+      "largeur": 3
+     },
+     "torse": {
+      "hauteur": 10,
+      "largeur": 10
+     },
+     "attendu": {
+      "silhouette": 34.4
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 430.04,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 35,
+      "largeur": 13
+     },
+     "tete": {
+      "hauteur": 6,
+      "largeur": 6
+     },
+     "torse": {
+      "hauteur": 11,
+      "largeur": 12
+     },
+     "attendu": {
+      "silhouette": 35.3
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 34,
+      "largeur": 10
+     },
+     "tete": {
+      "hauteur": 5,
+      "largeur": 3
+     },
+     "torse": {
+      "hauteur": 10,
+      "largeur": 10
+     },
+     "attendu": {
+      "silhouette": 35.3
+     }
+    }
+   ]
+  },
+  {
+   "nom": "430m",
+   "zoom": 8,
+   "qualite": "bas",
+   "fichier": "sonde-430m-x8-bas.jpg",
+   "octets": 20496,
+   "empreinte": "fd107799e7592b69",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,428.5&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=8&qualite=bas&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.86,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 26,
+      "largeur": 8
+     },
+     "tete": {
+      "hauteur": 4,
+      "largeur": 2
+     },
+     "torse": {
+      "hauteur": 7,
+      "largeur": 8
+     },
+     "attendu": {
+      "silhouette": 25.8
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 430.04,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 27,
+      "largeur": 10
+     },
+     "tete": {
+      "hauteur": 5,
+      "largeur": 4
+     },
+     "torse": {
+      "hauteur": 9,
+      "largeur": 10
+     },
+     "attendu": {
+      "silhouette": 26.5
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 26,
+      "largeur": 8
+     },
+     "tete": {
+      "hauteur": 3,
+      "largeur": 3
+     },
+     "torse": {
+      "hauteur": 8,
+      "largeur": 7
+     },
+     "attendu": {
+      "silhouette": 26.5
+     }
+    }
+   ]
+  },
+  {
+   "nom": "430m",
+   "zoom": 12,
+   "qualite": "moyen",
+   "fichier": "sonde-430m-x12-moyen.jpg",
+   "octets": 22104,
+   "empreinte": "fc6947746c3665e2",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,428.5&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=12&qualite=moyen&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.86,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 51,
+      "largeur": 15
+     },
+     "tete": {
+      "hauteur": 7,
+      "largeur": 5
+     },
+     "torse": {
+      "hauteur": 15,
+      "largeur": 15
+     },
+     "attendu": {
+      "silhouette": 51.6
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 430.04,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 53,
+      "largeur": 19
+     },
+     "tete": {
+      "hauteur": 9,
+      "largeur": 9
+     },
+     "torse": {
+      "hauteur": 16,
+      "largeur": 19
+     },
+     "attendu": {
+      "silhouette": 53
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 52,
+      "largeur": 15
+     },
+     "tete": {
+      "hauteur": 8,
+      "largeur": 6
+     },
+     "torse": {
+      "hauteur": 16,
+      "largeur": 14
+     },
+     "attendu": {
+      "silhouette": 53
+     }
+    }
+   ]
+  },
+  {
+   "nom": "430m",
+   "zoom": 12,
+   "qualite": "bas",
+   "fichier": "sonde-430m-x12-bas.jpg",
+   "octets": 20742,
+   "empreinte": "6bc090cd2cd843d3",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,428.5&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=12&qualite=bas&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.86,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 38,
+      "largeur": 11
+     },
+     "tete": {
+      "hauteur": 5,
+      "largeur": 4
+     },
+     "torse": {
+      "hauteur": 11,
+      "largeur": 11
+     },
+     "attendu": {
+      "silhouette": 38.7
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 430.04,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 40,
+      "largeur": 15
+     },
+     "tete": {
+      "hauteur": 7,
+      "largeur": 8
+     },
+     "torse": {
+      "hauteur": 13,
+      "largeur": 14
+     },
+     "attendu": {
+      "silhouette": 39.8
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 39,
+      "largeur": 12
+     },
+     "tete": {
+      "hauteur": 6,
+      "largeur": 4
+     },
+     "torse": {
+      "hauteur": 12,
+      "largeur": 11
+     },
+     "attendu": {
+      "silhouette": 39.8
+     }
+    }
+   ]
+  },
+  {
+   "nom": "430m",
+   "zoom": 20,
+   "qualite": "moyen",
+   "fichier": "sonde-430m-x20-moyen.jpg",
+   "octets": 21166,
+   "empreinte": "9a960827dde46248",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,428.5&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=20&qualite=moyen&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.86,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 84,
+      "largeur": 25
+     },
+     "tete": {
+      "hauteur": 11,
+      "largeur": 9
+     },
+     "torse": {
+      "hauteur": 25,
+      "largeur": 25
+     },
+     "attendu": {
+      "silhouette": 86
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 430.04,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 88,
+      "largeur": 32
+     },
+     "tete": {
+      "hauteur": 15,
+      "largeur": 16
+     },
+     "torse": {
+      "hauteur": 28,
+      "largeur": 31
+     },
+     "attendu": {
+      "silhouette": 88.4
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 87,
+      "largeur": 25
+     },
+     "tete": {
+      "hauteur": 13,
+      "largeur": 9
+     },
+     "torse": {
+      "hauteur": 26,
+      "largeur": 24
+     },
+     "attendu": {
+      "silhouette": 88.4
+     }
+    }
+   ]
+  },
+  {
+   "nom": "430m",
+   "zoom": 20,
+   "qualite": "bas",
+   "fichier": "sonde-430m-x20-bas.jpg",
+   "octets": 19529,
+   "empreinte": "01ab3223776ee1cd",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,428.5&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=20&qualite=bas&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.86,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 63,
+      "largeur": 19
+     },
+     "tete": {
+      "hauteur": 9,
+      "largeur": 6
+     },
+     "torse": {
+      "hauteur": 19,
+      "largeur": 18
+     },
+     "attendu": {
+      "silhouette": 64.5
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 430.04,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 66,
+      "largeur": 24
+     },
+     "tete": {
+      "hauteur": 11,
+      "largeur": 11
+     },
+     "torse": {
+      "hauteur": 20,
+      "largeur": 23
+     },
+     "attendu": {
+      "silhouette": 66.3
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      5,
+      0.2,
+      0
+     ],
+     "distanceM": 430.07,
+     "plongeeDeg": 4.85,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 65,
+      "largeur": 18
+     },
+     "tete": {
+      "hauteur": 10,
+      "largeur": 7
+     },
+     "torse": {
+      "hauteur": 19,
+      "largeur": 18
+     },
+     "attendu": {
+      "silhouette": 66.3
+     }
+    }
+   ]
+  },
+  {
+   "nom": "250m",
+   "zoom": 8,
+   "qualite": "moyen",
+   "fichier": "sonde-250m-x8-moyen.jpg",
+   "octets": 23674,
+   "empreinte": "e17a1e1a2e9c041f",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,247.35&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=8&qualite=moyen&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=2.5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.03,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 58,
+      "largeur": 17
+     },
+     "tete": {
+      "hauteur": 8,
+      "largeur": 6
+     },
+     "torse": {
+      "hauteur": 17,
+      "largeur": 17
+     },
+     "attendu": {
+      "silhouette": 58.7
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 250.01,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 60,
+      "largeur": 21
+     },
+     "tete": {
+      "hauteur": 10,
+      "largeur": 11
+     },
+     "torse": {
+      "hauteur": 20,
+      "largeur": 21
+     },
+     "attendu": {
+      "silhouette": 60.3
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.02,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 60,
+      "largeur": 17
+     },
+     "tete": {
+      "hauteur": 9,
+      "largeur": 7
+     },
+     "torse": {
+      "hauteur": 18,
+      "largeur": 17
+     },
+     "attendu": {
+      "silhouette": 60.3
+     }
+    }
+   ]
+  },
+  {
+   "nom": "250m",
+   "zoom": 8,
+   "qualite": "bas",
+   "fichier": "sonde-250m-x8-bas.jpg",
+   "octets": 21835,
+   "empreinte": "c343b3f6f6765f8d",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,247.35&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=8&qualite=bas&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=2.5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.03,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 43,
+      "largeur": 13
+     },
+     "tete": {
+      "hauteur": 6,
+      "largeur": 4
+     },
+     "torse": {
+      "hauteur": 13,
+      "largeur": 13
+     },
+     "attendu": {
+      "silhouette": 44
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 250.01,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 45,
+      "largeur": 17
+     },
+     "tete": {
+      "hauteur": 7,
+      "largeur": 7
+     },
+     "torse": {
+      "hauteur": 14,
+      "largeur": 16
+     },
+     "attendu": {
+      "silhouette": 45.2
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.02,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 44,
+      "largeur": 12
+     },
+     "tete": {
+      "hauteur": 6,
+      "largeur": 5
+     },
+     "torse": {
+      "hauteur": 13,
+      "largeur": 12
+     },
+     "attendu": {
+      "silhouette": 45.2
+     }
+    }
+   ]
+  },
+  {
+   "nom": "250m",
+   "zoom": 12,
+   "qualite": "moyen",
+   "fichier": "sonde-250m-x12-moyen.jpg",
+   "octets": 24560,
+   "empreinte": "2fbc49cbcea5dde9",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,247.35&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=12&qualite=moyen&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=2.5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.03,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 87,
+      "largeur": 26
+     },
+     "tete": {
+      "hauteur": 12,
+      "largeur": 9
+     },
+     "torse": {
+      "hauteur": 26,
+      "largeur": 25
+     },
+     "attendu": {
+      "silhouette": 88.1
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 250.01,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 91,
+      "largeur": 33
+     },
+     "tete": {
+      "hauteur": 16,
+      "largeur": 17
+     },
+     "torse": {
+      "hauteur": 29,
+      "largeur": 33
+     },
+     "attendu": {
+      "silhouette": 90.5
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.02,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 89,
+      "largeur": 26
+     },
+     "tete": {
+      "hauteur": 13,
+      "largeur": 10
+     },
+     "torse": {
+      "hauteur": 28,
+      "largeur": 25
+     },
+     "attendu": {
+      "silhouette": 90.5
+     }
+    }
+   ]
+  },
+  {
+   "nom": "250m",
+   "zoom": 12,
+   "qualite": "bas",
+   "fichier": "sonde-250m-x12-bas.jpg",
+   "octets": 22117,
+   "empreinte": "66c01d923fd10e93",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,247.35&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=12&qualite=bas&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=2.5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.03,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 66,
+      "largeur": 19
+     },
+     "tete": {
+      "hauteur": 9,
+      "largeur": 7
+     },
+     "torse": {
+      "hauteur": 19,
+      "largeur": 19
+     },
+     "attendu": {
+      "silhouette": 66.1
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 250.01,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 68,
+      "largeur": 25
+     },
+     "tete": {
+      "hauteur": 11,
+      "largeur": 12
+     },
+     "torse": {
+      "hauteur": 22,
+      "largeur": 25
+     },
+     "attendu": {
+      "silhouette": 67.9
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.02,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 67,
+      "largeur": 20
+     },
+     "tete": {
+      "hauteur": 10,
+      "largeur": 7
+     },
+     "torse": {
+      "hauteur": 20,
+      "largeur": 18
+     },
+     "attendu": {
+      "silhouette": 67.9
+     }
+    }
+   ]
+  },
+  {
+   "nom": "250m",
+   "zoom": 20,
+   "qualite": "moyen",
+   "fichier": "sonde-250m-x20-moyen.jpg",
+   "octets": 27871,
+   "empreinte": "ef59e6acd7b3ed6e",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,247.35&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=20&qualite=moyen&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=2.5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1920,
+     1080
+    ],
+    "densite": 1
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.03,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 146,
+      "largeur": 44
+     },
+     "tete": {
+      "hauteur": 21,
+      "largeur": 15
+     },
+     "torse": {
+      "hauteur": 43,
+      "largeur": 42
+     },
+     "attendu": {
+      "silhouette": 146.9
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 250.01,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 152,
+      "largeur": 55
+     },
+     "tete": {
+      "hauteur": 26,
+      "largeur": 28
+     },
+     "torse": {
+      "hauteur": 48,
+      "largeur": 54
+     },
+     "attendu": {
+      "silhouette": 151
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.02,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 149,
+      "largeur": 44
+     },
+     "tete": {
+      "hauteur": 22,
+      "largeur": 16
+     },
+     "torse": {
+      "hauteur": 45,
+      "largeur": 42
+     },
+     "attendu": {
+      "silhouette": 151
+     }
+    }
+   ]
+  },
+  {
+   "nom": "250m",
+   "zoom": 20,
+   "qualite": "bas",
+   "fichier": "sonde-250m-x20-bas.jpg",
+   "octets": 24967,
+   "empreinte": "bdd80188392262b6",
+   "url": "http://localhost:5173/?sonde=1&poste=0,37.5,247.35&regard=0,1.2,0&near=1&far=1700&brume=lin:150:1600&soleil=4,60,2&zoom=20&qualite=bas&modele=mafia_woman_02,mafia_henchman,mafia_woman_01&ecart=2.5&carte=4",
+   "ecran": {
+    "fenetre": [
+     1920,
+     1080
+    ],
+    "tampon": [
+     1440,
+     810
+    ],
+    "densite": 0.75
+   },
+   "personnages": [
+    {
+     "nom": "Verne",
+     "modele": "mafia_woman_02",
+     "position": [
+      -2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.03,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.8,
+     "silhouette": {
+      "hauteur": 109,
+      "largeur": 33
+     },
+     "tete": {
+      "hauteur": 15,
+      "largeur": 11
+     },
+     "torse": {
+      "hauteur": 32,
+      "largeur": 31
+     },
+     "attendu": {
+      "silhouette": 110.2
+     }
+    },
+    {
+     "nom": "Halder",
+     "modele": "mafia_henchman",
+     "position": [
+      0,
+      0.2,
+      0
+     ],
+     "distanceM": 250.01,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 114,
+      "largeur": 42
+     },
+     "tete": {
+      "hauteur": 19,
+      "largeur": 21
+     },
+     "torse": {
+      "hauteur": 36,
+      "largeur": 41
+     },
+     "attendu": {
+      "silhouette": 113.2
+     }
+    },
+    {
+     "nom": "Rossi",
+     "modele": "mafia_woman_01",
+     "position": [
+      2.5,
+      0.2,
+      0
+     ],
+     "distanceM": 250.02,
+     "plongeeDeg": 8.37,
+     "tailleM": 1.85,
+     "silhouette": {
+      "hauteur": 112,
+      "largeur": 32
+     },
+     "tete": {
+      "hauteur": 17,
+      "largeur": 12
+     },
+     "torse": {
+      "hauteur": 34,
+      "largeur": 32
+     },
+     "attendu": {
+      "silhouette": 113.2
+     }
+    }
+   ]
+  }
+ ],
+ "verdicts": [
+  {
+   "nom": "155m",
+   "mission": 3,
+   "distance": 155,
+   "zoom": 10,
+   "qualite": "bas",
+   "signe": "torse",
+   "silhouette": {
+    "px": 87,
+    "nom": "Mira"
+   },
+   "signePx": {
+    "px": 23,
+    "nom": "Mira"
+   },
+   "tient": true
+  },
+  {
+   "nom": "138m",
+   "mission": 5,
+   "distance": 138,
+   "zoom": 12,
+   "qualite": "bas",
+   "signe": "tete",
+   "silhouette": {
+    "px": 125,
+    "nom": "Kessler"
+   },
+   "signePx": {
+    "px": 22,
+    "nom": "Kessler"
+   },
+   "tient": true
+  },
+  {
+   "nom": "430m",
+   "mission": 4,
+   "distance": 430,
+   "zoom": 20,
+   "qualite": "bas",
+   "signe": "tete",
+   "silhouette": {
+    "px": 63,
+    "nom": "Verne"
+   },
+   "signePx": {
+    "px": 9,
+    "nom": "Verne"
+   },
+   "tient": false
+  },
+  {
+   "nom": "250m",
+   "mission": 4,
+   "distance": 250,
+   "zoom": 20,
+   "qualite": "bas",
+   "signe": "tete",
+   "silhouette": {
+    "px": 109,
+    "nom": "Verne"
+   },
+   "signePx": {
+    "px": 15,
+    "nom": "Verne"
+   },
+   "tient": true
+  }
+ ],
+ "decisionM4": {
+  "garde": false,
+  "texte": "M4 passe au repli de 120 à 250 m : à 430 m, silhouette 63 px (Verne), tête 9 px (Verne), en Bas à ×20, sous le critère (80 et 10 px)."
+ },
+ "distancesLimites": {
+  "155m": 169,
+  "138m": 216,
+  "430m": 339,
+  "250m": 341
+ },
+ "ecartAuCalcul": {
+  "min": 0.9593023255813954,
+  "max": 1.0188679245283019
+ }
+}

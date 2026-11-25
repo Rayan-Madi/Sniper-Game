@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { scene } from './scene.js'
 import { spawnCharacter, animateRig } from './characters.js'
-import { getObstacles } from './maps.js'
+import { getObstacles } from './maps/index.js'
 import { disposeObject } from './gfx/dispose.js'
 import { npcCastsShadow } from './gfx/quality.js'
 import { zonesFromSkeleton, zonesFromProcedural } from './shot/hitzones.js'
@@ -189,7 +189,13 @@ function addMarker(group) {
 
 export class NPC {
   // groundY : hauteur du sol de la carte (dalle du port, tarmac, route du convoi), 0 par défaut (menu, PvP).
-  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, levelData, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, modelType = null, partyMode = false, onPhone = false, standUp = null }) {
+  // allure : celle de la mission (src/campaign/missions/), { cibles, gardes, imprevisibles } : pas des cibles, que les
+  // civils suivent aussi, et des gardes (m/s) ; cibles imprévisibles. Sans elle (PvP) : 0,5 m/s, 0,4 pour les gardes.
+  // casting : les options du modèle (spawnCharacter, src/characters.js : model, strict, teinte, teinteMaillage,
+  // exclure), que donne la mission ; sans lui, un modèle tiré dans le pool du rôle, comme la foule du PvP.
+  // shadowRole : le rôle que montre son ombre ('cible', 'garde' ou 'civil' ; npcCastsShadow, src/gfx/quality.js) ; sans
+  // lui, son rôle. female : le sexe du personnage de secours (modèle absent).
+  constructor({ isTarget = false, isGuard = false, isCivilian = false, color, x, z, groundY = 0, allure, bounds, fleeSideways = false, hideMarker = false, hat = 0, lockState = null, female = false, casting = null, shadowRole = null, partyMode = false, onPhone = false, standUp = null }) {
     this.groundY    = groundY
     this.isTarget   = isTarget
     this.isGuard    = isGuard
@@ -197,20 +203,18 @@ export class NPC {
     this.fleeSideways = fleeSideways
     this.lockState  = lockState   // bloque le PNJ dans un état (ex: téléphone)
     this.onPhone    = onPhone     // commanditaire : assis, en pleine négociation au téléphone (jusqu'à sa fuite)
-    this.standUp    = standUp     // [dx, dz] (m) : où il se tient une fois levé, depuis l'assise (carte, hiddenTarget)
+    this.standUp    = standUp     // [dx, dz] (m) : où il se tient une fois levé, depuis l'assise (place de la carte)
     this._rising    = null        // { fromY, t, k } : commanditaire qui se lève, du canapé vers le sol, devant l'assise
     this.alive      = true
-    this.levelData  = levelData
+    this.allure     = allure
     this.bounds     = bounds || { minX: -12, maxX: 12, minZ: -15, maxZ: 15 }
 
-    // Modèle 3D importé (.glb) si configuré, sinon modèle procédural.
-    // La cible "à identifier" (chapeau + marqueur masqué, niveau 6) reste
-    // procédurale pour que les indices visuels (costume clair, chapeau) collent.
-    // Modèle .glb. modelType permet de forcer un pool (ex : la cible cachée
-    // du niveau final utilise le pool CIVIL pour se fondre dans la foule).
+    // Modèle 3D importé (.glb), sinon le personnage de secours, procédural. Son casting (spec du lot 3, §2 d) : le modèle
+    // imposé d'une cible, cherché dans tous les pools (le commanditaire de M6 a un modèle de la foule), les sosies
+    // écartés des civils ; sans casting, le pool du rôle, sans rien tirer de plus (la graine du PvP).
     this.partyMode = partyMode
-    const type = modelType || (isTarget ? 'target' : isGuard ? 'guard' : 'civilian')
-    this.character = spawnCharacter(type)
+    const type = isTarget ? 'target' : isGuard ? 'guard' : 'civilian'
+    this.character = casting ? spawnCharacter(type, casting) : spawnCharacter(type)
     if (this.character) {
       this.mesh = new THREE.Group()
       this.mesh.add(this.character.model)
@@ -223,9 +227,11 @@ export class NPC {
       this.mesh = makePerson(color, isTarget, isGuard, { hideMarker, hat, female })
     }
     this.mesh.position.set(x, groundY, z)   // les pieds sur le sol de la carte, pas sous la dalle
-    // Ombre : rôle visible du personnage. Le commanditaire de M6 (modèle de la foule) a celui des civils, sinon son
-    // ombre le distinguerait des danseurs quand seules les cibles et les gardes en ont une.
-    this.shadowRole = isGuard ? 'garde' : (isTarget && modelType !== 'civilian') ? 'cible' : 'civil'
+    // Ombre : le rôle que montre le personnage, donné par qui le crée, sinon son rôle ; jamais le pool de son modèle
+    // (sans rôle donné, Verne, une cible au modèle du pool des civils, aurait l'ombre des cibles). Une cible sans
+    // marqueur (de M2 à M6, tâche A7 du lot 3) reçoit celle des civils (main.js) : sinon son ombre la distinguerait des
+    // civils quand seules les cibles et les gardes en ont une.
+    this.shadowRole = shadowRole || (isGuard ? 'garde' : isTarget ? 'cible' : 'civil')
     this._shadowCasters = []
     this.mesh.traverse(o => { if (o.isMesh && o.castShadow) this._shadowCasters.push(o) })
     this.applyShadows(shadowMode)
@@ -235,16 +241,18 @@ export class NPC {
     this.stateTimer   = 0
     this.walkDir      = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize()
     this.fleeDir      = new THREE.Vector3()
+    this.cibleFuite   = null    // [x, z] : le point vers lequel il fuit (fuirVers : une sortie, un abri), null sinon
+    this.corpsGarde   = false   // garderCorps : abattu, son corps reste jusqu'au démontage de la mission
     this.animT        = Math.random() * Math.PI * 2
     this.ringPulse    = 0
     this.onVehicle    = false   // cible à bord d'un véhicule (position gérée par main.js)
 
-    this.speed        = isGuard ? (levelData?.guardSpeed || 0.4) : (levelData?.targetSpeed || 0.5)
+    this.speed        = isGuard ? (allure?.gardes || 0.4) : (allure?.cibles || 0.5)
     this.stateInterval = this._pickInterval()
   }
 
   _pickInterval() {
-    return this.isTarget && this.levelData?.unpredictable
+    return this.isTarget && this.allure?.imprevisibles
       ? 1.2 + Math.random() * 2
       : 2.5 + Math.random() * 5
   }
@@ -388,14 +396,8 @@ export class NPC {
   // Fuit dans la direction opposée au tir
   flee(shotPos) {
     if (this.onVehicle) return   // une cible en voiture ne fuit pas à pied
-    this.state      = STATES.FLEE
-    this.stateTimer = 0
-    // Le commanditaire raccroche et se lève : il quitte la pose assise (clip de course, update) et le canapé (_rise)
-    // (spec du lot 2, §3.7 ; avant, il glissait assis, 20 cm au-dessus du parquet).
-    if (this.onPhone) {
-      this.onPhone = false
-      this._rising = { fromY: this.mesh.position.y, t: 0, k: 0 }
-    }
+    this._commencerFuite()
+    this.cibleFuite = null
 
     if (this.fleeSideways) {
       // Appartement : on court vers la sortie latérale la plus proche (±X)
@@ -412,6 +414,36 @@ export class NPC {
     if (this.fleeDir.length() < 0.01) {
       this.fleeDir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize()
     }
+  }
+
+  // Fuit vers le point [x, z] (spec du lot 3, §2 f ; fuirVersLaSortie, main.js) : une sortie ou un abri de la mission, au
+  // bout de la réaction d'une cible (src/campaign/alarm.js). Tout d'une fuite (état, lever du canapé), à la vitesse d'une
+  // fuite ; le cap est repris vers le point à chaque image (_move), et elle s'y arrête.
+  fuirVers([x, z]) {
+    if (this.onVehicle) return
+    this._commencerFuite()
+    this.cibleFuite = [x, z]
+    this._capVersLaCible()
+  }
+
+  // Ce que fait toute fuite : l'état, et le commanditaire qui raccroche et se lève : il quitte la pose assise (clip de
+  // course, update) et le canapé (_rise) (spec du lot 2, §3.7 ; avant, il glissait assis, 20 cm au-dessus du parquet).
+  _commencerFuite() {
+    this.state      = STATES.FLEE
+    this.stateTimer = 0
+    if (this.onPhone) {
+      this.onPhone = false
+      this._rising = { fromY: this.mesh.position.y, t: 0, k: 0 }
+    }
+  }
+
+  // Cap de la fuite vers cibleFuite ; rend la distance qui reste (m).
+  _capVersLaCible() {
+    const pos = this.mesh.position
+    const dx = this.cibleFuite[0] - pos.x, dz = this.cibleFuite[1] - pos.z
+    const d = Math.hypot(dx, dz)
+    if (d > 1e-6) this.fleeDir.set(dx / d, 0, dz / d)
+    return d
   }
 
   react(shotPos) {
@@ -509,6 +541,14 @@ export class NPC {
     if (this.state === STATES.FLEE) {
       // Vitesse de fuite très élevée — sort du champ de vision rapidement
       const spd = this.speed * 8.0 * dt
+      // Fuite vers un point : le cap est repris à chaque image ; arrivée, elle s'y arrête
+      if (this.cibleFuite) {
+        const reste = this._capVersLaCible()
+        if (reste <= spd) {
+          pos.x = this.cibleFuite[0]; pos.z = this.cibleFuite[1]
+          return
+        }
+      }
       // Contourne les bâtiments : si le chemin est bloqué, dévie à 90°
       const wasInside = blocked(pos.x, pos.z)
       if (!wasInside && blocked(pos.x + this.fleeDir.x * spd * 4, pos.z + this.fleeDir.z * spd * 4)) {
@@ -624,6 +664,15 @@ export class NPC {
     }
     if (this.mesh.userData.marker) this.mesh.userData.marker.visible = false
     if (this.mesh.userData.ring)   this.mesh.userData.ring.visible = false
-    this.removeIn = BODY_TIME   // le corps part au bout de 8 s de jeu (update), libéré
+    // Le corps part au bout de 8 s de jeu (update), libéré ; gardé (garderCorps), il reste jusqu'au démontage
+    this.removeIn = this.corpsGarde ? Infinity : BODY_TIME
+  }
+
+  // Le corps de ce PNJ, abattu ou à venir, reste jusqu'au démontage de la mission (NPC.dispose, unmountLevel) : fin
+  // différée de la mission (spec du lot 3, §2 c, contrat avec le lot 4 : « retrait des corps suspendu dès la première
+  // mort »), et la kill-cam du lot 4.
+  garderCorps() {
+    this.corpsGarde = true
+    if (!this.alive) this.removeIn = Infinity
   }
 }

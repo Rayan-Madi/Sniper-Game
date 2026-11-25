@@ -31,6 +31,7 @@
   .m6 .wave i:nth-child(7n+2) { background: #f1f4ea; opacity: .5; }
   .m6 .icpt.on .wave { animation: m6-jit 1.7s steps(1) infinite; }
   .m6 .icpt.on .trans { animation: m6-txj 2.6s steps(1) infinite; }
+  .m6 #trans { white-space: pre-line; }   /* la réplique à deux voix passe à la ligne (décision D2) */
   .m6 .icpt .who b { color: #e04848; font-weight: normal; }
   .m6 .icpt .tl { position: absolute; left: 22%; width: 30%; top: 6.4cqw; height: .35cqw; background: rgba(224,72,72,.45); mix-blend-mode: screen; opacity: 0; }
   .m6 .icpt.on .tl { opacity: 1; animation: m6-tl 2.1s steps(1) infinite; }
@@ -40,6 +41,10 @@
   @keyframes m6-txj { 0%,100% { transform: none; clip-path: none } 31% { transform: translateX(.7cqw) skewX(-9deg) } 33% { transform: none }
       66% { clip-path: inset(0 0 48% 0); transform: translateX(-.9cqw) } 68% { clip-path: none; transform: none } }
   @keyframes m6-tl { 0% { top: 6.4cqw; left: 22%; opacity: 1 } 25% { top: 11cqw; left: 55%; opacity: .3 } 50% { top: 3cqw; left: 8%; opacity: .8 } 75% { top: 14cqw; left: 40%; opacity: 0 } }
+  /* effets atténués (k-reduced, posée par le kit sur #st) : l'interception ne tremble plus (pose de repos) ; le trait
+     de déchirure, qui n'existe que par son saut, s'efface */
+  .m6.k-reduced .icpt.on .wave, .m6.k-reduced .icpt.on .trans { animation: none; }
+  .m6.k-reduced .icpt.on .tl { animation: none; opacity: 0; }
 
   /* dossier presque vide */
   .m6 .dossier { left: 22cqw; top: 7.5cqw; width: 56cqw; border-color: rgba(212,175,55,.38);
@@ -71,13 +76,17 @@
       60% { clip-path: inset(80% 0 12% 0); transform: translateX(-.7cqw) } 85% { clip-path: inset(40% 0 52% 0); transform: translateX(2.6cqw) } }
   @keyframes m6-tc { 0% { clip-path: inset(72% 0 21% 0); transform: translateX(.9cqw) } 35% { clip-path: inset(28% 0 64% 0); transform: translateX(-2.2cqw) }
       65% { clip-path: inset(88% 0 4% 0); transform: translateX(1.5cqw) } 90% { clip-path: inset(52% 0 40% 0); transform: none } }
+  /* effets atténués : déchirures figées à leur pose de repos, parasites immobiles */
+  .m6.k-reduced .vph.on .tear.a, .m6.k-reduced .vph.on .tear.b, .m6.k-reduced .vph.on .tear.c { animation: none; }
   .m6 .vph .nz { position: absolute; inset: -30%; opacity: .3; mix-blend-mode: screen; animation: k-grain .3s steps(3) infinite;
       background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+  .m6.k-reduced .vph .nz { animation: none; }
   .m6 .vph .lines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.32) 0 1px, transparent 1px 3px); }
   .m6 .vtag { position: absolute; left: 6%; top: 4%; font-size: 1.05cqw; background: #e04848; color: #0b0c10; padding: .15cqw .5cqw; font-weight: bold; text-shadow: none; opacity: 0; }
   .m6 .vtag.on { opacity: 1; }
   .m6 .vph .cam { position: absolute; left: .8cqw; bottom: .7cqw; font-size: 1.05cqw; color: #e8efe0; text-shadow: 0 0 2px #000; opacity: .85; }
   .m6 .vph .cam b { color: #e04848; font-weight: normal; animation: k-blink 1s steps(2) infinite; }
+  .m6.k-reduced .vph .cam b { animation: none; }   /* effets atténués : voyant allumé fixe */
   .m6 .fields { padding-top: .2cqw; }
   .m6 .fields .k { display: inline-block; width: 13.6cqw; color: rgba(215,220,207,.55); }
   .m6 .rb { display: inline-block; vertical-align: middle; height: 1.7cqw; width: var(--w); background: #000;
@@ -135,6 +144,7 @@
   .m6 #guests.on .dn { transform-box: fill-box; transform-origin: center; animation: m6-dance .42s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -53ms); }
   .m6 #guests.dim .dn { opacity: .2; transition-delay: 0s; }
   @keyframes m6-dance { from { transform: translate(-1px, .6px) } to { transform: translate(1px, -.8px) } }
+  .m6.k-reduced #guests.on .dn { animation: none; }   /* effets atténués : les danseurs restent à leur place */
 
   /* ce que je sais */
   .m6 .prof { position: absolute; left: 67cqw; top: 27.6cqw; width: 30.5cqw; padding: 1.1cqw 1.3cqw 1cqw; border: 1px solid rgba(212,175,55,.4);
@@ -154,6 +164,7 @@
   .m6 .trace.on { opacity: 1; }
   .m6 .trace.out { opacity: 0; }
   .m6 .trace .tw { animation: k-blink .5s steps(2) infinite; }
+  .m6.k-reduced .trace .tw { animation: none; }   /* effets atténués : voyant allumé fixe */
   .m6 .trace b { color: #f1f4ea; font-weight: normal; }
   .m6 .trace .tb { height: .5cqw; margin-top: .45cqw; background: rgba(224,72,72,.18); }
   .m6 .trace .tb i { display: block; height: 100%; width: 0; background: #e04848; }
@@ -163,6 +174,8 @@
       background: radial-gradient(ellipse at center, transparent 48%, rgba(224,40,40,.3) 100%); }
   .m6 .hb.on { opacity: 1; animation: m6-hb .85s infinite; }
   @keyframes m6-hb { 0% { opacity: .35 } 10% { opacity: 1 } 24% { opacity: .5 } 34% { opacity: .9 } 100% { opacity: .35 } }
+  /* effets atténués : voile rouge fixe, sans battement (deux éclats par battement, 2,4 par seconde sinon) */
+  .m6.k-reduced .hb.on { animation: none; }
   .m6 .radio .lb2 { display: none; }
   .m6 .radio.comp .lb { display: none; }
   .m6 .radio.comp .lb2 { display: inline; color: #e04848; }
@@ -342,7 +355,9 @@
     stateClasses: ['hl', 'dim', 'x', 'comp', 'big', 'full'],
     beats: [
       { label: 'interception', min: 900, cues: [[100, K => K.crt()], [300, K => K.on('void')], [550, K => K.on('icpt')], [700, G(260, .7)]] },
-      { who: 'PHONE', say: '« Ils sont tous morts ? — Oui. Il ne reste que vous. »', post: 250,
+      // deux voix sur deux lignes, sans tiret (décision D2 de la spec cinématiques v2) : deux caractères de moins que la
+      // v1 (124 ms d'estimation), rendus à post (250 ms dans la v1) ; le temps dure exactement autant
+      { who: 'PHONE', say: '« Ils sont tous morts ?\nOui. Il ne reste que vous. »', post: 374,
         cues: [[500, G(140, .6)], [1300, H], [1700, G(220, .85)], [2500, G(90, .5)], [2900, H], [3400, G(160, .7)]] },
       { who: 'PHONE', say: '« Alors trouvez-moi ce sniper. CE SOIR. »', post: 400,
         cues: [[0, K => K.lost(180)], [900, G(120, .6)], [2050, K => { K.shake(); K.glitch(300, 1); H(K) }], [2700, G(140, .7)]] },

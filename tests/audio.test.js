@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 // Audio (spec du lot 1 §4.2, tâche L3). La nappe de mission baisse en 1,2 s quand la mission s'arrête : son gain doit
@@ -12,12 +12,13 @@ vi.mock('../src/scene.js', async () => {
   return {
     scene: new THREE.Scene(),
     camera: new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 500),
+    sun: new THREE.DirectionalLight(),   // l'arène du PvP et le décor du menu y posent leur profil de caméra
     renderer: { render() {}, domElement: document.createElement('canvas') },
     setLighting() {},
   }
 })
 const intro = vi.hoisted(() => ({ onDone: null }))
-vi.mock('../src/pvpIntro.js', () => ({
+vi.mock('../src/pvp/pvpIntro.js', () => ({
   playPvpIntro(role, arena, onTick, onDone) { intro.onDone = onDone },
   isPvpIntroActive: () => !!intro.onDone,
   stopPvpIntro() { intro.onDone = null },
@@ -134,7 +135,7 @@ describe('sons du PvP', () => {
     vi.stubGlobal('cancelAnimationFrame', () => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const audio = await import('../src/audio.js')
-    const pvp = await import('../src/pvp.js')
+    const pvp = await import('../src/pvp/index.js')
     pvp.initMultiplayerMenu()
     audio.audioContext()   // le contexte du jeu (sons du menu, cinématiques)
     $('btn-mp-create').onclick()
@@ -162,9 +163,13 @@ describe('sons du PvP', () => {
     expect(master.inputs.size).toBeGreaterThan(3)   // musique, sonnerie, bips de l'alarme
   })
 
-  it('garde sur le source : pvp.js n\'instancie aucun AudioContext', () => {
-    const src = readFileSync(resolve(__dirname, '../src/pvp.js'), 'utf8')
-    expect(src).not.toMatch(/AudioContext\s*\|\||new\s*\(?\s*(window\.)?(webkit)?AudioContext/)
+  it('garde sur le source : aucun module du PvP (src/pvp/) n\'instancie d\'AudioContext', () => {
+    const dossier = resolve(__dirname, '../src/pvp')
+    const modules = readdirSync(dossier).filter(f => f.endsWith('.js'))
+    expect(modules).toEqual(expect.arrayContaining(['index.js', 'salon.js', 'sniper.js', 'contreTueur.js', 'son.js', 'etat.js']))
+    for (const f of modules) {
+      expect(readFileSync(resolve(dossier, f), 'utf8'), f).not.toMatch(/AudioContext\s*\|\||new\s*\(?\s*(window\.)?(webkit)?AudioContext/)
+    }
   })
 })
 
@@ -587,5 +592,64 @@ describe('pluie du port (M3)', () => {
     expect(src.stopAt).not.toBeNull()
     expect(Math.exp(-(ms / 1000) / fondu[3]), "niveau restant à l'arrêt de la source").toBeLessThanOrEqual(1e-3 + 1e-12)
     expect(ms / 1000, 'coupée avec la nappe').toBeLessThanOrEqual(1.2 + 0.01)
+  })
+})
+
+// La voix radio d'Anton en mission (spec du lot 3, §2 g ; plan du lot 3a, tâche A8) : les bips des cinématiques le temps
+// d'une ligne (déclic, souffle du canal, syllabes synthétiques, déclic de fin), tout programmé d'un coup sur l'horloge
+// audio, dans un gain à elle branché au maître ; coupée par stopRadio (la pause) et par stopMissionAmbience (fin de
+// mission, menu, briefing). Son hasard vient d'un générateur à graine : le hasard du jeu ne bouge pas.
+// Témoin : playRadio n'existe pas avant la tâche (ne compte pas) ; par mutation de src/audio.js, vues rouges : la voix
+// qui tire dans Math.random ; stopMissionAmbience qui ne la coupe pas ; une ligne qui ne coupe pas la précédente.
+describe("la voix radio d'Anton", () => {
+  const sources = () => created.filter(n => n.kind === 'oscillator' || n.kind === 'buffer')
+
+  it('playRadio(2) : des sons dans les 2 s de la ligne, dont des syllabes, dans un gain branché au maître ; aucun Math.random', async () => {
+    const audio = await import('../src/audio.js')
+    const ctx = audio.audioContext(), master = audio.masterNode()
+    ctx.currentTime = 10
+    created.length = 0
+    const hasard = vi.spyOn(Math, 'random')
+    audio.playRadio(2)
+    expect(hasard).not.toHaveBeenCalled()
+    const voix = gainsOn(master)
+    expect(voix).toHaveLength(1)
+    const s = sources()
+    // Des syllabes, chacune sur la grille de 125 ms de la voix des cinématiques
+    const syllabes = s.filter(n => n.kind === 'oscillator')
+    expect(syllabes.length, 'syllabes').toBeGreaterThan(0)
+    for (const o of syllabes) {
+      const place = (o.startAt - 10) / 0.125
+      expect(Math.abs(place - Math.round(place))).toBeLessThan(1e-6)
+    }
+    for (const n of s) {
+      expect(n.startAt).toBeGreaterThanOrEqual(10)
+      expect(n.startAt).toBeLessThanOrEqual(12)
+      expect(n.stopAt).toBeLessThanOrEqual(12.2)
+    }
+  })
+
+  it('stopRadio() la coupe : son gain débranché du maître', async () => {
+    const audio = await import('../src/audio.js')
+    const master = audio.masterNode()
+    audio.playRadio(3)
+    audio.stopRadio()
+    expect(gainsOn(master)).toHaveLength(0)
+  })
+
+  it('stopMissionAmbience() la coupe aussi', async () => {
+    const audio = await import('../src/audio.js')
+    const master = audio.masterNode()
+    audio.playRadio(3)
+    audio.stopMissionAmbience()
+    expect(gainsOn(master)).toHaveLength(0)
+  })
+
+  it('une nouvelle ligne coupe la précédente : une seule voix branchée', async () => {
+    const audio = await import('../src/audio.js')
+    const master = audio.masterNode()
+    audio.playRadio(3)
+    audio.playRadio(2)
+    expect(gainsOn(master)).toHaveLength(1)
   })
 })

@@ -182,29 +182,50 @@ function capsuleT(ro, rd, a, b, r) {
   return best
 }
 
-// Zone que le rayon (THREE.Ray, direction unitaire) touche en premier : { part, point, distance }, ou null.
+// Normale sortante de la zone z au point p de sa surface : du point de l'axe [a, b] le plus proche vers p.
+const _c = new THREE.Vector3()
+function zoneNormal(z, p, out) {
+  _ba.subVectors(z.b, z.a)
+  const baba = _ba.dot(_ba)
+  const s = baba < 1e-12 ? 0 : Math.max(0, Math.min(1, _oa.subVectors(p, z.a).dot(_ba) / baba))
+  return out.subVectors(p, _c.copy(z.a).addScaledVector(_ba, s)).normalize()
+}
+
+// Zone que le rayon (THREE.Ray, direction unitaire) touche en premier : { part, point, distance, normal }, ou null.
+// normal : la normale sortante de la zone au point d'entrée (unitaire ; face au rayon s'il part de l'intérieur de la
+// zone), que garde le dernier tir mortel (contrat du lot 4).
 export function rayVsZones(ray, zones) {
   let best = null
   for (const z of zones || []) {
     const t = capsuleT(ray.origin, ray.direction, z.a, z.b, z.r)
-    if (t >= 0 && (!best || t < best.distance)) best = { part: z.part, distance: t }
+    if (t >= 0 && (!best || t < best.distance)) best = { zone: z, distance: t }
   }
   if (!best) return null
-  return { part: best.part, point: ray.at(best.distance, new THREE.Vector3()), distance: best.distance }
+  const point = ray.at(best.distance, new THREE.Vector3())
+  const normal = new THREE.Vector3()
+  if (best.distance > 0) zoneNormal(best.zone, point, normal)
+  if (best.distance === 0 || normal.lengthSq() < 0.5) normal.copy(ray.direction).negate()
+  return { part: best.zone.part, point, distance: best.distance, normal }
 }
 
-// Le PNJ vivant que la balle touche en premier sur son rayon : { npc, part, point, distance }, ou null. La boîte
-// grossière du PNJ (getBounds), élargie de ZONES.prefiltre de chaque côté (bras tendus, genoux d'une pose assise),
-// écarte d'abord ceux que le rayon ne frôle même pas ; les autres sont testés zone par zone (rayVsZones).
+// Le PNJ vivant que la balle touche en premier sur son rayon : { npc, part, point, distance, normal }, ou null. La
+// boîte grossière du PNJ (getBounds), élargie de ZONES.prefiltre de chaque côté (bras tendus, genoux d'une pose
+// assise), écarte d'abord ceux que le rayon ne frôle même pas ; les autres sont testés zone par zone (rayVsZones).
+// far : rien au-delà de cette distance sur le rayon (le bout d'un segment de la trajectoire, src/shot/occlusion.js).
+// Un rayon parti de l'intérieur de la boîte (un segment court, ou qui la traverse de haut en bas) y entre à 0 m :
+// THREE.Ray.intersectBox rend alors le point de sortie, qui peut être au-delà de far alors qu'une zone est avant.
 const _box = new THREE.Box3()
-export function npcHit(ray, npcs) {
+const _entree = new THREE.Vector3()
+export function npcHit(ray, npcs, { far = Infinity } = {}) {
   let best = null
   for (const n of npcs) {
     if (!n.alive) continue
     const { center, size } = n.getBounds()
-    if (!ray.intersectsBox(_box.setFromCenterAndSize(center, size).expandByScalar(ZONES.prefiltre))) continue
+    _box.setFromCenterAndSize(center, size).expandByScalar(ZONES.prefiltre)
+    if (!ray.intersectBox(_box, _entree)) continue
+    if (!_box.containsPoint(ray.origin) && _entree.distanceTo(ray.origin) > far) continue
     const hit = rayVsZones(ray, n.hitZones())
-    if (hit && (!best || hit.distance < best.distance)) best = { npc: n, ...hit }
+    if (hit && hit.distance <= far && (!best || hit.distance < best.distance)) best = { npc: n, ...hit }
   }
   return best
 }

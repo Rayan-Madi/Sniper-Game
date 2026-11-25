@@ -1,4 +1,4 @@
-import { CULASSE } from './shot/tuning.js'
+import { CULASSE, BALLE, LUNETTE } from './shot/tuning.js'
 import { m5Neuf, nettoyerM5, remettreM5 } from './campaign/etapes.js'
 
 export const UPGRADES = {
@@ -78,11 +78,11 @@ export function resetProgress() {
 export function getStats() {
   const l = state.levels
   return {
-    bulletDelay:    0.45 - l.velocity * 0.08,   // secondes avant impact (réactif)
+    v0:             BALLE.vitesse + l.velocity * BALLE.vitesseParNiveau,   // vitesse de la balle (m/s) : 800, 950 au niveau 4
     boltS:          CULASSE.dureeS[Math.max(0, Math.min(CULASSE.dureeS.length - 1, l.velocity))],   // culasse (s)
     trembleScale:   1.0 - l.stability * 0.20,
     stressRate:     1.0 - l.coldblood * 0.25,
-    maxZoom:        6   + l.zoom      * 2,
+    maxZoomScale:   1   + l.zoom      * LUNETTE.zoomParNiveau,   // Lunette : × le zoom maximum de la mission (1,45 au niveau 3)
     silenced:       l.silencer >= 1,
     superSilenced:  l.silencer >= 2,
   }

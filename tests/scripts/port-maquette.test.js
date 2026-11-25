@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { portMaquette, SCENES, generateScene } from '../../scripts/port-maquette.mjs'
 
 const FIXTURE = `<!DOCTYPE html><html><head><link rel="stylesheet" href="kit.css">
@@ -66,10 +67,54 @@ describe('portMaquette', () => {
   })
 })
 
+describe('generateScene', () => {
+  // Dépôt factice : la maquette de m1 cite quatre portraits et un fond ; public/briefing/img sert portrait-a en
+  // .webp (il a aussi un .jpg et un .png), portrait-d en .webp (il a aussi un .png), portrait-b en .jpg,
+  // portrait-c et le fond en .png seulement.
+  it('sert le .webp d\'une image qui en a un, sinon le .jpg, sinon le .png ; la maquette garde ses .png', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'port-maquette-'))
+    try {
+      const maquettes = join(repo, 'docs', 'superpowers', 'maquettes', 'cinematiques')
+      const img = join(repo, 'public', 'briefing', 'img')
+      mkdirSync(maquettes, { recursive: true })
+      mkdirSync(img, { recursive: true })
+      const html = FIXTURE.replace('<img src="img/portrait-a.png" alt="">', ['a', 'b', 'c', 'd']
+        .map(n => `<img src="img/portrait-${n}.png" alt="">`).join(''))
+      writeFileSync(join(maquettes, SCENES.m1 + '.html'), html)
+      for (const f of ['portrait-a.png', 'portrait-a.jpg', 'portrait-a.webp', 'portrait-b.png', 'portrait-b.jpg', 'portrait-c.png',
+        'portrait-d.png', 'portrait-d.webp', 'fond.png']) {
+        writeFileSync(join(img, f), '')
+      }
+      const mod = await importSource(generateScene('m1', repo))
+      const servies = [...mod.html.matchAll(/src="briefing\/img\/([^"]+)"/g)].map(m => m[1])
+      expect(servies).toEqual(['portrait-a.webp', 'portrait-b.jpg', 'portrait-c.png', 'portrait-d.webp'])
+      expect(mod.css).toContain('url(briefing/img/fond.png)')
+      expect(readFileSync(join(maquettes, SCENES.m1 + '.html'), 'utf8')).toBe(html)
+    } finally {
+      rmSync(repo, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('scènes générées', () => {
   it('connaît les deux pièces du prologue', () => {
     expect(SCENES['prologue-a']).toBe('prologue-a')
     expect(SCENES['prologue-b']).toBe('prologue-b')
+  })
+
+  // Une image retirée de public/briefing/img (un portrait passé en WebP, par exemple) alors qu'une scène la cite
+  // encore ne casse aucun autre test : la scène la chercherait en vain (404) pendant la cinématique.
+  it('chaque image citée par une scène existe dans public/briefing/img', () => {
+    const citees = [], manquantes = []
+    for (const id of Object.keys(SCENES)) {
+      const source = readFileSync(join(process.cwd(), 'src', 'briefing', 'scenes', id + '.js'), 'utf8')
+      for (const [, nom] of source.matchAll(/briefing\/img\/([\w.-]+)/g)) {
+        citees.push(nom)
+        if (!existsSync(join(process.cwd(), 'public', 'briefing', 'img', nom))) manquantes.push(`${id} : ${nom}`)
+      }
+    }
+    expect(citees.length).toBeGreaterThan(20)
+    expect(manquantes).toEqual([])
   })
 
   it('chaque scène du dépôt est à jour avec sa maquette (sinon : node scripts/port-maquette.mjs)', () => {

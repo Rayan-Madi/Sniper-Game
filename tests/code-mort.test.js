@@ -54,13 +54,21 @@ describe('échec : chaque échec dit sa cause, plus de texte par défaut', () =>
   const fn = a.fns.get('triggerGameOver')
   const appels = callsInNode(a, a.program).filter(c => c.callee === 'triggerGameOver')
 
-  it('chaque appel de triggerGameOver passe sa cause, un texte écrit', () => {
+  // Deux causes viennent des données de la mission (tâche A8 du lot 3), chacune garantie non vide là où elle naît : le
+  // texte d'une sortie ou d'un abri atteint (messageDeFuite, src/campaign/escape.js : celui que la mission donne à
+  // l'issue, sinon celui de sa sorte ; tests/campaign/escape.test.js) et celui de l'échéance d'une fenêtre de tir (forme
+  // des missions : un texte non vide ; tests/campaign/missions.test.js). Toute autre cause est un texte écrit.
+  const CAUSES_DES_DONNEES = ['triggerGameOver(fui.message)', 'triggerGameOver(echeance.echec)']
+
+  it('chaque appel de triggerGameOver passe sa cause, un texte écrit (ou l\'une des deux causes des données)', () => {
     expect(fn, 'triggerGameOver dans main.js').toBeTruthy()
     expect(appels.length).toBeGreaterThanOrEqual(3)   // civil abattu, cible en fuite, convoi parti
-    for (const c of appels) {
-      const src = a.source.slice(c.start, c.end)
+    const textes = appels.map(c => a.source.slice(c.start, c.end))
+    for (const src of textes) {
+      if (CAUSES_DES_DONNEES.includes(src)) continue
       expect(src, src).toMatch(/^triggerGameOver\(\s*'[^']+'\s*\)$/)
     }
+    expect(textes.filter(s => CAUSES_DES_DONNEES.includes(s)).sort(), 'chaque cause des données, une fois').toEqual([...CAUSES_DES_DONNEES].sort())
   })
 
   it('triggerGameOver affiche sa cause sans condition', () => {

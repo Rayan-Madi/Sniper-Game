@@ -14,12 +14,13 @@ vi.mock('../../src/scene.js', async () => {
   return {
     scene: new THREE.Scene(),
     camera: new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 500),
+    sun: new THREE.DirectionalLight(),   // l'arène du PvP et le décor du menu y posent leur profil de caméra
     renderer: { render() {}, domElement: document.createElement('canvas') },
     setLighting() {},
   }
 })
 const intro = vi.hoisted(() => ({ active: false, onDone: null, role: null, plays: 0 }))
-vi.mock('../../src/pvpIntro.js', () => ({
+vi.mock('../../src/pvp/pvpIntro.js', () => ({
   playPvpIntro(role, arena, onTick, onDone) { intro.active = true; intro.onDone = onDone; intro.role = role; intro.plays++ },
   isPvpIntroActive: () => intro.active,
   stopPvpIntro() { intro.active = false; intro.onDone = null },
@@ -70,7 +71,7 @@ beforeAll(async () => {
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   ;({ scene } = await import('../../src/scene.js'))
-  pvp = await import('../../src/pvp.js')
+  pvp = await import('../../src/pvp/index.js')
   pvp.initMultiplayerMenu()
 })
 

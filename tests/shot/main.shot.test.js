@@ -8,8 +8,11 @@ import { MAIN_SRC, analyse, callsIn } from '../gfx/mainSource.js'
 // - culasse : le tir est refusé tant qu'elle n'est pas prête, sa durée suit la Vélocité, ses sons et sa jauge suivent
 //   le temps de la mission ;
 // - sillage : il part au tir, pour le temps de vol de la balle ; le trait d'impact (spawnTracer) n'existe plus.
+// Depuis la tâche A4 du lot 3, le rayon du tir est celui du réticule (rayonDuReticule, qui le capture) et le temps de
+// vol du sillage est celui de la trajectoire jusqu'à l'impact prévu (predireImpact), et non plus le délai fixe.
 //
-// Témoin : au commit df6dd66, aucune de ces gardes ne tient (vu rouge avant le branchement).
+// Témoins : au commit df6dd66, aucune de ces gardes ne tient (vu rouge avant le branchement). Les deux réécrites à la
+// tâche A4 (capture par rayonDuReticule, temps de vol prévu) rougissent sur le main.js d'avant elle (97336ed ; vu rouge).
 
 const a = analyse(MAIN_SRC)
 const texte = n => a.source.slice(n.start, n.end)
@@ -22,13 +25,14 @@ describe('recul', () => {
     expect(a.imports.get('createRecoil')?.from).toBe('./shot/recoil.js')
   })
 
-  it('le coup déclenche le recul, après la capture du rayon du tir', () => {
+  it('le coup déclenche le recul, après la capture du rayon du tir (le réticule : rayonDuReticule)', () => {
     const c = callsIn(a, 'shoot')
     const kick = c.findIndex(x => x.callee === 'recoil.kick')
-    const rayon = c.findIndex(x => /\.setFromCamera$/.test(x.callee))
+    const rayon = c.findIndex(x => x.callee === 'rayonDuReticule')
     expect(kick, 'shoot appelle recoil.kick()').toBeGreaterThan(-1)
-    expect(rayon, 'shoot capture le rayon').toBeGreaterThan(-1)
+    expect(rayon, 'shoot capture le rayon du réticule').toBeGreaterThan(-1)
     expect(kick).toBeGreaterThan(rayon)
+    expect(appels('rayonDuReticule').some(x => /\.setFromCamera$/.test(x)), 'rayonDuReticule pose le rayon sur la caméra').toBe(true)
   })
 
   it('la boucle fait revenir le recul avant de régler la caméra', () => {
@@ -94,11 +98,11 @@ describe('culasse', () => {
 })
 
 describe('sillage', () => {
-  it('le coup lance le sillage, pour le temps de vol de la balle', () => {
+  it('le coup lance le sillage, pour le temps de vol de la balle jusqu\'à l\'impact prévu', () => {
     expect(a.imports.get('spawnTrail')?.from).toBe('./effects.js')
     const t = texteAppel('shoot', 'spawnTrail')
     expect(t, 'shoot appelle spawnTrail').toBeTruthy()
-    expect(t).toMatch(/bulletDelay/)
+    expect(t).toMatch(/predireImpact\(/)
   })
 
   it('plus de trait d\'impact : spawnTracer n\'est plus ni importé ni appelé', () => {

@@ -145,9 +145,10 @@ const scopeOpen = c => until(c, '__aim().pret', 3000)
 // fui), elle reste figée en vol.
 const BALLE_ARRIVEE = `!__mission().balle || __mission().phase !== 'playing'`
 
-// Avance d'un tir sur un PNJ qui marche ou qui fuit : le délai de la balle (0,45 s sans Vélocité), plus l'image où la
-// visée est prise (comme shootAhead).
-const AVANCE = 0.45 + 1 / 60
+// Avance d'un tir sur un PNJ qui marche ou qui fuit : le temps de vol de la balle jusqu'au point visé (sa distance à la
+// vitesse de la Vélocité, spec du lot 3 §2 c : 0,04 s à 31 m, 0,54 s à 430 m), plus l'image où la visée est prise
+// (comme shootAhead). __aimAt le calcule ('balle') ; avant la tâche A4, c'était le délai fixe de 0,45 s.
+const AVANCE = 'balle'
 
 // Lunette ouverte, souffle retenu, visée sur `what` (voir __aimAt), puis un tir dont on attend l'impact. Un PNJ qui
 // marche ou qui fuit est visé là où il sera à l'arrivée de la balle (AVANCE) : depuis la culasse du lot 2 (1,2 s entre
@@ -164,7 +165,7 @@ async function aimAndShoot(c, what, n = 0, { zone = 'torse', apnee = true, avanc
   if ((await mission(c)).phase !== 'playing') return null
   const tirs = (await mission(c)).tirs
   const ok = await js(c, `new Promise(r => {
-    if (!__aimAt(${JSON.stringify(what)}, ${n}, ${avance}, ${JSON.stringify(zone)})) return r(false)
+    if (!__aimAt(${JSON.stringify(what)}, ${n}, ${JSON.stringify(avance)}, ${JSON.stringify(zone)})) return r(false)
     requestAnimationFrame(() => { document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); r(true) })
   })`)
   if (!ok) return false
@@ -174,8 +175,8 @@ async function aimAndShoot(c, what, n = 0, { zone = 'torse', apnee = true, avanc
 }
 
 // Tir sur une cible du convoi (M5), visée `avance` secondes devant elle. La visée est posée entre deux images, la
-// boucle du jeu la prend à l'image suivante, et le tir part aussitôt après dans la même image : avance = délai de
-// la balle + une image. Faux si la visée n'a rien trouvé.
+// boucle du jeu la prend à l'image suivante, et le tir part aussitôt après dans la même image : avance = temps de vol
+// de la balle + une image ('balle', AVANCE). Faux si la visée n'a rien trouvé.
 async function shootAhead(c, what, avance) {
   await mouse(c, 'mousedown', 2)
   await key(c, 'keydown', 'Shift', 'ShiftLeft')
@@ -183,7 +184,7 @@ async function shootAhead(c, what, avance) {
   await scopeOpen(c)
   const tirs = (await mission(c)).tirs
   const ok = await js(c, `new Promise(r => {
-    if (!__aimAt(${JSON.stringify(what)}, 0, ${avance})) return r(false)
+    if (!__aimAt(${JSON.stringify(what)}, 0, ${JSON.stringify(avance)})) return r(false)
     requestAnimationFrame(() => { document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); r(true) })
   })`)
   if (!ok) return false
@@ -422,9 +423,10 @@ const SCENARIOS = {
   },
 
   // Culasse (spec du lot 2, §3.3) : deux clics rapprochés ne donnent qu'un tir. Le second clic part après l'arrivée de
-  // la balle (0,45 s), pendant les 1,2 s de culasse : avant le lot 2, il tirait dès la résolution du premier (un clic
-  // pendant le vol, déjà refusé avant, l'est toujours). Visée dans le ciel : la balle part au loin, personne ne réagit,
-  // la mission continue. La culasse revenue, le clic suivant tire. Durées lues sur l'horloge de la mission
+  // la balle, pendant les 1,2 s de culasse : avant le lot 2, il tirait dès la résolution du premier (un clic pendant le
+  // vol, déjà refusé avant, l'est toujours). Visée dans le ciel : la balle, qui ne rencontre rien, est perdue au bout de
+  // son vol (0,6 s depuis la tâche A4 du lot 3, avant que la culasse revienne ; 0,45 s avant), personne ne réagit, la
+  // mission continue. La culasse revenue, le clic suivant tire. Durées lues sur l'horloge de la mission
   // (__aim().horloge, celle de la culasse), pas sur l'horloge murale : sur une machine lente ou chargée, le pas du jeu
   // est plafonné à 50 ms et son temps retarde (à RALENTI=20, la culasse revenait 2,1 s après le coup à l'horloge
   // murale). Une veille relève l'horloge à la première image où le clic gauche tire de nouveau : la culasse dure
@@ -516,7 +518,7 @@ const SCENARIOS = {
           await scopeOpen(c)
           // Une balle qui passe environ 1,5 m au-dessus de la cible et tombe derrière elle : la cible fuit
           const ok = await js(c, `new Promise(r => {
-            if (!__aimAt('cible', 0, ${AVANCE})) return r(false)
+            if (!__aimAt('cible', 0, ${JSON.stringify(AVANCE)})) return r(false)
             document.dispatchEvent(new MouseEvent('mousemove', { movementX: 0, movementY: -45, bubbles: true }))
             requestAnimationFrame(() => { document.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); r(true) })
           })`)

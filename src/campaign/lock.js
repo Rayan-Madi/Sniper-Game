@@ -3,8 +3,8 @@ import * as THREE from 'three'
 import { scene } from '../scene.js'
 import { disposeObject } from '../gfx/dispose.js'
 
-// Monte le cadenas à pos (moralLock.pos de la carte) : corps, anse, halo doré qui pulse (attire l'œil du sniper),
-// et la boîte que le tir doit traverser. Renvoie { mesh, box, light }.
+// Monte le cadenas à pos (l'ancre cadenas de la carte, que cite le choix moral de la mission) : corps, anse, halo doré
+// qui pulse (attire l'œil du sniper), et la boîte que le tir doit traverser. Renvoie { mesh, box, light }.
 export function buildMoralLock([lx, ly, lz]) {
   const mesh = new THREE.Group()
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.18),

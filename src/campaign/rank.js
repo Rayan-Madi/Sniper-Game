@@ -13,7 +13,7 @@ export function rankFor({ shots, hits, alerts }) {
   return { label: 'BRUTAL', color: '#ff8844' }
 }
 
-// Ce que la balle a touché ('target', 'lock', 'guard', 'civilian', 'decor' ou 'rien' : firstHit de main.js) compte-t-il
+// Ce que la balle a touché ('target', 'lock', 'guard', 'civilian', 'decor' ou 'rien' : roleDe de main.js) compte-t-il
 // comme touche ?
 // Le cadenas du port compte : libérer les victimes ne doit pas interdire le rang FANTÔME. Un garde n'est pas un
 // contrat et un civil fait échouer la mission : ni l'un ni l'autre ne compte.

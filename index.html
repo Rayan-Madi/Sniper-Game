@@ -77,19 +77,55 @@
       position: absolute; top: 80px; right: 24px;
       display: flex; flex-direction: column; gap: 6px;
     }
+    /* Fiche des cibles (src/campaign/fiche.js) : dans la marge noire de la lunette jusqu'en 4:3 (bord de la lentille à
+       214 px du bord gauche en 1024 × 768), sous la case MISSION. */
     #target-dossier {
       position: absolute; top: 90px; left: 24px;
-      max-width: 280px; display: none;
-      background: rgba(20,15,8,0.78);
+      width: clamp(176px, 16vw, 240px); display: none;
+      background: rgba(20,15,8,0.8);
       border: 1px solid rgba(255,212,78,0.4);
       border-left: 3px solid #ffd44e;
-      padding: 10px 14px; border-radius: 4px;
-      color: #f0e0b0; font-size: 12px; line-height: 1.6;
+      padding: 10px 12px; border-radius: 4px;
+      color: #f0e0b0; font-size: 11px; line-height: 1.35; letter-spacing: 0.02em;
     }
-    .dossier-title {
-      color: #ffd44e; font-size: 11px; letter-spacing: 0.1em;
-      margin-bottom: 6px; text-transform: uppercase;
+    .fiche-titre {
+      color: #ffd44e; font-size: 11px; letter-spacing: 0.12em;
+      margin-bottom: 8px;
     }
+    .fiche-entree {
+      display: flex; gap: 9px; align-items: flex-start;
+      transition: opacity 220ms ease-out;
+    }
+    .fiche-entree + .fiche-entree { margin-top: 8px; }
+    .fiche-photo {
+      flex: none; width: 40px; height: 50px; overflow: hidden;
+      background: #15171c; border-radius: 2px;
+    }
+    .fiche-photo img {
+      display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%;
+      transition: filter 220ms ease-out;
+    }
+    .fiche-sans-photo {
+      display: flex; align-items: center; justify-content: center;
+      color: #e04848; font-family: Georgia, 'Times New Roman', serif; font-size: 24px;
+    }
+    .fiche-texte { min-width: 0; padding-top: 1px; }
+    .fiche-nom { display: flex; gap: 6px; font-size: 12px; font-weight: bold; color: #fff3d6; }
+    .fiche-ordre { color: #ffd44e; font-variant-numeric: tabular-nums; }
+    .fiche-nom-texte { position: relative; overflow-wrap: anywhere; }
+    .fiche-nom-texte::after {
+      content: ''; position: absolute; left: -2px; right: -2px; top: 52%; height: 2px;
+      background: #e04848; transform: scaleX(0); transform-origin: left center;
+      transition: transform 220ms cubic-bezier(.2,.7,.2,1);
+    }
+    .fiche-role { color: rgba(240,224,176,0.55); font-size: 10px; letter-spacing: 0.06em; }
+    .fiche-role + .fiche-signe { margin-top: 2px; }
+    /* Cible abattue : le nom barré d'un trait tiré, le portrait éteint ; d'un coup en effets atténués */
+    .fiche-entree.abattue { opacity: 0.5; }
+    .fiche-entree.abattue img { filter: grayscale(1); }
+    .fiche-entree.abattue .fiche-nom-texte::after { transform: scaleX(1); }
+    .fiche-entree.instantanee, .fiche-entree.instantanee img,
+    .fiche-entree.instantanee .fiche-nom-texte::after { transition: none; }
     .kill-entry {
       background: rgba(0,0,0,0.6);
       border-left: 2px solid #4eff4e;
@@ -98,6 +134,25 @@
       color: #4eff4e;
       animation: fadeup 2.5s ease forwards;
     }
+    /* Ligne d'Anton dans le fil (direALaRadio, src/main.js ; tâche A8 du lot 3) : la voix du fixeur, aux couleurs de la
+       fiche des cibles et sous le voyant de la radio des briefings, pour ne pas la lire comme un tir. Elle entre comme
+       les autres lignes du fil, reste le temps de la lire, puis s'efface (le départ de la sortie est posé par la ligne). */
+    .kill-entry.radio {
+      max-width: 300px;
+      background: rgba(20,15,8,0.82);
+      border-left: 3px solid #ffd44e;
+      color: #f0e0b0;
+      line-height: 1.4;
+      animation: radio-entree 0.5s ease both, radio-sortie 0.5s ease forwards;
+      animation-delay: 0s, 2.3s;
+    }
+    @keyframes radio-entree { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes radio-sortie { to { opacity: 0; } }
+    .radio-qui {
+      margin-right: 8px;
+      color: #ffd44e; font-size: 10px; letter-spacing: 0.14em;
+    }
+    .radio-qui::before { content: '\25CF\00A0'; color: #e04848; }
     @keyframes fadeup {
       0% { opacity: 0; transform: translateY(8px); }
       20% { opacity: 1; transform: translateY(0); }
@@ -425,10 +480,7 @@
     </div>
     <div id="alert-banner">⚠ ALERTE ⚠</div>
     <div id="kill-feed"></div>
-    <div id="target-dossier">
-      <div class="dossier-title">⌖ DOSSIER : CIBLE À IDENTIFIER</div>
-      <div id="dossier-text"></div>
-    </div>
+    <div id="target-dossier"></div>   <!-- rempli au départ de chaque mission (src/campaign/fiche.js) -->
   </div>
 
   <div id="instruction">CLIC DROIT : Viser &nbsp;|&nbsp; CLIC GAUCHE : Tirer &nbsp;|&nbsp; MOLETTE : Zoom &nbsp;|&nbsp; MAJ : Retenir son souffle</div>

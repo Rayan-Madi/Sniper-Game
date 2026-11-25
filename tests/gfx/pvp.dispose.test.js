@@ -13,12 +13,13 @@ vi.mock('../../src/scene.js', async () => {
   return {
     scene: new THREE.Scene(),
     camera: new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 500),
+    sun: new THREE.DirectionalLight(),   // l'arène du PvP et le décor du menu y posent leur profil de caméra
     renderer: { render() {}, domElement: document.createElement('canvas') },
     setLighting() {},
   }
 })
 const intro = vi.hoisted(() => ({ active: false, onDone: null }))
-vi.mock('../../src/pvpIntro.js', () => ({
+vi.mock('../../src/pvp/pvpIntro.js', () => ({
   playPvpIntro(role, arena, onTick, onDone) { intro.active = true; intro.onDone = onDone },
   isPvpIntroActive: () => intro.active,
   stopPvpIntro() { intro.active = false; intro.onDone = null },
@@ -62,8 +63,8 @@ const $ = (id) => document.getElementById(id)
 const HTML = readFileSync(resolve(__dirname, '../../index.html'), 'utf8')
 
 // Modules neufs à chaque test (cache des modèles, ressources déjà libérées par dispose.js, état de la manche) ; le
-// DOM du jeu est remis à neuf, les écouteurs de pvp.js réenregistrés.
-let pvp, scene, MAP_BUILDERS
+// DOM du jeu est remis à neuf, les écouteurs du PvP (src/pvp/index.js) réenregistrés.
+let pvp, scene, buildMenuDecor
 beforeEach(async () => {
   vi.resetModules()
   gltf.loaded = []
@@ -76,12 +77,12 @@ beforeEach(async () => {
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   ;({ scene } = await import('../../src/scene.js'))
-  ;({ MAP_BUILDERS } = await import('../../src/maps.js'))
+  ;({ buildMenuDecor } = await import('../../src/maps/index.js'))
   await (await import('../../src/characters.js')).preloadCharacters()
-  pvp = await import('../../src/pvp.js')
+  pvp = await import('../../src/pvp/index.js')
   pvp.initMultiplayerMenu()
   scene.clear()
-  MAP_BUILDERS[0]()   // la rue derrière le menu, comme au démarrage
+  buildMenuDecor()   // le décor du menu (src/maps/menu.js), comme au démarrage
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 

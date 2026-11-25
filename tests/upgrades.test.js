@@ -154,3 +154,44 @@ describe('M5 : l\'étape et les renseignements du Bivouac dans la sauvegarde', (
     expect(localStorage.getItem('sniper-save')).toBeNull()
   })
 })
+
+// Vélocité (spec du lot 3, §2 c ; plan du lot 3a, tâche A4) : la balle part à 800 m/s, 37,5 de plus par niveau, 950 au
+// niveau 4 ; cette vitesse remplace le délai fixe (bulletDelay : 0,45 s moins 0,08 par niveau, quelle que soit la
+// distance), et la culasse se raccourcit comme avant. Témoin : le getStats d'avant la tâche n'a que bulletDelay (vu
+// rouge).
+describe('Vélocité : la vitesse de la balle', () => {
+  it('800, 837,5, 875, 912,5 et 950 m/s du niveau 0 au niveau 4', () => {
+    const vus = [0, 1, 2, 3, 4].map(n => { U.state.levels.velocity = n; return U.getStats().v0 })
+    expect(vus).toEqual([800, 837.5, 875, 912.5, 950])
+  })
+
+  it('plus de délai fixe (bulletDelay) : la balle met le temps de son vol, et non 0,45 s à toute distance', () => {
+    expect('bulletDelay' in U.getStats()).toBe(false)
+  })
+
+  it('la culasse se raccourcit toujours avec la Vélocité (1,2 s à 0,9 s)', () => {
+    U.state.levels.velocity = 0
+    expect(U.getStats().boltS).toBe(1.2)
+    U.state.levels.velocity = 4
+    expect(U.getStats().boltS).toBe(0.9)
+  })
+})
+
+// Lunette (spec du lot 3, décision 2 ; plan du lot 3a, tâche A5) : le zoom maximum de la mission, multiplié par
+// 1 + 0,15 × niveau (×1,45 au niveau 3 : ×29 pour les ×20 de M4 au sous-lot 3c), au lieu d'un maximum fixe de
+// 6 + 2 × niveau dans toutes les missions. Le maximum de la mission et la molette : src/aim.js (bornesDuZoom), câblés
+// dans main.js (tests/shot/main.zoom.test.js, où la molette d'avant la tâche sert de témoin). Témoin : le getStats
+// d'avant la tâche n'a que le maximum fixe, maxZoom (vu rouge).
+describe('Lunette : le zoom maximum de la mission, relevé de 15 % par niveau (décision 2)', () => {
+  it('facteur 1, 1,15, 1,3 et 1,45 du niveau 0 au niveau 3', () => {
+    const vus = [0, 1, 2, 3].map(n => { U.state.levels.zoom = n; return U.getStats().maxZoomScale })
+    // Arrondis à 1e-12 près ; un facteur absent (le getStats d'avant la tâche) donne NaN : une différence relevée par
+    // l'assertion, pas une erreur
+    expect(vus.map(f => Math.round(f * 1e12) / 1e12)).toEqual([1, 1.15, 1.3, 1.45])
+  })
+
+  it('plus de maximum fixe (maxZoom : 6 + 2 × niveau, de ×6 à ×12 quelle que soit la mission)', () => {
+    U.state.levels.zoom = 3
+    expect('maxZoom' in U.getStats()).toBe(false)
+  })
+})

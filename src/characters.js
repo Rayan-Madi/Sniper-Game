@@ -14,18 +14,19 @@ import { progressOf } from './campaign/loading.js'
 // Pour ajouter les tiens : dépose le .glb dans public/models/ puis édite ici.
 // (Voir public/models/README.txt)
 // Modèles 3D réalistes AVEC animations Idle/Walk intégrées (s'animent tout seuls).
-// Cibles = criminels mafia (hommes + femmes), gardes = homme de main.
-// IMPORTANT : aucun modèle n'est partagé entre les rôles.
-// Le commanditaire final n'a pas de modèle : il n'est jamais montré.
+// Trois pools, un par rôle (cibles, gardes, civils), et chaque modèle dans un seul. Sans casting, un PNJ tire son modèle
+// dans le pool de son rôle (la foule du PvP). Les missions imposent à chaque cible le modèle de son portrait, quel que
+// soit son pool, et écartent ses sosies du tirage des civils (spawnCharacter, options model et exclure ; spec du lot 3,
+// §2 d, tâche A6) : la règle « aucun modèle partagé » vaut désormais par mission (src/campaign/missions/).
 
 // Chemin RELATIF à la page (BASE_URL vaut '/' en dev, './' dans le build) :
 // un chemin absolu, commençant par /models/, devient file:///C:/models/... sous Electron.
 const MODEL_DIR = import.meta.env.BASE_URL + 'models/'
 
 export const MODELS = {
-  // CIBLES (criminels importants) — modèles réservés (H + F)
-  // mafia_boss.glb, malgré son nom, est un soldat en tenue « vanguard » : c'est
-  // une des trois variantes tirées au hasard pour toutes les cibles, pas le boss.
+  // CIBLES (criminels importants), hommes et femmes
+  // mafia_boss.glb, malgré son nom, est un soldat en tenue « vanguard », pas le boss : le colonel Kessler (M5) et les
+  // gardes de la base (M4).
   // tints = variations de teinte subtiles (multiplie la texture) + heightVar = tailles
   // variées → plus jamais deux ennemis strictement identiques côte à côte
   target: {
@@ -37,13 +38,15 @@ export const MODELS = {
       { url: MODEL_DIR + 'mafia_woman_01.glb' },
     ],
   },
-  // GARDES — modèle réservé (teintes d'uniforme légèrement différentes)
+  // GARDES : un modèle, aux teintes d'uniforme légèrement différentes (Halder, en M4, a ce modèle)
   guard: {
     url: MODEL_DIR + 'mafia_henchman.glb', fitHeight: 1.85, rotY: 0, heightVar: 0.06,
     tints: [0xffffff, 0xdde6f5, 0xf0e4d6, 0xd9ead9],
     anims: { idle: 'Idle', walk: 'Walk' },
   },
-  // CIVILS (figurants) — modèles DIFFÉRENTS des cibles, déclinés en couleurs/tailles
+  // CIVILS (figurants), déclinés en couleurs et en tailles ; des cibles ont aussi ces modèles (les frères de M2, Mira,
+  // Verne, le commanditaire de M6), et leur mission écarte leurs sosies, sauf la foule de M6 (seul son comportement
+  // trahit le commanditaire)
   civilian: {
     fitHeight: 1.8, rotY: 0, heightVar: 0.12, anims: { idle: 'Idle', walk: 'Walk' },
     tints: [0xffffff, 0xccbbaa, 0xaabbcc, 0xbbaacc, 0xccaa99],
@@ -60,6 +63,28 @@ const cache = {}   // type -> [ {scene, animations, cfg} ]
 
 // URL des modèles chargés pour un type, dans l'ordre du pool (relecture, tests).
 export function poolUrls(type) { return (cache[type] || []).map(p => p.cfg.url) }
+
+// Modèle chargé désigné par son fichier (« mafia_woman_02 », « mafia_woman_02.glb » ou son adresse), cherché dans
+// tous les pools, sans tirage au hasard : { scene, animations, cfg, type } (la scène reste partagée : à cloner), ou
+// null s'il n'est pas chargé. Pour la sonde de lisibilité (route ?sonde=1 de main.js), qui pose les modèles imposés de
+// la spec du lot 3, dont deux hors du pool de leur rôle : Verne chez les civils, Halder chez les gardes ; et pour le
+// casting des missions (spawnCharacter, option model).
+const fichierDe = v => String(v || '').split(/[?#]/)[0].split('/').pop().replace(/\.glb$/i, '')
+export function loadedModel(nom) {
+  const fichier = fichierDe(nom)
+  if (!fichier) return null
+  for (const [type, pool] of Object.entries(cache)) {
+    const p = pool.find(x => fichierDe(x.cfg.url) === fichier)
+    if (p) return { scene: p.scene, animations: p.animations, cfg: p.cfg, type }
+  }
+  return null
+}
+
+// Le modèle est-il un modèle du jeu (déclaré dans MODELS, chargé ou non) ?
+function modeleDeclare(nom) {
+  const fichier = fichierDe(nom)
+  return !!fichier && Object.entries(MODELS).some(([type, cfg]) => variantsFor(type, cfg).some(v => fichierDe(v.url) === fichier))
+}
 
 // Ressources des modèles chargés (géométries et textures distinctes, marquées partagées) : le renderer les garde pour
 // la session dès qu'un personnage les a dessinées. Relevées par la route ?memtest=1 et publiées avec chaque relevé :
@@ -102,7 +127,8 @@ export function preloadCharacters() {
     // Promise.all garde l'ordre des variantes, pas celui d'arrivée des fichiers :
     // en PvP, les deux machines tirent leurs modèles avec la même graine et
     // doivent donc avoir des pools rangés pareil.
-    const loaded = await Promise.all(variantsFor(type, cfg).map(async (vcfg) => {
+    const variants = variantsFor(type, cfg)
+    const loaded = await Promise.all(variants.map(async (vcfg) => {
       const f = { loaded: 0, total: 0, done: false }
       files.push(f)
       try {
@@ -119,8 +145,22 @@ export function preloadCharacters() {
     }))
     const pool = loaded.filter(Boolean)
     if (pool.length) cache[type] = pool
-  })).then(() => { settled = true })
+    return { charges: pool.length, echecs: variants.filter((v, i) => !loaded[i]).map(v => v.url) }
+  })).then(parType => {
+    settled = true
+    publishLoaded(parType)
+  })
   return loading
+}
+
+// Fin du chargement publiée sur <html> pour la fumée du livrable Electron (spec du lot 5 §3.2, scripts/fumee.mjs) : un
+// build n'a pas les accroches de développement (__mission). data-modeles : nombre de modèles chargés ;
+// data-modeles-echecs : leurs URL en échec, séparées par des espaces (vide : aucun PNJ procédural faute de modèle).
+function publishLoaded(parType) {
+  if (typeof document === 'undefined') return
+  const html = document.documentElement
+  html.dataset.modeles = String(parType.reduce((n, t) => n + t.charges, 0))
+  html.dataset.modelesEchecs = parType.flatMap(t => t.echecs).join(' ')
 }
 
 // Modèle chargé, une fois pour toutes. Certains .glb (ex : gangster_man_02) exportent le matériau du CORPS en
@@ -163,17 +203,56 @@ function setCullSpheres(model, height, cx, cz) {
   })
 }
 
-// Instance clonée (variante au hasard, ou précise via opts.match) + mixer.
+// Instance clonée d'un modèle chargé + mixer : un modèle tiré au hasard dans le pool de type, puis sa taille et sa
+// teinte. null sans modèle à cloner : le PNJ prend le personnage de secours (makePerson, npc.js).
+// Casting (spec du lot 3, §2 d, approche B ; plan du lot 3a, tâche A6), options :
+//   model           le modèle imposé, par son fichier (« mafia_woman_02 », « mafia_woman_02.glb » ou son adresse),
+//                   cherché dans tous les pools (Verne est dans celui des civils, Halder dans celui des gardes), sans
+//                   tirage ; il garde la configuration de son pool (hauteur, variation de taille, teintes, animations)
+//   strict          une erreur plutôt qu'une retombée en silence : un modèle imposé ou exclu que MODELS ne déclare pas, un
+//                   maillage de teinteMaillage que le modèle n'a pas. Sans strict, un modèle imposé inconnu retombe sur un
+//                   modèle tiré dans le pool de type (la règle de l'ancienne option match), et un maillage inconnu est
+//                   ignoré.
+//   teinte          la teinte du modèle entier, sans tirage ; 0xffffff : sa texture telle quelle (matériaux du modèle)
+//   teinteMaillage  { nom du maillage: teinte } : la teinte de ces maillages seulement (le polo de Marc, Ch01_Shirt), sur
+//                   une copie de leur matériau, à l'instance ; elle remplace, pour eux, la teinte du modèle entier
+//   exclure         les modèles écartés du tirage (les sosies des cibles parmi les civils d'une mission) : un seul tirage,
+//                   parmi les autres modèles du pool
+// Un modèle connu mais pas chargé (fichier en échec, chargement inachevé), ou un tirage sans candidat, rend null, comme
+// un pool absent : le personnage de secours, jamais le visage d'un autre. Le jeu ne charge les modèles qu'une fois, avant
+// toute mission (charactersReady) : une mission ne plante pas sur un fichier manquant.
+// Sans option, rien ne change, au tirage près : le PvP tire sa foule et l'avatar du contre-tueur avec une graine que
+// partagent les deux machines (pvp.js), et un tirage de plus, ou un objet three de plus (three tire au hasard
+// l'identifiant de chaque objet, matériau ou squelette qu'il crée), les ferait diverger (tests/pvp/tirages.test.js).
 export function spawnCharacter(type, opts = {}) {
-  const pool = cache[type]
-  if (!pool) return null
-  let candidates = pool
-  if (opts.match) {
-    const filtered = pool.filter(p => p.cfg.url.includes(opts.match))
-    if (filtered.length) candidates = filtered
+  const { strict = false, teinte, teinteMaillage, exclure } = opts
+  if (strict) {
+    for (const nom of [opts.model, ...(exclure || [])]) {
+      if (nom !== undefined && !modeleDeclare(nom)) throw new Error(`[characters] modèle inconnu : « ${nom} »`)
+    }
   }
-  const pick = candidates[Math.floor(Math.random() * candidates.length)]
+  let pick
+  if (opts.model !== undefined && modeleDeclare(opts.model)) {
+    const fichier = fichierDe(opts.model)
+    pick = Object.values(cache).flat().find(p => fichierDe(p.cfg.url) === fichier)
+    if (!pick) return null
+  } else {
+    const pool = cache[type]
+    if (!pool) return null
+    const exclus = new Set((exclure || []).map(fichierDe))
+    const candidates = exclus.size ? pool.filter(p => !exclus.has(fichierDe(p.cfg.url))) : pool
+    if (!candidates.length) return null
+    pick = candidates[Math.floor(Math.random() * candidates.length)]
+  }
   const cfg = pick.cfg
+  // Maillages à teinter à part : chacun doit exister dans le modèle (cherché sur sa scène partagée, avant le clone)
+  if (teinteMaillage && strict) {
+    const noms = new Set()
+    pick.scene.traverse(o => { if (o.isMesh) noms.add(o.name) })
+    for (const nom of Object.keys(teinteMaillage)) {
+      if (!noms.has(nom)) throw new Error(`[characters] maillage inconnu : « ${nom} » dans ${fichierDe(cfg.url)}`)
+    }
+  }
   const model = cloneSkinned(pick.scene)
   if (cfg.rotY) model.rotation.y = cfg.rotY
 
@@ -199,21 +278,24 @@ export function spawnCharacter(type, opts = {}) {
     model.scale.setScalar(cfg.scale)
   }
 
-  // Teinte de vêtements aléatoire (variété de la foule à partir d'un seul modèle). La teinte blanche laisse la texture
-  // telle quelle : l'instance garde alors les matériaux du modèle (partagés). Une autre teinte copie le matériau, qui
-  // est à l'instance et sera libéré avec elle (NPC.dispose) ; la copie garde les textures du modèle (Material.copy les
-  // reprend par référence), mais pas la marque « partagé » que Material.clone recopie avec userData.
+  // Teinte de vêtements, imposée ou tirée au hasard (variété de la foule à partir d'un seul modèle). La teinte blanche
+  // laisse la texture telle quelle : l'instance garde alors les matériaux du modèle (partagés). Une autre teinte, celle
+  // du modèle entier ou celle d'un maillage (teinteMaillage), copie le matériau du maillage, qui est à l'instance et sera
+  // libéré avec elle (NPC.dispose) ; la copie garde les textures du modèle (Material.copy les reprend par référence),
+  // mais pas la marque « partagé » que Material.clone recopie avec userData.
   let tint = null
-  if (cfg.tints && cfg.tints.length) tint = cfg.tints[Math.floor(Math.random() * cfg.tints.length)]
+  if (teinte !== undefined) tint = teinte
+  else if (cfg.tints && cfg.tints.length) tint = cfg.tints[Math.floor(Math.random() * cfg.tints.length)]
   const recolor = tint != null && tint !== 0xffffff
   model.traverse(o => {
     if (o.isMesh) {
       o.castShadow = true
       if (!culled) o.frustumCulled = false   // sans sphère d'instance (modèle sans fitHeight) : toujours dessiné
-      if (recolor) {
+      const couleur = teinteMaillage && Object.hasOwn(teinteMaillage, o.name) ? teinteMaillage[o.name] : recolor ? tint : null
+      if (couleur != null) {
         o.material = o.material.clone()
         delete o.material.userData.shared
-        o.material.color = new THREE.Color(tint)
+        o.material.color = new THREE.Color(couleur)
       }
     }
   })

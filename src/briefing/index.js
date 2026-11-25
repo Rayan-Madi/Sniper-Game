@@ -30,6 +30,8 @@ function ensureKitStyle() {
 }
 
 // reducedMotion : effets atténués (spec du lot 1 §4.5), transmis au kit ; main.js le lit dans les réglages et le système.
+// params.attenue === '1' le force (route de développement ?cine=<id>&attenue=1, spec cinématiques v2 §3.2, point 1) :
+// la version atténuée d'une scène se capture sans toucher aux réglages.
 // ready : promesse que la scène attend pour démarrer, l'écran noir déjà affiché (main.js : la mission montée pendant
 // son briefing, spec du lot 1 §4.6, pour que le montage ne fige pas l'animation). Rejetée : la scène démarre quand même.
 export async function playCinematic(id, { onDone = () => {}, params = null, freeze = null, audio = null, reducedMotion = false, ready = null, root = document.getElementById('briefing-root') } = {}) {
@@ -92,7 +94,7 @@ export async function playCinematic(id, { onDone = () => {}, params = null, free
     root.classList.remove('k-leaving')
     root.innerHTML = `<div class="${mod.stClass}" id="st">${mod.html}</div><div class="k-skip">ÉCHAP · ENTRÉE · ESPACE : PASSER</div>`
     root.hidden = false
-    K = handle.kit = createKit({ root, audio, freeze, reducedMotion })
+    K = handle.kit = createKit({ root, audio, freeze, reducedMotion: reducedMotion || (!!params && params.attenue === '1') })
     document.addEventListener('keydown', onKey, true)
     root.addEventListener('click', onClick)
     current = handle

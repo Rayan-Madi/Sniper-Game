@@ -1,7 +1,7 @@
-// Visée de la campagne : champ de vision de la lunette, cadrage de départ, conversion entre angle et pixels,
+// Visée de la campagne : champ de vision et zoom de la lunette, cadrage de départ, conversion entre angle et pixels,
 // tremblement et stress.
 // Module pur (ni DOM ni three) : main.js et scope.js l'appellent, les tests l'importent directement.
-import { TREMBLEMENT, STRESS, APNEE } from './shot/tuning.js'
+import { LUNETTE, TREMBLEMENT, STRESS, APNEE } from './shot/tuning.js'
 
 export const BASE_FOV = 60
 
@@ -16,6 +16,32 @@ export function fovFor(zoom, scoped) {
 export function scopeFov(zoom, openness) {
   const o = Math.max(0, Math.min(1, openness))
   return BASE_FOV / zoom ** (o * o * (3 - 2 * o))
+}
+
+// ─── Zoom de la lunette ────────────────────────────────────────────
+// Chaque mission dit son zoom (spec du lot 3, §2 c, précisions de la tâche A5) : zoom { depart, min, max } de
+// src/campaign/missions/. main.js pose le départ au montage (mountLevel) ; la molette (zoomALaMolette) va d'une borne à
+// l'autre.
+
+// Bornes de la molette dans une mission : son minimum, et son maximum relevé par l'amélioration Lunette (décision 2) :
+// facteurLunette, getStats().maxZoomScale (src/upgrades.js), vaut 1 + 0,15 × niveau.
+export function bornesDuZoom(zoom, facteurLunette) {
+  return { min: zoom.min, max: zoom.max * facteurLunette }
+}
+
+// Zoom après un cran de molette (sens > 0 : on grossit ; sens < 0 : on élargit) : le cran voisin sur la grille de
+// LUNETTE.pasMolette (×3, ×3,5, ×4…), ramené entre les bornes. Un maximum hors de la grille, relevé par la Lunette (×6,9
+// au niveau 1 pour un maximum de base de ×6), s'atteint au dernier cran ; le cran suivant vers le large revient sur la
+// grille (×6,5). Ajouter 0,5 au zoom, comme la molette d'avant la tâche A5, ne la retrouverait qu'à la butée du minimum
+// (×6,4, ×5,9… ×3,4, puis ×3).
+export function zoomApresCran(zoom, sens, { min, max }) {
+  const pas = LUNETTE.pasMolette
+  const k = zoom / pas
+  // Un zoom à l'arrondi des flottants près d'un cran de la grille compte pour ce cran : il avance d'un cran entier, jamais
+  // d'un cran nul (un maximum relevé qui tomberait sur la grille à 4e-15 près, ×29 + 4e-15, irait au cran suivant vers le
+  // large, ×28,5, et non à ×29). Aucun maximum d'aujourd'hui ni du §3 n'en a besoin : 20 × 1,45 vaut 29 tout juste.
+  const voisin = sens > 0 ? (Math.floor(k + 1e-9) + 1) * pas : (Math.ceil(k - 1e-9) - 1) * pas
+  return Math.max(min, Math.min(max, voisin))
 }
 
 // ─── Tangage ───────────────────────────────────────────────────────

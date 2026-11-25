@@ -138,6 +138,13 @@ export function createKit({ root, audio = null, freeze = null, reducedMotion = f
   K.wave = on => {
     waveOn = on
     const bars = wave ? [...wave.children] : []
+    // effets atténués (k-reduced sur #st) : l'onde ne s'agite plus ; tant que la ligne parle, une seule pose, tirée une
+    // fois pour toutes sous la même enveloppe (graine fixe), à plat sinon (spec cinématiques v2 §3.7)
+    if (st.classList.contains('k-reduced')) {
+      const g = K.graine(1998)
+      bars.forEach((b, i) => { b.style.height = (on && !K.frozen ? 8 + g() * 88 * Math.sin((i / bars.length) * Math.PI) : 6) + '%' })
+      return
+    }
     const tick = () => {
       if (!waveOn || K.frozen) { bars.forEach(b => { b.style.height = '6%' }); return }
       bars.forEach((b, i) => { const env = Math.sin((i / bars.length) * Math.PI); b.style.height = (8 + Math.random() * 88 * env) + '%' })
@@ -145,6 +152,42 @@ export function createKit({ root, audio = null, freeze = null, reducedMotion = f
     }
     tick()
   }
+
+  // ── commun : anim ──
+  // Outils communs aux deux kits (src/briefing/kit.js et docs/superpowers/maquettes/cinematiques/kit.js), identiques au
+  // caractère près entre ces deux marques (garde G7, tests/briefing/kit-commun.test.js) : les retoucher des deux côtés.
+  // K.anim(dessin, duree, { attenue, courbe }) : dessin(k, o) reçoit l'avancement k de 0 à 1 en duree ms, au pas des
+  // images, et l'opacité o = 1 ; au gel, l'avancement exact de l'instant du gel, puis plus rien (inscrit parmi les
+  // compteurs). k suit la courbe nommée (spec cinématiques v2 §3.3) : 'douce' par défaut, k² (3 − 2k) ; 'sortie' pour
+  // une arrivée, 1 − (1 − k)³ ; 'lineaire' seulement pour ce qui mesure un temps vrai (REC, durée d'appel, tête de
+  // lecture, compte à rebours, chariot d'impression). Une courbe inconnue est une erreur.
+  // Effets atténués (k-reduced sur #st) : attenue: 'fin', dessin(1, 1) d'emblée ; attenue: 'fondu', k = 1 d'emblée et
+  // o de 0 à 1 en 300 ms sur la même courbe (fondu vers l'état final, au dessin d'appliquer o) ; sans attenue, il joue
+  // pareil.
+  const COURBES = new Map([['douce', t => t * t * (3 - 2 * t)], ['sortie', t => 1 - (1 - t) ** 3], ['lineaire', t => t]])
+  K.anim = (dessin, duree, { attenue = null, courbe = 'douce' } = {}) => {
+    const c = COURBES.get(courbe)
+    if (!c) throw new Error(`K.anim : courbe inconnue « ${courbe} » (douce, sortie ou lineaire)`)
+    const reduit = st.classList.contains('k-reduced')
+    if (reduit && attenue === 'fin') { dessin(1, 1); return }
+    const fondu = reduit && attenue === 'fondu', d = fondu ? 300 : duree, s = performance.now()
+    // t : part du temps écoulée, qui dit quand le dessin est fini ; c(t) : ce que le dessin reçoit
+    const show = () => {
+      const t = d > 0 ? Math.min(1, (performance.now() - s) / d) : 1
+      if (fondu) dessin(1, c(t)); else dessin(c(t), 1)
+      return t
+    }
+    const f = () => {
+      if (K.frozen) return
+      if (show() < 1) raf(f); else counters.delete(show)
+    }
+    counters.add(show)
+    f()
+  }
+  // K.graine(n) : tirage reproductible de 0 à 1 (Park-Miller, le générateur de la ville du prologue A) ; une graine par
+  // élément, pour qu'un ajout ne déplace pas les tirages des autres.
+  K.graine = n => { let s = n; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646 } }
+  // ── fin du commun : anim ──
 
   // ── voix : bips synthétiques ; le temps dure l'estimation de la réplique ──
   K.speak = (text, who) => {

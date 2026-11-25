@@ -55,9 +55,11 @@ function pnj(extra = {}, at = [2, 0.2, -3]) {
   r.mockRestore()
   return n
 }
-// Commanditaire de M6 : assis au téléphone (clip Talk, pose assise), joué jusqu'au bout du fondu.
+// Commanditaire de M6 : assis au téléphone (clip Talk, pose assise), joué jusqu'au bout du fondu ; son modèle, celui de
+// sa mission (gangster_man_02, casting de la tâche A6 du lot 3), et l'ombre des civils, comme mountLevel.
 function assis() {
-  const n = pnj({ hideMarker: true, lockState: 'phone', onPhone: true, modelType: 'civilian' })
+  const n = pnj({ hideMarker: true, lockState: 'phone', onPhone: true, shadowRole: 'civil',
+    casting: { model: 'gangster_man_02', strict: true, teinte: 0xffffff } })
   n.update(0.5); n.update(0.5)
   return n
 }

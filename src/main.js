@@ -1,34 +1,43 @@
 import * as THREE from 'three'
-import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQuality } from './scene.js'
-import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope, getScopeFov, getScopeOpenness, setZoom, getZoom, getEffectiveZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope, resizeScope, shotGlow, setBoltProgress } from './scope.js'
+import { initScene, scene, camera, renderer, ambient, sun, fill, applyRenderQuality, setLighting } from './scene.js'
+import { showScope, closeScope, hideScope, isVisible, isScopeReady, updateScope, getScopeFov, getScopeOpenness, setZoom, getZoom, getEffectiveZoom, setStress, setSteady, updateTremble, getTrembleOffset, getTrembleMrad, drawScope, resizeScope, shotGlow, setBoltProgress, setZero, setTelemetre } from './scope.js'
 import { NPC, STATES, setNpcShadows } from './npc.js'
 import { getStats, state as upgradeState, UPGRADES, saveProgress, loadProgress, resetProgress, markBriefingSeen, markPrologueSeen, resetCampaignFlags } from './upgrades.js'
-import { getLevel } from './levels.js'
-import { MAP_BUILDERS, updateMapAmbient, makeJeep, isMapObject, solidMeshes, setSolidTint } from './maps.js'
-import { playShot, playSilencedShot, playShotSounds, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, mountEcho, unmountEcho, audioState, audioContext, masterNode } from './audio.js'
+import { MAP_BUILDERS, buildMenuDecor, updateMapAmbient, makeJeep, isMapObject, solidMeshes, vitres, setSolidTint, clearMap } from './maps/index.js'
+import { missionFor, resoudreAncres, nombreDeCivils, castingDesCivils } from './campaign/missions/index.js'
+import { playShot, playSilencedShot, playShotSounds, playAlert, playGameOver, playLevelClear, playCivilKill, playBoltOpen, playBoltClose, updateStressAudio, setHoldingBreath, startMissionAmbience, stopMissionAmbience, mountEcho, unmountEcho, audioState, audioContext, masterNode, playRadio, stopRadio } from './audio.js'
 import { spawnTrail, retargetTrail, spawnImpact, spawnSpray, updateEffects, clearEffects, spawnBulletHole, clearBulletHoles } from './effects.js'
 import { settings, loadSettings, saveSettings, applySettings, sensMultiplier, invertY, resetPvpKeys, effectsReduced } from './settings.js'
-import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources } from './characters.js'
-import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp.js'
+import { preloadCharacters, charactersReady, charactersProgress, charactersSettled, modelResources, loadedModel } from './characters.js'
+import { initMultiplayerMenu, buildRoundScene, releaseRoundScene } from './pvp/index.js'
 import { playCinematic } from './briefing/index.js'
-import { aimAngles, stepStress, clampPitch } from './aim.js'
-import { STRESS, APNEE, SILLAGE } from './shot/tuning.js'
+import { aimAngles, stepStress, clampPitch, bornesDuZoom, zoomApresCran } from './aim.js'
+import { STRESS, APNEE, SILLAGE, BALLE, TELEMETRE, FUITE, OCCLUSION } from './shot/tuning.js'
 import { createRecoil } from './shot/recoil.js'
 import { createBolt } from './shot/bolt.js'
-import { npcHit } from './shot/hitzones.js'
-import { solidHit, resolveImpact } from './shot/occlusion.js'
+import { impactSurSegment, solidHit } from './shot/occlusion.js'
+import { lancerBalle, avancerBalle, predireImpact } from './shot/balle.js'
+import { tirMortel } from './shot/tirMortel.js'
+import { createTelemetre } from './shot/telemetre.js'
 import { targetScore, guardHit, missFeed } from './shot/score.js'
 import { planShotSounds } from './shot/soundPlan.js'
 import { MAX_LEVEL, recordClear, jumpToLevel } from './campaign/progress.js'
-import { canPause, canShoot, canClear, canFail, canRebrief } from './campaign/phase.js'
+import { canPause, canShoot, canClear, canFail, canRebrief, canFinish, creerFin } from './campaign/phase.js'
+import { creerAlarme, reagir } from './campaign/alarm.js'
+import { creerFuite, fuiteParSorties, issueLaPlusProche } from './campaign/escape.js'
+import { creerFenetres } from './campaign/window.js'
+import { creerRadio } from './campaign/radio.js'
 import { rankFor, precisionOf, isHit } from './campaign/rank.js'
 import { levelShortcut } from './campaign/shortcuts.js'
-import { stepConvoy, releaseConvoy } from './campaign/convoy.js'
+import { stepConvoy, releaseConvoy, abscisseConvoi, supportDuTir } from './campaign/convoy.js'
 import { buildMoralLock, releaseMoralLock } from './campaign/lock.js'
+import { afficherFiche, barrerCible } from './campaign/fiche.js'
 import { journalNote, JOURNAL_PAPER } from './campaign/journal.js'
 import { createStatsPanel, statsRequested } from './gfx/stats.js'
-import { PRESETS, presetFor, createResolutionController } from './gfx/quality.js'
+import { PRESETS, presetFor, createResolutionController, npcCastsShadow } from './gfx/quality.js'
 import { onPixelRatioChange } from './gfx/pixelRatio.js'
+import { applyCameraProfile } from './gfx/cameraProfile.js'
+import { stopInvestigation } from './prologue/stop.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen, watchContextLoss, makeModal } from './campaign/loading.js'
 import { prepareDuringBriefing, afterPaint } from './campaign/prepare.js'
 import { bindFullscreenButton } from './comfort.js'
@@ -40,8 +49,12 @@ let score = 0
 let gamePhase = 'menu'
 let alertActive = false
 let alertTimer = 0
-let currentLevelData = null
+// Mission en cours (src/campaign/missions/), sa carte (ce que son constructeur a rendu : sol, écho, pluie, ancres), et
+// les ancres de la carte que la mission cite (resoudreAncres : œil et regard du poste, zone des PNJ, places, cadenas,
+// route du convoi)
+let currentMission = null
 let currentMapInfo = null
+let currentAnchors = null
 let clock = new THREE.Clock()
 
 // Hauteur du sol de la carte en cours (dalle du port, tarmac, route du convoi) : pieds des PNJ, tirs manqués
@@ -52,11 +65,18 @@ let yaw = 0, pitch = 0
 const SENSITIVITY = 0.0018
 
 // Tir
-let bulletInFlight = false
-let bulletDelay = 0
-let pendingShotRay = null   // rayon capturé À L'INSTANT du tir (pas à l'impact)
-let pendingTrail = null     // sillage de la balle en vol : la résolution recale son bout sur le point d'impact
+// La balle en vol (spec du lot 3, §2 c ; src/shot/balle.js), null sans balle en vol : lancée au coup, elle avance à
+// chaque image, après les PNJ, sur l'horloge de la mission. Elle porte aussi ce que le coup laisse au dernier tir
+// mortel (la vue de la lunette, vue ; l'abscisse du convoi, sTir) et son sillage, que l'arrivée recale.
+let balle = null
 let lastImpact = null       // ce que la dernière balle a touché (relu par __mission() en développement)
+// Dernier tir mortel (src/shot/tirMortel.js ; contrat avec le lot 4, les kill-cams) : enregistré à chaque mort d'une
+// cible nommée, avant les sons de l'impact ; null au départ de chaque mission.
+let dernierTirMortel = null
+// Télémètre de la lunette (src/shot/telemetre.js) : la distance au point visé, relevée à 10 Hz lunette tenue (affichée
+// par la lunette, relue par __aim() en développement).
+const telemetre = createTelemetre()
+let distanceVisee = null
 // Coup de feu (spec du lot 2, §3.3) : recul ajouté au regard du joueur (recoilOffset, en radians, relu à chaque image)
 // et culasse, toutes deux au temps de la mission (missionClock, en secondes, avancé de dt en jeu : arrêté en pause,
 // ralenti pendant la kill-cam).
@@ -98,6 +118,15 @@ let moralLockMesh = null, moralLockBox = null, moralLockLight = null
 // Bonus de tir
 let lastTargetKillAt = -99999   // double élimination
 
+// Règles de la mission (spec du lot 3, §2 f et g ; tâche A8), montées à chaque départ (monterRegles) d'après sa mission :
+// les réactions des cibles en attente (src/campaign/alarm.js), leur fuite vers les sorties et les abris, ou le cône
+// (escape.js), les fenêtres de tir (window.js), la radio d'Anton (radio.js), et la fin, immédiate ou différée (phase.js).
+const alarme = creerAlarme()
+let fuite = creerFuite({ sorties: [], abris: [] }, null)
+let fenetres = creerFenetres()
+let radio = creerRadio()
+let fin = creerFin()
+
 // Apnée (retenir son souffle)
 let breathMeter = 1        // 1 = plein, 0 = vide
 let holdBreathKey = false  // touche Shift enfoncée
@@ -123,6 +152,7 @@ const hudTargets   = document.getElementById('hud-targets')
 const hudScore     = document.getElementById('hud-score')
 const hudLevel     = document.getElementById('hud-level')
 const killFeed     = document.getElementById('kill-feed')
+const dossierEl    = document.getElementById('target-dossier')   // la fiche des cibles (src/campaign/fiche.js)
 const instruction  = document.getElementById('instruction')
 const loadingScreen = createLoadingScreen(document.getElementById('loading-screen'))   // PRÉPARATION DU DOSSIER
 
@@ -132,7 +162,7 @@ loadSettings()
 applyQuality()       // préréglage graphique avant la première image (densité de pixels, ombres)
 loadProgress()        // reprend l'histoire là où le joueur s'était arrêté
 const charactersLoading = preloadCharacters()   // charge les .glb configurés (rien si aucun), voir characters.js
-MAP_BUILDERS[0]()     // décor vivant derrière le menu principal (caméra qui dérive)
+buildMenuDecor()      // décor vivant derrière le menu principal (caméra qui dérive ; src/maps/menu.js)
 initMultiplayerMenu() // mode 1v1 Sniper vs Contre-tueur (voir pvp.js)
 
 // Panneau de performances : ?stats=1 (voir syncStatsPanel)
@@ -380,6 +410,9 @@ function cinematicAudio() {
 
 // ── Enquête du prologue (module chargé à la demande) ──
 // Elle ne doit jamais bloquer la partie : erreur de chargement, de démarrage ou en cours d'image → on enchaîne.
+// Toute fin de l'enquête, achevée (run.next), abandonnée (abortInvestigation) ou finie pendant son démarrage, passe par
+// stopInvestigation (src/prologue/stop.js) : l'enquête se démonte et rend la caméra telle qu'elle l'a trouvée, puis le
+// profil de caméra repart du profil hors mission (spec du lot 3, §2 b ; src/gfx/cameraProfile.js).
 let enquete = null   // { handle, next, ended }
 function investigate(onNext, options = {}) {
   abortInvestigation()   // une enquête déjà en cours (ou en chargement) ne reste pas orpheline
@@ -388,7 +421,7 @@ function investigate(onNext, options = {}) {
     if (run.ended) return
     run.ended = true
     if (enquete === run) enquete = null
-    if (run.handle) { try { run.handle.stop() } catch (e) { console.error('[enquête]', e) } }
+    stopInvestigation(run, camera, scene, sun)
     releaseMouse()
     gamePhase = 'briefing'          // la suite est une cinématique : plus de rendu WebGL
     clock.getDelta()
@@ -402,9 +435,9 @@ function investigate(onNext, options = {}) {
   import('./prologue/investigation.js')
     .then(m => {
       if (run.ended) return
-      const h = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options: { stats: STATS_URL || settings.showStats, ...options } })
-      if (run.ended) { try { h.stop() } catch (e) { /* déjà démontée */ } return }
-      run.handle = h
+      run.handle = m.startInvestigation({ renderer, camera, audio: cinematicAudio(), onDone: run.next, options: { stats: STATS_URL || settings.showStats, ...options } })
+      // finie pendant son démarrage (son contrat l'exclut : onDone jamais pendant l'appel) : arrêtée comme toute fin
+      if (run.ended) { stopInvestigation(run, camera, scene, sun); return }
       gamePhase = 'investigation'
       clock.getDelta()
     })
@@ -415,7 +448,7 @@ function abortInvestigation() {
   const run = enquete
   if (!run) return
   enquete = null; run.ended = true
-  if (run.handle) { try { run.handle.stop() } catch (e) { console.error('[enquête]', e) } }
+  stopInvestigation(run, camera, scene, sun)
 }
 
 // Briefing de la mission au premier essai seulement (ou sur demande), puis le niveau.
@@ -513,6 +546,7 @@ function unmountLevel() {
   clearConvoy()
   removeMoralLock()   // sinon le cadenas du port restait sous le menu, posé dans la rue
   npcs = []; targets = []; guards = []; civilians = []
+  alarme.vider()   // les réactions en attente tenaient des PNJ libérés
   clearBulletHoles()
   clearEffects()
   unmountEcho()
@@ -527,38 +561,38 @@ function startLevel(n, prep = null) {
   statShots = 0; statHits = 0; statStart = performance.now(); statAlerts = 0
   timeScale = 1; killcamActive = false; failPending = false; lastTargetKillAt = -99999
   const token = missionToken   // minuteurs de cette mission : sans effet si elle est relancée ou abandonnée
-  if (((n - 1) % 6) + 1 === 3) upgradeState.freedVictims = false   // chaque essai du port repart d'un choix vierge
+  if (missionFor(n).choixMoral) upgradeState.freedVictims = false   // chaque essai du port repart d'un choix vierge
 
   if (!prepared) mountLevel(n)
 
-  // Cadenas du port : indice au bout de quelques secondes
+  // Cadenas du port : l'indice du choix moral au bout de quelques secondes
   if (moralLockMesh) {
+    const { indice } = currentMission.choixMoral
     setTimeout(() => {
       if (token === missionToken && gamePhase === 'playing' && moralLockMesh) {
-        addKillFeed('👂 Des coups sourds... le conteneur rouge, à gauche.')
+        addKillFeed(indice.texte)
       }
-    }, 5000)
+    }, indice.apresS * 1000)
   }
 
-  stress = 0; alertActive = false; alertTimer = 0; bulletInFlight = false
-  pendingTrail = null; lastImpact = null
+  stress = 0; alertActive = false; alertTimer = 0
+  balle = null; lastImpact = null; dernierTirMortel = null
+  telemetre.reset(); distanceVisee = null
   missionClock = 0; bolt.reset()   // culasse prête au premier coup
+  // Règles de la mission (tâche A8), neuves à chaque départ, sur l'horloge de la mission remise à zéro ; le départ est son
+  // premier événement (une ligne d'Anton, une fenêtre de tir)
+  monterRegles()
+  signaler('depart')
   score = upgradeState.totalScore
 
   hudEl.style.display = 'block'
-  hudLevel.textContent = `${currentLevelData.name}  ·  ${Math.min(n, MAX_LEVEL)}/${MAX_LEVEL}`
+  hudLevel.textContent = `${currentMission.nom}  ·  ${Math.min(n, MAX_LEVEL)}/${MAX_LEVEL}`
   alertBanner.style.display = 'none'
   startMissionAmbience({ rain: !!currentMapInfo.rain })   // nappe sonore de tension pendant la mission, et la pluie du port
 
-  // Dossier d'indices (cible cachée)
-  const hidden = currentMapInfo.hiddenTarget
-  const dossier = document.getElementById('target-dossier')
-  if (hidden && dossier) {
-    document.getElementById('dossier-text').textContent = hidden.clue
-    dossier.style.display = 'block'
-  } else if (dossier) {
-    dossier.style.display = 'none'
-  }
+  // Fiche des cibles dans le HUD (spec du lot 3, §2 e) : une entrée par cible, son portrait, son nom et le signe de son
+  // briefing ; sans marqueur après le tutoriel, c'est elle qui les fait reconnaître. Vierge à chaque départ.
+  afficherFiche(dossierEl, currentMission)
 
   updateHUD()
   gamePhase = 'playing'
@@ -571,89 +605,107 @@ function startLevel(n, prep = null) {
 }
 
 // Montage de la scène d'une mission (carte, PNJ, cadenas, convoi, caméra de départ, écho de la carte), sans écran, son
-// ni minuteur : startLevel l'appelle, la route ?memtest=1 aussi. Le hasard est tiré dans le même ordre qu'avant
-// l'extraction (l'écho a sa propre graine).
+// ni minuteur : startLevel l'appelle, la route ?memtest=1 aussi. La mission est décrite dans son fichier
+// (src/campaign/missions/) ; ses lieux (poste, zone, places, cadenas, route) sont les ancres de sa carte qu'elle cite.
+// Le hasard est tiré dans le même ordre qu'avant l'extraction (l'écho a sa propre graine).
 function mountLevel(n) {
   removeMoralLock()
   applyQuality()   // ombre des personnages pour les PNJ qui suivent, résolution dynamique repartie de 1
 
-  currentLevelData = getLevel(n)
+  const m = currentMission = missionFor(n)
 
-  // Choisir la map selon le niveau (cyclique si > 5)
+  // La carte de la mission (cyclique au-delà de 6), puis les lieux qu'elle cite parmi ses ancres
   const mapIdx = (n - 1) % MAP_BUILDERS.length
   currentMapInfo = MAP_BUILDERS[mapIdx]()
+  // Profil de caméra de la mission (spec du lot 3, §2 b ; src/gfx/cameraProfile.js) : plans proche et lointain, brume,
+  // position et cible du soleil, cadre d'ombre. Après la carte, qui règle ses lumières (setLighting remet le soleil à sa
+  // place par défaut) et ne pose plus de brume ; avant la compilation des shaders (prepareLevel), qui dépendent de la
+  // brume. Hors mission, le décor du menu, l'arène du PvP et la fin de l'enquête reposent le profil hors mission.
+  applyCameraProfile(camera, scene, sun, m.profil)
   // Écho de la carte (spec du lot 2, §3.5) : sa réponse impulsionnelle est générée ici, pendant le briefing, pas au
   // premier tir ; aucun son n'est joué
   mountEcho(currentMapInfo.acoustics)
+  const lieux = currentAnchors = resoudreAncres(m, currentMapInfo.ancres)
 
   // Cadenas du choix moral (port) : un tir dessus libère les victimes du conteneur
-  if (currentMapInfo.moralLock) {
-    ({ mesh: moralLockMesh, box: moralLockBox, light: moralLockLight } = buildMoralLock(currentMapInfo.moralLock.pos))
+  if (m.choixMoral) {
+    ({ mesh: moralLockMesh, box: moralLockBox, light: moralLockLight } = buildMoralLock(lieux.cadenas))
   }
 
-  // Positionner la caméra depuis le point sniper de la map
-  const [cx, cy, cz] = currentMapInfo.cameraPos
+  // La caméra au poste : l'œil, et le regard de départ vers son point (à l'horizontale, vers -Z, sans regard)
+  const [cx, cy, cz] = lieux.oeil
   camera.position.set(cx, cy, cz)
-
-  // Calculer yaw/pitch initial depuis cameraTarget si défini
-  if (currentMapInfo.cameraTarget) {
-    ({ yaw, pitch } = aimAngles(currentMapInfo.cameraPos, currentMapInfo.cameraTarget))
+  if (lieux.regard) {
+    ({ yaw, pitch } = aimAngles(lieux.oeil, lieux.regard))
   } else {
     yaw = 0; pitch = 0
   }
 
-  setZoom(4, { instant: true })   // posé d'un coup, pas lissé depuis la mission d'avant ; la caméra suit dans loop() (syncFov)
+  // La lunette part du zoom de départ de la mission (spec du lot 3, précisions de la tâche A5), posé d'un coup, pas lissé
+  // depuis la mission d'avant ; la caméra suit dans loop() (syncFov)
+  setZoom(m.zoom.depart, { instant: true })
+  // La lunette réglée sur la distance qu'annonce Anton (spec du lot 3, décision 1) : la balle recroise la ligne de visée
+  // à cette distance, et la lunette l'affiche (« ZÉRO 430 m »)
+  setZero(m.zero)
   recoil.reset(); recoilOffset = { pitch: 0, yaw: 0 }   // cadrage de départ sans recul de la mission d'avant
 
-  const b = currentMapInfo.spawnBounds
+  const b = lieux.zone
   const groundY = mapGround()   // les pieds des PNJ sur la dalle du port, le tarmac, la route du convoi
-  const sideFlee = !!currentMapInfo.sideExit
+  const sideFlee = m.fuite === 'laterale'
 
-  // Spawner cibles
-  const hidden = currentMapInfo.hiddenTarget  // cible à identifier par indices (niveau final)
-  for (let i = 0; i < currentLevelData.targets; i++) {
-    const useHidden = hidden && i === 0
+  // Spawner cibles : posée à sa place (le canapé du commanditaire de M6), sinon au hasard dans la zone. Chacune porte son
+  // indice dans casting.cibles (cibleId : la fiche du HUD et le dernier tir mortel la retrouvent par lui)
+  for (const [i, c] of m.casting.cibles.entries()) {
+    const place = c.place ? lieux.places[c.place] : null
+    const telephone = c.routine === 'telephone'
     const npc = new NPC({
       isTarget: true,
       color: 0xcc4422,
-      x: useHidden ? hidden.spawn[0] : b.minX + Math.random() * (b.maxX - b.minX),
-      z: useHidden ? hidden.spawn[1] : b.minZ + Math.random() * (b.maxZ - b.minZ),
+      x: place ? place.x : b.minX + Math.random() * (b.maxX - b.minX),
+      z: place ? place.z : b.minZ + Math.random() * (b.maxZ - b.minZ),
       groundY,
-      levelData: currentLevelData,
+      allure: m.allure,
       bounds: b,
       fleeSideways: sideFlee,
-      hideMarker: !!useHidden,
-      lockState: useHidden ? STATES.PHONE : null,
-      onPhone: !!useHidden,
-      standUp: useHidden ? hidden.standUp : null,   // en fuite, il se lève devant le canapé (maps.js)
-      // Le commanditaire est indiscernable : même pool de modèles que la FOULE.
-      // Seul son comportement (assis, au téléphone, ne danse jamais) le trahit.
-      modelType: useHidden ? 'civilian' : null,
-      female: !useHidden && Math.random() < 0.4,
+      hideMarker: !m.marqueurs,
+      lockState: telephone ? STATES.PHONE : null,
+      onPhone: telephone,
+      standUp: place ? place.debout : null,   // en fuite, il se lève devant le canapé (src/maps/m6-fete.js)
+      // Son visage (spec du lot 3, §2 d) : le modèle de son portrait, cherché dans tous les pools, sans tirage ni
+      // retombée (une erreur si la mission cite un modèle que le jeu n'a pas), sans teinte sauf mention
+      casting: { model: c.modele, strict: true, teinte: c.teinte ?? 0xffffff, teinteMaillage: c.teinteMaillage },
+      // Sans marqueur (de M2 à M6, tâche A7), l'ombre des civils : une ombre que les civils n'ont pas la désignerait
+      shadowRole: m.marqueurs ? 'cible' : 'civil',
+      female: c.femme,   // le personnage de secours, sans modèle chargé
     })
     // Assis sur le canapé (la pose "Talk" est assise) → il se démarque des danseurs
-    if (useHidden && hidden.seatY !== undefined) npc.mesh.position.y = hidden.seatY
+    if (place && place.assise !== undefined) npc.mesh.position.y = place.assise
+    npc.cibleId = i
     npcs.push(npc); targets.push(npc)
   }
 
-  // Spawner gardes
-  for (let i = 0; i < currentLevelData.guards; i++) {
+  // Spawner gardes : le modèle de la mission s'il y en a un (M4, mafia_boss : Halder a celui du pool des gardes), sinon
+  // un modèle tiré dans le pool des gardes
+  const gardes = m.casting.gardes
+  for (let i = 0; i < gardes.nombre; i++) {
     const npc = new NPC({
       isGuard: true,
       color: 0x334433,
       x: b.minX + Math.random() * (b.maxX - b.minX),
       z: b.minZ + Math.random() * (b.maxZ - b.minZ),
       groundY,
-      levelData: currentLevelData,
+      allure: m.allure,
       bounds: b,
       fleeSideways: sideFlee,
+      casting: gardes.modele ? { model: gardes.modele, strict: true, teinte: gardes.teinte ?? 0xffffff } : null,
     })
     npcs.push(npc); guards.push(npc)
   }
 
-  // Spawner civils innocents — tirer dessus = game over
+  // Spawner civils innocents : tirer dessus, c'est l'échec. Les sosies des cibles sont écartés de leur tirage.
   const civilColors = [0x7a6aaa, 0xaa7a3a, 0x3a7aaa, 0xaaaaaa, 0x6a9a6a, 0xaa5a8a, 0x5aaa8a, 0xccaa44]
-  const numCivils = currentLevelData.civilians ?? (3 + Math.floor(Math.random() * 3))
+  const civils = m.casting.civils
+  const numCivils = nombreDeCivils(civils)
   for (let i = 0; i < numCivils; i++) {
     const npc = new NPC({
       isTarget: false,
@@ -663,10 +715,11 @@ function mountLevel(n) {
       x: b.minX + Math.random() * (b.maxX - b.minX),
       z: b.minZ + Math.random() * (b.maxZ - b.minZ),
       groundY,
-      levelData: currentLevelData,
+      allure: m.allure,
       bounds: b,
       fleeSideways: sideFlee,
-      partyMode: !!currentMapInfo.party,   // à la fête, la foule danse
+      partyMode: !!civils.danse,   // à la fête, la foule danse
+      casting: castingDesCivils(m),
       female: Math.random() < 0.5,   // mixité des civils
     })
     npcs.push(npc); civilians.push(npc)
@@ -674,7 +727,7 @@ function mountLevel(n) {
 
   // ── Convoi : 3 jeeps (escorte avant, cible+chauffeur, escorte arrière) ──
   convoyCar = null; convoyTarget = null
-  if (currentMapInfo.convoy && targets.length > 0) {
+  if (m.convoi && targets.length > 0) {
     convoyTarget = targets[0]
     convoyTarget.onVehicle = true
 
@@ -713,8 +766,10 @@ function mountLevel(n) {
       { npc: g[3], ...PASS },
     ]})
 
-    // Route le long de X à z = -4, chaussée à groundY : jeeps et occupants sont posés dessus (campaign/convoy.js)
-    convoyCar = { baseX: -55, z: -4, groundY, dir: 1, speed: 8.5, vehicles }
+    // La route de la carte, le long de X, chaussée à groundY : jeeps et occupants sont posés dessus (campaign/convoy.js) ;
+    // depart, son entrée, d'où se compte l'abscisse du convoi (dernier tir mortel)
+    const route = lieux.route
+    convoyCar = { baseX: route.depart, depart: route.depart, z: route.z, groundY, dir: route.sens, speed: m.convoi.vitesse, vehicles }
   }
 }
 
@@ -728,7 +783,7 @@ function showMenu() {
   abortInvestigation()
   missionToken++   // la mission est abandonnée : ses minuteurs de fin (kill-cam, civil abattu) ne doivent plus tomber sur le menu
   unmountLevel()   // PNJ, convoi, cadenas, impacts et effets de la mission quittée
-  MAP_BUILDERS[0]()   // la carte de la mission est libérée, la rue revient derrière le menu (comme au démarrage)
+  buildMenuDecor()    // la carte de la mission est libérée, le décor du menu revient (comme au démarrage)
   applyQuality()      // hors mission, la résolution dynamique rend la densité pleine
   hideScope()
   releaseMouse()
@@ -747,6 +802,7 @@ function showMenu() {
 function pauseGame() {
   if (!canPause(missionPhase())) return   // ralenti de la dernière cible, civil abattu : la fin de mission arrive
   gamePhase = 'paused'
+  radio.suspendre(); stopRadio()   // Anton se tait sous la pause, la ligne en cours coupée
   hideScope()
   releaseMouse()
   pauseEl.style.display = 'flex'
@@ -758,6 +814,7 @@ function resumeGame() {
   pauseEl.style.display = 'none'
   settingsEl.style.display = 'none'
   gamePhase = 'playing'
+  radio.reprendre()
   clock.getDelta()   // évite un grand dt après la pause
 }
 
@@ -804,6 +861,146 @@ function showUpgradeScreen() {
   renderUpgradeUI()
 }
 
+// ─── Règles de la mission (spec du lot 3, §2 f et g ; tâche A8) ────
+// Réaction des cibles au coup, fuite vers les sorties et les abris (ou le cône), fenêtres de tir, radio d'Anton, fin
+// immédiate ou différée : des modules purs (src/campaign/alarm.js, escape.js, window.js, radio.js, phase.js), menés ici
+// sur l'horloge de la mission. Les six missions d'aujourd'hui n'ont ni sortie, ni abri, ni fenêtre, ni ligne, et leur
+// fin est immédiate : le jeu y reste celui d'avant la tâche ; les sous-lots 3b à 3d les remplissent.
+
+// Les règles de la mission en cours, d'après ses données (src/campaign/missions/) et ses lieux : startLevel, à chaque
+// départ.
+function monterRegles() {
+  alarme.vider()
+  fuite = creerFuite(currentMission, currentAnchors)
+  fenetres = creerFenetres(currentMission.fenetres)
+  radio = creerRadio(currentMission.radio)
+  fin = creerFin(currentMission.fin)
+}
+
+// Un événement de la mission (EVENEMENTS, src/campaign/missions/index.js), à l'instant de son horloge : la radio dit les
+// lignes qui l'attendent, les fenêtres de tir qui l'attendent s'ouvrent.
+function signaler(evenement) {
+  radio.signaler(evenement, missionClock)
+  fenetres.signaler(evenement, missionClock)
+}
+
+// Le coup de feu s'entend (shoot) : la radio et les fenêtres apprennent le tir (le premier de la mission, puis chacun),
+// et, dans une mission à sorties ou abris, ses cibles réagiront au son du départ, d / 343 s plus tard (alarm.js) ; au
+// silencieux, rien à entendre.
+function coupEntendu(stats) {
+  if (statShots === 1) signaler('premier-tir')
+  signaler('tir')
+  planifierReactions({ son: stats.silenced ? null : { t: missionClock, depuis: camera.position.toArray() }, chutes: [] })
+}
+
+// Une mort dans la mission (cible, garde, civil) : la fin différée garde les corps dès la première (contrat avec le lot
+// 4), et les cibles qui voient tomber un collègue (une cible ou un garde, jamais un civil) réagiront à sa chute.
+function surUneMort(npc) {
+  if (fin.differee) garderLesCorps()
+  planifierReactions({ son: null, chutes: [{ t: missionClock, pnj: npc }] })
+}
+
+// Les corps de la mission restent jusqu'à son démontage (NPC.garderCorps) : fin différée, la kill-cam du lot 4.
+function garderLesCorps() {
+  for (const npc of npcs) npc.garderCorps()
+}
+
+// Les réactions des cibles à un coup (reagir, alarm.js), mises en attente sur l'horloge de la mission ; rien dans une
+// mission sans sortie ni abri.
+function planifierReactions(coup) {
+  alarme.planifier(reagir(coup, npcs, currentMission, { enVue: voitLaChute }))
+}
+
+// Vrai si rien de solide (la carte, les jeeps du convoi) ne coupe le segment de a à b (THREE.Vector3) ; near : ce qui est
+// plus près de a ne compte pas (l'appui du poste, devant l'œil du tireur).
+function ligneDeVue(a, b, { near = 0 } = {}) {
+  const d = b.distanceTo(a)
+  if (d < 1e-6) return true
+  const ray = new THREE.Ray(a.clone(), b.clone().sub(a).divideScalar(d))
+  return !solidHit(ray, missionSolids(), [], { near, far: d })
+}
+
+// Une cible voit tomber un collègue : de ses yeux (1,6 m) à son torse (1 m), au moment du coup.
+function voitLaChute(observateur, tombe) {
+  const yeux = observateur.mesh.position.clone(), torse = tombe.mesh.position.clone()
+  yeux.y += 1.6; torse.y += 1
+  return ligneDeVue(yeux, torse)
+}
+
+// Le tireur voit une cible : de l'œil (au-delà de l'appui du poste) à son torse.
+function enVueDuTireur(cible) {
+  const torse = cible.mesh.position.clone()
+  torse.y += 1
+  return ligneDeVue(camera.position, torse, { near: OCCLUSION.departM })
+}
+
+// La suite de la réaction d'une cible (alarm.js) : elle fuit vers l'issue de la mission la plus proche (escape.js).
+function fuirVersLaSortie(npc) {
+  const p = npc.mesh.position
+  const issue = issueLaPlusProche([p.x, p.z], fuite.issues)
+  if (!issue) return
+  npc.fuirVers([issue.x, issue.z])
+  signaler('fuite')
+}
+
+// Les règles, à chaque image, au temps de la mission, après la balle (dont l'arrivée peut tuer et lancer la fin) : les
+// réactions des cibles (la stupeur, puis la fuite vers une issue), les échéances des fenêtres de tir, la radio d'Anton,
+// et l'échéance du calme d'une fin différée (le ralenti, jamais avec un échec en attente : canFinish).
+function avancerRegles() {
+  for (const r of alarme.avancer(missionClock)) {
+    if (r.quoi === 'stupeur') r.pnj.react(new THREE.Vector3(...r.depuis))
+    else fuirVersLaSortie(r.pnj)
+  }
+  for (const e of fenetres.avancer(missionClock)) {
+    echeanceDeFenetre(e)
+    if (gamePhase !== 'playing') return   // la fenêtre a fait échouer la mission
+  }
+  for (const ligne of radio.avancer(missionClock)) direALaRadio(ligne)
+  if (fin.echue(missionClock, { cadenas: !!moralLockMesh }) && canFinish(missionPhase())) startKillcam()
+}
+
+// L'échéance d'une fenêtre de tir (window.js) : l'échec à son texte, une pénalité (le score et le fil), ou un événement
+// de la mission.
+function echeanceDeFenetre({ echeance }) {
+  if (echeance.echec) triggerGameOver(echeance.echec)
+  else if (echeance.penalite) {
+    score -= echeance.penalite
+    addKillFeed(echeance.fil, true)
+    updateHUD()
+  } else if (echeance.evenement) signaler(echeance.evenement)
+}
+
+// Une ligne d'Anton (radio.js) : écrite dans le fil, sous son nom, le temps de la lire (2 s après ses bips, et pas moins
+// qu'une ligne ordinaire du fil), et dite en bips radio le temps de la ligne (playRadio, src/audio.js).
+function direALaRadio(ligne) {
+  const el = document.createElement('div')
+  el.className = 'kill-entry radio'
+  const qui = document.createElement('span')
+  qui.className = 'radio-qui'
+  qui.textContent = 'ANTON'
+  el.append(qui, ligne.texte)
+  const tenueS = Math.max(2.8, ligne.dureeS + 2)
+  el.style.animationDelay = `0s, ${tenueS - 0.5}s`   // la sortie (index.html), sur la dernière demi-seconde
+  killFeed.appendChild(el)
+  setTimeout(() => el.remove(), tenueS * 1000)
+  playRadio(ligne.dureeS)
+}
+
+// La fin de la mission, à la mort de la dernière cible (spec du lot 3, §2 c et g ; contrat avec le lot 4) : la seule
+// porte de la fin. tir : le dernier tir mortel ; sa fin dit 'immediate' (le ralenti tout de suite, comme avant la tâche)
+// ou 'differee' (le calme de fin.calmeS, en jeu, Anton qui parle, puis le ralenti : avancerRegles). Les fenêtres de tir
+// s'arrêtent : il n'y a plus rien à rater.
+function lancerFin(tir) {
+  if (killcamActive || fin.lancee) return
+  fenetres.arreter()
+  if ((tir ? tir.fin : fin.differee ? 'differee' : 'immediate') === 'differee') {
+    fin.lancer(missionClock)
+    signaler('calme')
+  } else {
+    startKillcam()
+  }
+}
+
 // ─── Alerte & Game over ────────────────────────────────────────────
 function triggerAlert(reason) {
   if (alertActive) return
@@ -813,6 +1010,7 @@ function triggerAlert(reason) {
   alertBanner.style.display = 'block'
   playAlert()
   addKillFeed(reason || '⚠ ALERTE : restez caché', true)
+  signaler('alerte')
 
   // Gardes réagissent
   for (const g of guards) {
@@ -853,7 +1051,7 @@ function triggerLevelClear() {
   // Réussite enregistrée en une fois : points, score ET mission suivante, avant la sauvegarde.
   // Quitter le jeu ici ne doit pas laisser rejouer (et recréditer) la mission qu'on vient de réussir.
   const n = upgradeState.currentLevel
-  const reward = currentLevelData.pointsReward
+  const reward = currentMission.points
   const { last } = recordClear(upgradeState, { level: n, reward, score })
   lastCleared = n
   saveProgress()
@@ -886,39 +1084,65 @@ function triggerConvoyEscaped() {
 
 // ─── Tir ───────────────────────────────────────────────────────────
 function shoot() {
-  // Lunette ouverte à 100 % seulement (spec du lot 2, §3.2), culasse revenue (§3.3), ni pendant le ralenti, ni après
-  // un civil abattu
-  if (!isScopeReady() || bulletInFlight || !bolt.ready(missionClock) || !canShoot(missionPhase())) return
+  // Lunette ouverte à 100 % seulement (spec du lot 2, §3.2), culasse revenue (§3.3), aucune balle en vol, ni pendant le
+  // ralenti, ni après un civil abattu
+  if (!isScopeReady() || balle || !bolt.ready(missionClock) || !canShoot(missionPhase())) return
   const stats = getStats()
-  bulletInFlight = true
-  bulletDelay = stats.bulletDelay
   bolt.fire(missionClock, stats.boltS)   // 1,2 s sans pouvoir tirer (moins avec la Vélocité), sons et jauge
   statShots++
   shotGlow(effectsReduced())   // lueur chaude sur les bords de la lunette : 0,12 d'opacité, 0,06 en effets atténués
   stats.silenced ? playSilencedShot() : playShot()
   stress = Math.min(1, stress + STRESS.parTir)
+  coupEntendu(stats)   // la radio, les fenêtres de tir, et les cibles qui entendront le départ (tâche A8)
 
-  // CAPTURER la visée MAINTENANT (le réticule visible au clic), pas à l'impact, sinon le tremblement a dérivé pendant
-  // le délai de vol
-  const t = getTrembleOffset()
-  const aimX =  (t.x / innerWidth)  * 2.0
-  const aimY = -(t.y / innerHeight) * 2.0
-  const ray = new THREE.Raycaster()
-  syncFov()   // la caméra prend le champ affiché, celui que getTrembleOffset utilise : réticule et rayon cohérents
-  ray.setFromCamera(new THREE.Vector2(aimX, aimY), camera)
-  pendingShotRay = ray
-
-  // Sillage : du canon jusqu'à ce que la balle rencontre sur son rayon au moment du coup (le PNJ, le décor, sinon un
-  // point au loin), pendant le temps de vol ; la résolution le recale si elle trouve autre chose (resolveBullet)
-  pendingTrail = spawnTrail(camera.localToWorld(MUZZLE.clone()), firstHit(ray.ray).point, stats.bulletDelay)
+  // CAPTURER la visée MAINTENANT (le réticule visible au clic), sinon le tremblement a dérivé pendant le vol. La caméra
+  // est d'abord recadrée sur le regard du clic : la souris a pu bouger depuis l'image, et le rayon du tir comme la vue
+  // gardée pour le rejeu (balle.vue, plus bas) partent de ce même regard.
+  aimMissionCamera()
+  const ray = rayonDuReticule()
+  // La balle (spec du lot 3, §2 c) : de l'œil, le long du réticule, relevée pour recroiser la visée à la distance de
+  // réglage de la mission (décision 1), à la vitesse de la Vélocité ; elle vole sur l'horloge de la mission
+  balle = lancerBalle({ origine: ray.origin, dir: ray.direction, v0: stats.v0, g: BALLE.gravite, zero: currentMission.zero, tTir: missionClock })
+  // Ce que le coup laisse au dernier tir mortel (contrat du lot 4) : la vue de la lunette, avant le recul (le rejeu
+  // commence dans la lunette), et l'abscisse du convoi
+  balle.vue = { lacet: yaw + recoilOffset.yaw, tangage: pitch + recoilOffset.pitch, zoom: getEffectiveZoom(), fov: camera.fov }
+  balle.sTir = convoyCar ? abscisseConvoi(convoyCar) : null
+  // Sillage : du canon, sur la trajectoire, jusqu'à ce que la balle rencontrerait si le monde ne bougeait plus (le PNJ,
+  // le décor, sinon le bout de son vol) ; l'arrivée le recale si elle trouve autre chose (resolveBullet)
+  balle.sillage = spawnTrail(camera.localToWorld(MUZZLE.clone()), balle.traj, predireImpact(balle, toucherSegment))
   // Recul : la vue monte après le départ de la balle, qui va là où l'on visait
   recoil.kick()
 }
 
-// Ce qui arrête une balle dans la mission, hors PNJ (spec du lot 2, §3.4) : le décor solide de la carte (maps.js), les
-// jeeps du convoi, et le cadenas du port par sa boîte (plus large que lui : il se vise facilement).
+// Rayon du réticule tel qu'il est dessiné (le tremblement compris), de l'œil, dans le champ que la caméra affiche :
+// celui du tir et du télémètre.
+function rayonDuReticule() {
+  const t = getTrembleOffset()
+  const raycaster = new THREE.Raycaster()
+  syncFov()   // la caméra prend le champ affiché, celui que getTrembleOffset utilise : réticule et rayon cohérents
+  camera.updateMatrixWorld()   // le cadrage de cette image (aimMissionCamera), que le rendu n'a pas encore pris
+  raycaster.setFromCamera(new THREE.Vector2((t.x / innerWidth) * 2, -(t.y / innerHeight) * 2), camera)
+  return raycaster.ray
+}
+
+// Ce qui arrête une balle dans la mission, hors PNJ (spec du lot 2, §3.4) : le décor solide de la carte (src/maps/),
+// les jeeps du convoi, et le cadenas du port par sa boîte (plus large que lui : il se vise facilement).
 const missionSolids = () => (convoyCar ? [...solidMeshes(), ...convoyCar.vehicles.map(v => v.mesh)] : solidMeshes())
 const missionBoxes = () => (moralLockBox ? [{ box: moralLockBox, surface: 'metal', cadenas: true }] : [])
+
+// Ce que la balle rencontre sur un segment de sa trajectoire (spec du lot 3, §2 c ; impactSurSegment,
+// src/shot/occlusion.js) : les zones des PNJ de la mission à leur pose du moment, le décor solide de la mission (la
+// carte, les jeeps, le cadenas) et les vitres de la carte, traversées. Le télémètre s'en sert aussi (mesurerDistance).
+function toucherSegment(seg) {
+  return impactSurSegment({ ...seg, npcs, objets: missionSolids(), boites: missionBoxes(), vitres: vitres() })
+}
+
+// Distance au point visé (m) : le rayon du réticule contre le décor solide, le sol et les zones des PNJ, jusqu'à la
+// portée du télémètre ; null s'il n'y rencontre rien (le ciel).
+function mesurerDistance() {
+  const { impact } = toucherSegment({ ray: rayonDuReticule(), longueur: TELEMETRE.porteeM, depuisM: 0 })
+  return impact ? impact.distance : null
+}
 
 // La jeep du convoi dont fait partie un maillage touché, ou null : une marque y reste et roule avec elle.
 function jeepOf(objet) {
@@ -927,41 +1151,35 @@ function jeepOf(objet) {
   return null
 }
 
-// Ce que la balle rencontre en premier sur son rayon (resolveImpact, src/shot/occlusion.js) : le PNJ vivant le plus
-// proche, touché sur une de ses zones calées sur les os (npcHit, src/shot/hitzones.js : tête, torse ou membre), le
-// décor solide (solidHit : la carte, les jeeps, le cadenas), sinon rien (un point au loin sur le rayon). Le résultat
-// de resolveImpact, plus role : 'target', 'civilian', 'guard' (PNJ), 'lock' (le cadenas), 'decor' ou 'rien' ; point :
-// où la balle s'arrête.
-function firstHit(ray) {
-  const npc = npcHit(ray, npcs)
-  const impact = resolveImpact({ ray, npcHits: npc ? [npc] : [], decorHit: solidHit(ray, missionSolids(), missionBoxes()) })
-  const role = impact.kind === 'npc' ? (impact.npc.isTarget ? 'target' : impact.npc.isCivilian ? 'civilian' : 'guard')
+// Le rôle de ce que la balle a touché : 'target', 'civilian', 'guard' (PNJ), 'lock' (le cadenas), 'decor' ou 'rien'.
+function roleDe(impact) {
+  return impact.kind === 'npc' ? (impact.npc.isTarget ? 'target' : impact.npc.isCivilian ? 'civilian' : 'guard')
     : impact.cadenas ? 'lock' : impact.kind
-  return { ...impact, role }
 }
 
-function resolveBullet() {
-  bulletInFlight = false
-
-  // Utiliser le rayon CAPTURÉ AU MOMENT DU TIR (pas la visée actuelle)
-  const raycaster = pendingShotRay
-  pendingShotRay = null
-  const trail = pendingTrail
-  pendingTrail = null
-  if (!raycaster) return
-
+// Arrivée de la balle (avancerBalle, src/shot/balle.js) : ce qu'elle a rencontré sur sa trajectoire, à l'instant de
+// l'impact interpolé dans son segment, contre la pose des PNJ et des jeeps de l'image ; ou rien, une balle perdue au
+// bout de son vol (BALLE.volMaxS). hit : l'impact (resolveImpact, src/shot/occlusion.js), plus son rôle ; point : où la
+// balle s'arrête.
+function resolveBullet(arrivee) {
+  const b = balle
+  balle = null
   const stats = getStats()
 
-  // Ce que la balle touche, à son arrivée (pose des PNJ, jeeps qui ont roulé) : le premier sur son rayon, d'un PNJ, du
-  // décor solide et du cadenas ; sinon elle part au loin. Le sillage finit là, même si un PNJ a quitté la ligne depuis
-  // le coup.
-  const hit = firstHit(raycaster.ray)
+  const hit = { ...arrivee.impact, role: roleDe(arrivee.impact) }
   const { role, npc: closestNpc, part, point: closestPt } = hit
-  retargetTrail(trail, hit.point)
+  // Le sillage finit là où la balle est arrivée, même si un PNJ a quitté la ligne, ou y est entré, depuis le coup
+  retargetTrail(b.sillage, arrivee.t - b.tTir)
+  // Dernier tir mortel (contrat avec le lot 4, src/shot/tirMortel.js) : enregistré à la mort d'une cible, AVANT les sons
+  // de l'impact, dont le lot 4 coupe celui de la dernière cible (derniere) quand la kill-cam le rejoue
+  if (role === 'target') {
+    dernierTirMortel = tirMortel({ balle: b, arrivee, cible: closestNpc, cibles: targets, fin: currentMission.fin,
+      support: supportDuTir(convoyCar, closestNpc, b.sTir) })
+  }
   // Le son de ce que la balle touche (spec du lot 2, §3.5) : chair, métal, pierre, bois ou sol, entendu le temps que le
-  // son revienne du point d'impact (distance / 343 s), vers l'écho de la carte s'il est loin ; rien pour une balle partie
-  // au loin. Il confirme la touche : plus de bip.
-  const sons = planShotSounds({ distance: closestPt.distanceTo(raycaster.ray.origin), surface: hit.surface, part })
+  // son revienne du point d'impact jusqu'au tireur (distance / 343 s), vers l'écho de la carte s'il est loin ; rien pour
+  // une balle perdue. Il confirme la touche : plus de bip.
+  const sons = planShotSounds({ distance: closestPt.distanceTo(b.traj.origine), surface: hit.surface, part })
   playShotSounds(sons)
   lastImpact = { role, surface: hit.surface || null, part: part || null, sons }
   if (isHit(role)) statHits++   // précision du rapport de fin : le cadenas compte, libérer n'interdit pas FANTÔME
@@ -985,14 +1203,17 @@ function resolveBullet() {
     const lockPos = moralLockMesh.position.clone()
     removeMoralLock()
     upgradeState.freedVictims = true
-    score += 150
-    addKillFeed('🔓 Conteneur ouvert : ils s\'échappent... (+150 pts)')
-    // trois silhouettes s'enfuient du conteneur
-    for (let i = 0; i < 3; i++) {
+    const { points, victimes } = currentMission.choixMoral
+    score += points
+    addKillFeed(`🔓 Conteneur ouvert : ils s'échappent... (+${points} pts)`)
+    signaler('cadenas')
+    // les victimes (des silhouettes) s'enfuient du conteneur ; des civils de la mission, sans sosie de ses cibles
+    for (let i = 0; i < victimes; i++) {
       const freed = new NPC({
         isCivilian: true, color: 0x8a7a5a,
         x: lockPos.x + 0.5 + i * 0.4, z: lockPos.z + 1 + i * 0.6, groundY: mapGround(),
-        levelData: currentLevelData, bounds: currentMapInfo.spawnBounds,
+        allure: currentMission.allure, bounds: currentAnchors.zone,
+        casting: castingDesCivils(currentMission),
       })
       freed.flee(lockPos)
       npcs.push(freed); civilians.push(freed)
@@ -1000,8 +1221,10 @@ function resolveBullet() {
   }
 
   // Tir raté : la balle s'arrête dans le décor (gerbe de sa matière, marque persistante sur la surface, qui roule avec
-  // une jeep touchée), ou part au loin. Les PNJ proches du point d'impact réagissent (personne pour une balle partie au
-  // loin : son point est à 1 km) ; le fil ne parle de fuite que si des PNJ fuient.
+  // une jeep touchée), ou se perd au bout de son vol (BALLE.volMaxS). Sans silencieux, le stress du tir manqué monte, et
+  // les PNJ proches du point d'impact réagissent. Une balle perdue ne fait réagir personne (spec du lot 3, §2 c : ni son
+  // ni réaction), où qu'elle se perde : en M4 à 430 m, une balle passée au-dessus des PNJ du fond de la zone se perd à
+  // une trentaine de mètres d'eux. Le fil ne parle de fuite que si des PNJ fuient.
   if (role === 'decor' || role === 'rien') {
     const shotPos = closestPt
     if (role === 'decor') {
@@ -1012,9 +1235,11 @@ function resolveBullet() {
     let fuyards = 0
     if (!stats.silenced) {
       stress = Math.min(1, stress + STRESS.tirManque)
-      fuyards = fleeNearby(shotPos, 20)
-      reactNearby(shotPos, 28)
-      checkGuardAlert(shotPos, stats)
+      if (role === 'decor') {
+        fuyards = fleeNearby(shotPos, 20)
+        reactNearby(shotPos, 28)
+        checkGuardAlert(shotPos, stats)
+      }
     }
     addKillFeed(missFeed(fuyards))
   }
@@ -1024,6 +1249,7 @@ function resolveBullet() {
 
 function killCivilian(npc) {
   npc.die()
+  surUneMort(npc)
   fleeNearby(npc.mesh.position, 25)
   playCivilKill()
   addKillFeed('⚠ CIVIL ABATTU : MISSION ÉCHOUÉE', true)
@@ -1037,6 +1263,9 @@ function killCivilian(npc) {
 
 function killTarget(npc, part = 'torse') {
   npc.die()
+  surUneMort(npc)   // ses collègues en vue réagiront ; la fin différée garde les corps
+  // Son entrée de la fiche barrée, retrouvée par son cibleId (d'un coup en effets atténués)
+  barrerCible(dossierEl, npc.cibleId, { anime: !effectsReduced() })
   // Plus de bip de confirmation : le son de l'impact sur la chair confirme la touche (resolveBullet)
   // Cible en mouvement (véhicule) = tir difficile = plus de points ; tête ×2, torse ×1, membre ×0,6 (src/shot/score.js)
   const bonus = targetScore({ onVehicle: npc.onVehicle, still: npc.isStill(), part })
@@ -1052,6 +1281,7 @@ function killTarget(npc, part = 'torse') {
     addKillFeed('⚡ DOUBLE ÉLIMINATION (+100 pts)')
   }
   lastTargetKillAt = nowK
+  signaler('cible')
 
   // Si c'était la cible du convoi, la jeep part en roue libre et s'arrête
   if (npc === convoyTarget && convoyCar) {
@@ -1081,7 +1311,7 @@ function killTarget(npc, part = 'torse') {
 // déclenche l'alerte ; au silencieux, les autres gardes réagissent sans alerte (guardHit, src/shot/score.js).
 function hitGuard(npc, stats) {
   const issue = guardHit(stats)
-  if (issue.meurt) npc.die()
+  if (issue.meurt) { npc.die(); surUneMort(npc) }
   addKillFeed(issue.feed)
   if (issue.gardesReagissent) {
     for (const g of guards) {
@@ -1109,11 +1339,13 @@ function checkGuardAlert(shotPos, stats) {
 }
 
 // Fait fuir les PNJ vivants à moins de `radius` de `pos` ; rend le nombre de ceux qui fuient (une cible à bord d'un
-// véhicule ne fuit pas à pied).
+// véhicule ne fuit pas à pied). Dans une mission à sorties ou abris, les cibles n'y fuient pas : leur fuite passe par leur
+// réaction au coup (src/campaign/alarm.js), vers une issue (tâche A8).
 function fleeNearby(pos, radius) {
+  const ciblesAPart = fuiteParSorties(currentMission)
   let fuyards = 0
   for (const npc of npcs) {
-    if (!npc.alive) continue
+    if (!npc.alive || (ciblesAPart && npc.isTarget)) continue
     if (npc.mesh.position.distanceTo(pos) < radius) {
       npc.flee(pos)
       if (npc.state === 'flee') fuyards++
@@ -1122,9 +1354,14 @@ function fleeNearby(pos, radius) {
   return fuyards
 }
 
+// Fige (react) les PNJ vivants à moins de `radius` de `pos`, à l'instant de l'impact. Dans une mission à sorties ou abris,
+// les cibles n'y réagissent pas : elles se figent au plus tôt du son du départ et de la chute vue d'un collègue (leur
+// réaction au coup, src/campaign/alarm.js), jamais à l'arrivée de la balle, ni au silencieux sans chute vue (relecture
+// de A8).
 function reactNearby(pos, radius) {
+  const ciblesAPart = fuiteParSorties(currentMission)
   for (const npc of npcs) {
-    if (!npc.alive || npc.state === 'flee') continue
+    if (!npc.alive || npc.state === 'flee' || (ciblesAPart && npc.isTarget)) continue
     if (npc.mesh.position.distanceTo(pos) < radius) {
       npc.react(pos)
     }
@@ -1136,24 +1373,26 @@ function isInCameraFOV(worldPos) {
   const forward  = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
   const dot      = forward.dot(toTarget)
   // Toujours utiliser 80° (pas le FOV zoomé) — sinon game over injuste au moindre écart
-  const halfFovRad = THREE.MathUtils.degToRad(80 / 2)
+  const halfFovRad = THREE.MathUtils.degToRad(FUITE.coneDeg / 2)
   return dot > Math.cos(halfFovRad)
 }
 
-function checkFledTargets() {
-  for (const t of targets) {
-    if (!t.alive || t.state !== 'flee' || t.onVehicle) continue
-    const pos = t.mesh.position
-    // Cible évadée = hors FOV ET à plus de 12m (délai pour se retourner)
-    if (!isInCameraFOV(pos) && pos.distanceTo(camera.position) > 12) {
-      triggerFleeGameOver()
-      return
-    }
-  }
+// La fuite des cibles (spec du lot 3, §2 f ; src/campaign/escape.js), à chaque image : dans une mission à sorties ou
+// abris, une cible en fuite qui en atteint un fait échouer la mission (au texte de l'issue), et, en option, une cible
+// en fuite hors de vue plus de perteDeVueS s ; sans eux, le cône d'avant le lot 3 : une cible en fuite hors du cône de
+// FUITE.coneDeg, à plus de FUITE.coneDistanceM de la caméra (le délai pour se retourner). dt : la durée de l'image.
+function checkFledTargets(dt) {
+  const fui = fuite.verifier(targets, dt, {
+    horsDuCone: t => !isInCameraFOV(t.mesh.position) && t.mesh.position.distanceTo(camera.position) > FUITE.coneDistanceM,
+    enVue: enVueDuTireur,
+  })
+  if (!fui) return
+  if (fui.message) triggerGameOver(fui.message)
+  else triggerFleeGameOver()
 }
 
 function checkWin() {
-  if (targets.filter(t => t.alive).length === 0 && !killcamActive) startKillcam()
+  if (targets.filter(t => t.alive).length === 0 && !killcamActive) lancerFin(dernierTirMortel)
 }
 
 // ─── Kill-cam : le temps ralentit sur la dernière cible ────────────
@@ -1224,13 +1463,14 @@ document.addEventListener('mousemove', e => {
   // Pas de limite sur yaw — rotation libre à 360°
 })
 
-document.addEventListener('wheel', e => {
+// Molette, lunette tenue pendant la mission : un cran de zoom (0,5, sur la grille de ce pas), entre les bornes de la
+// mission, son minimum et son maximum relevé par l'amélioration Lunette (décision 2 de la spec du lot 3 ; src/aim.js)
+function zoomALaMolette(e) {
   if (!isVisible() || gamePhase !== 'playing') return
-  const stats = getStats()
-  const cur = getZoom()
-  const next = Math.max(3, Math.min(stats.maxZoom, cur + (e.deltaY > 0 ? -0.5 : 0.5)))
-  setZoom(next)   // le champ de vision suit dans loop() (syncFov)
-}, { passive: true })
+  const bornes = bornesDuZoom(currentMission.zoom, getStats().maxZoomScale)
+  setZoom(zoomApresCran(getZoom(), e.deltaY > 0 ? -1 : 1, bornes))   // le champ de vision suit dans loop() (syncFov)
+}
+document.addEventListener('wheel', zoomALaMolette, { passive: true })
 
 document.getElementById('canvas').addEventListener('click', () => {
   if (gamePhase === 'playing') document.getElementById('canvas').requestPointerLock()
@@ -1335,7 +1575,7 @@ function syncFov() {
 // de la route ?memtest=1.
 function aimMissionCamera() {
   syncFov()
-  const [baseX, baseY, baseZ] = currentMapInfo ? currentMapInfo.cameraPos : [0, 8, 30]
+  const [baseX, baseY, baseZ] = currentAnchors ? currentAnchors.oeil : [0, 8, 30]   // l'œil du poste de la mission
   // Regard du joueur, plus le recul du dernier coup qui y revient (spec du lot 2, §3.3)
   const euler = new THREE.Euler(pitch + recoilOffset.pitch, yaw + recoilOffset.yaw, 0, 'YXZ')
   const dir = new THREE.Vector3(0, 0, -1).applyEuler(euler)
@@ -1442,19 +1682,28 @@ function loop(rafAt) {
     // abattu) le convoi s'immobilise hors champ : pas de boucle infinie qui offrirait des essais gratuits.
     if (convoyCar && stepConvoy(convoyCar, dt, convoyTarget)) { triggerConvoyEscaped(); return }
 
-    // Vérifier si une cible a fui (sauf cible en véhicule)
-    checkFledTargets()
+    // Vérifier si une cible a fui (sauf cible en véhicule) : une issue atteinte, ou le cône (src/campaign/escape.js)
+    checkFledTargets(dt)
     if (gamePhase !== 'playing') return
 
-    // Résoudre tir
-    if (bulletInFlight) {
-      bulletDelay -= dt
-      if (bulletDelay <= 0) resolveBullet()
+    // Le temps de la mission avance (la balle, la culasse)
+    missionClock += dt
+
+    // La balle (spec du lot 3, §2 c) : APRÈS les PNJ et le convoi, le bout de trajectoire parcouru pendant l'image est
+    // cherché contre leur pose du moment. C'est l'ordre « PNJ, puis segments de la balle » du contrat avec le lot 4 : le
+    // rejeu de la kill-cam retrouve la cible dans la pose où le segment l'a touchée.
+    if (balle) {
+      const arrivee = avancerBalle(balle, missionClock, toucherSegment)
+      if (arrivee) resolveBullet(arrivee)
     }
+
+    // Les règles de la mission (tâche A8), après la balle : réactions des cibles, fenêtres de tir, radio d'Anton, échéance
+    // du calme d'une fin différée
+    avancerRegles()
+    if (gamePhase !== 'playing') return
 
     // Coup de feu (spec du lot 2, §3.3), au temps de la mission : la culasse s'ouvre puis se referme (sons à leurs
     // instants, jauge sous le réticule), et le recul revient vers la visée du joueur
-    missionClock += dt
     for (const son of bolt.cues(missionClock)) son === 'ouverture' ? playBoltOpen() : playBoltClose()
     setBoltProgress(bolt.progress(missionClock))
     recoilOffset = recoil.update(dt)
@@ -1510,6 +1759,12 @@ function loop(rafAt) {
     updateEffects(dt)
 
     aimMissionCamera()
+
+    // Télémètre (spec du lot 3, §2 c), sur le cadrage de cette image : lunette tenue, la distance au point visé, relevée
+    // 10 fois par seconde ; lunette fermée, il repartira d'une mesure immédiate
+    if (isVisible()) distanceVisee = telemetre.update(dt, mesurerDistance)
+    else telemetre.reset()
+    setTelemetre(distanceVisee)
 
     updateHUD()
   } else {
@@ -1578,31 +1833,45 @@ if (import.meta.env.DEV) {
   // Visée (relectures du zoom choisi et affiché, de l'ouverture de la lunette, de la culasse, du stress, du
   // tremblement en milliradians et en pixels, du regard et du recul) : __aim() dans la console ; pret : le clic gauche
   // tire (lunette ouverte à 100 %, culasse revenue, aucune balle en vol) ; horloge : le temps de la mission en secondes
-  // (missionClock, celui de la culasse), pour mesurer une durée du jeu sans dépendre de la vitesse de la machine
+  // (missionClock, celui de la culasse et de la balle), pour mesurer une durée du jeu sans dépendre de la vitesse de la
+  // machine ; telemetre : la distance au point visé qu'affiche la lunette (m, null sans mesure) ; zero : son réglage (m)
   window.__aim = () => ({ fov: camera.fov, zoom: getZoom(), zoomAffiche: getEffectiveZoom(), scoped: isVisible(),
-    ouverture: getScopeOpenness(), pret: isScopeReady() && bolt.ready(missionClock) && !bulletInFlight,
+    ouverture: getScopeOpenness(), pret: isScopeReady() && bolt.ready(missionClock) && !balle,
+    telemetre: distanceVisee, zero: currentMission ? currentMission.zero : null,
     culasse: +bolt.progress(missionClock).toFixed(3), horloge: missionClock, stress,
     trembleMrad: getTrembleMrad(), tremblePx: getTrembleOffset(), regard: viewAngles(),
     reculDeg: { tangage: +THREE.MathUtils.radToDeg(recoilOffset.pitch).toFixed(4), lacet: +THREE.MathUtils.radToDeg(recoilOffset.yaw).toFixed(4) } })
   // ?solides=1 : chaque maillage qui arrête la balle prend la couleur de sa matière (pierre gris clair, métal bleu,
-  // bois orange, sol vert ; maps.js, SOLID_TINTS), la carte affichée et toutes celles qui suivent, jeeps comprises.
+  // bois orange, sol vert ; src/maps/prims.js, SOLID_TINTS), la carte affichée et toutes celles qui suivent, jeeps et
+  // décor du menu compris.
   if (q.has('solides')) setSolidTint(true)
   // Son de la mission (spec du lot 2, §3.5 ; scripts/verif-mission.mjs) : __son() dit l'écho monté (son acoustique),
   // la pluie, la nappe et l'état du contexte audio
   window.__son = () => audioState()
   // Mission en cours (relectures des gardes de phase, vérifications sans interface) : __mission() dans la console ;
-  // dernierImpact : ce que la dernière balle a touché ({ role, surface, part, sons }, voir firstHit ; sons : le
-  // calendrier joué à son arrivée, planShotSounds)
+  // balle : une balle en vol ; dernierImpact : ce que la dernière balle a touché ({ role, surface, part, sons }, voir
+  // resolveBullet ; sons : le calendrier joué à son arrivée, planShotSounds) ; tirMortel : le dernier tir mortel, résumé
+  // (instants, temps de vol, distance, zone, cible, derniere, fin, réglage, vitesse, vitres traversées ; le PNJ et les
+  // vecteurs restent dans la page) ; regles : les règles de la mission (tâche A8 du lot 3) : les réactions en attente,
+  // les fenêtres ouvertes, les lignes d'Anton en attente, le calme d'une fin différée (secondes restantes, null sans
+  // calme) et l'état de chaque PNJ
+  const resumeTir = r => r && { tTir: r.tTir, tImpact: r.tImpact, volS: +(r.tImpact - r.tTir).toFixed(5),
+    distance: +r.point.distanceTo(r.origine).toFixed(2), zone: r.zone, cibleId: r.cibleId, derniere: r.derniere, fin: r.fin,
+    zero: r.zero, v0: r.v0, traversees: r.traversees.length, support: r.support && r.support.type }
   window.__mission = () => ({ ...missionPhase(), cibles: targets.filter(t => t.alive).length,
     pnj: npcs.map(n => n.mesh.position.toArray().map(v => +v.toFixed(3))),
     chronoMs: Math.round(performance.now() - statStart), tirs: statShots, touches: statHits, alertes: statAlerts, score,
-    balle: bulletInFlight, sol: mapGround(), souffle: holdBreathKey, dernierImpact: lastImpact,
-    jeeps: convoyCar ? convoyCar.vehicles.map(v => v.mesh.position.toArray().map(c => +c.toFixed(3))) : null })
+    balle: !!balle, sol: mapGround(), souffle: holdBreathKey, dernierImpact: lastImpact, tirMortel: resumeTir(dernierTirMortel),
+    jeeps: convoyCar ? convoyCar.vehicles.map(v => v.mesh.position.toArray().map(c => +c.toFixed(3))) : null,
+    regles: { reactions: alarme.enAttente().length, fenetres: fenetres.ouvertes(missionClock), radio: radio.enAttente(),
+      calme: fin.lancee ? +fin.resteS(missionClock).toFixed(3) : null, etats: npcs.map(n => n.state) } })
   // Visée scriptée (scripts/verif-mission.mjs) : __aimAt('cadenas') vise le cadenas du port, __aimAt('civil', 2) le
   // troisième civil vivant ('cible', 'garde', 'civil'). Rend le point visé ([x, y, z], dans le monde), faux si rien ne
   // correspond. Le tir reste celui du joueur.
   // avance (s) : vise là où le PNJ sera après le vol de la balle : une cible du convoi, qui roule (M5), ou un PNJ qui
-  // marche ou qui fuit (vitesses de NPC._move : speed en marche, speed × 8 en fuite, déviations ignorées).
+  // marche ou qui fuit (vitesses de NPC._move : speed en marche, speed × 8 en fuite, déviations ignorées). 'balle' : le
+  // temps de vol de la balle jusqu'au point visé (sa distance à la vitesse de la Vélocité), plus l'image où la visée est
+  // prise.
   // zone : 'torse' (défaut), 'tete' ou 'membre' : vise le milieu de la première zone touchée de cette partie (pour la
   // tête, le crâne), sur la pose du moment (NPC.hitZones, src/shot/hitzones.js) ; le milieu de sa boîte grossière s'il
   // n'en a pas.
@@ -1615,6 +1884,7 @@ if (import.meta.env.DEV) {
     const p = what === 'cadenas' ? moralLockBox && moralLockBox.getCenter(new THREE.Vector3())
       : z ? z.a.clone().lerp(z.b, 0.5) : npc?.getBounds().center
     if (!p) return false
+    if (avance === 'balle') avance = p.distanceTo(camera.position) / getStats().v0 + 1 / 60
     if (avance && convoyCar && npc) p.x += convoyCar.dir * convoyCar.speed * avance
     else if (avance && npc) p.addScaledVector(vitessePnj(npc), avance)
     ;({ yaw, pitch } = aimAngles(camera.position.toArray(), p.toArray()))
@@ -1738,6 +2008,40 @@ if (import.meta.env.DEV) {
       const report = (entries, state) => { pre.textContent = JSON.stringify(entries, null, 1); document.title = 'memtest:' + state }
       await runMemtest({ steps: memtestSteps(), act, render, snapshot, report })
     }).catch(err => { console.error('[memtest]', err); document.title = 'memtest:erreur' })
+  }
+  // ?sonde=1&poste=x,y,z&regard=x,y,z&near=…&far=…&brume=lin:debut:fin|exp2:densite&soleil=x,y,z&zoom=…&qualite=…
+  // &modele=nom[,nom…]&ecart=…&carte=1…6|nu : sonde de lisibilité à longue distance (spec du lot 3, §1 « 3.0 » et §4,
+  // porte de décision ; src/gfx/sonde.js et sondeScene.js), lue par scripts/capture-mission.mjs (cible sonde). La carte
+  // de la mission en cours (ou celle de carte=n, ou un sol nu), sans PNJ ; l'œil au poste, avec le profil demandé et le
+  // zoom de la lunette ; les modèles demandés côte à côte sous le point regardé, tournés vers le poste, sans teinte, à
+  // leur hauteur d'ajustement, avec l'ombre des cibles de M2 à M6 (rôle « civil »). Chacun est mesuré par un rendu
+  // d'identification : silhouette, tête et buste, en pixels rendus. La boucle du jeu s'arrête : l'image de la sonde,
+  // rendue une fois, reste à l'écran. __sonde() rend l'état (pret, erreur, mesures). &qualite= : le préréglage de la
+  // mesure, pas enregistré (sinon celui du profil).
+  if (q.has('sonde')) {
+    let etat = { pret: false, erreur: null }
+    window.__sonde = () => etat
+    Promise.all([import('./gfx/sonde.js'), import('./gfx/sondeScene.js')]).then(async ([{ lireSonde }, { monterSonde }]) => {
+      setCampaignPaused(true)   // plus aucun rendu du jeu : la caméra du menu ne dérive plus après la mesure
+      menuEl.style.display = 'none'
+      const config = lireSonde(location.search)
+      if (config.qualite) settings.graphics = config.qualite
+      applyQuality()
+      await charactersLoading   // les modèles imposés viennent du jeu (loadedModel)
+      const n = config.carte ?? upgradeState.currentLevel
+      let carte = null
+      if (n === 'nu') { clearMap(); setLighting() }
+      else {
+        // La carte, avec le profil de sa mission, comme au montage : sa brume (la carte n'en pose plus), dont la sonde
+        // garde la couleur ; puis la sonde pose le sien
+        carte = MAP_BUILDERS[(n - 1) % MAP_BUILDERS.length]()
+        applyCameraProfile(camera, scene, sun, missionFor(n).profil)
+      }
+      etat = monterSonde({ renderer, scene, camera, sun }, config, {
+        carte, solides: solidMeshes(), modele: loadedModel, ombre: npcCastsShadow(quality.npcShadows, 'civil'),
+        fenetre: [innerWidth, innerHeight],
+      })
+    }).catch(err => { console.error('[sonde]', err); etat = { pret: false, erreur: String((err && err.message) || err) } })
   }
   if (q.has('cine')) {
     menuEl.style.display = 'none'

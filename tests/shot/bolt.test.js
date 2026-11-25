@@ -18,11 +18,13 @@ beforeEach(async () => {
   U = await import('../../src/upgrades.js')
 })
 
-// La règle d'avant le lot 2, vue comme une culasse : prête dès la résolution de la balle, sans son ni jauge.
+// La règle d'avant le lot 2, vue comme une culasse : prête dès la résolution de la balle, sans son ni jauge. Le délai
+// est celui que getStats().bulletDelay rendait alors (retiré à la tâche A4 du lot 3, la balle ayant désormais son
+// temps de vol) : 0,45 s, 0,08 de moins par niveau de Vélocité.
 function reglesAvant() {
   let firedAt = -Infinity, delai = 0
   return {
-    fire(now) { firedAt = now; delai = U.getStats().bulletDelay },
+    fire(now) { firedAt = now; delai = 0.45 - U.state.levels.velocity * 0.08 },
     ready(now) { return now - firedAt >= delai - 1e-9 },
     progress() { return 1 },
     cues() { return [] },

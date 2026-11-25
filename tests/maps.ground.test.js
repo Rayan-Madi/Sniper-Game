@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import * as THREE from 'three'
 
-// maps.js et npc.js posent leurs objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
+// Les cartes (src/maps/) et npc.js posent leurs objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni
+// lumières.
 vi.mock('../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
 })
 
 import { scene } from '../src/scene.js'
-import { MAP_BUILDERS } from '../src/maps.js'
+import { MAP_BUILDERS } from '../src/maps/index.js'
 import { NPC } from '../src/npc.js'
 
 const NAMES = ['M1 marché', 'M2 parking', 'M3 port', 'M4 base', 'M5 convoi', 'M6 fête']
@@ -54,7 +55,7 @@ describe('sol des cartes : groundY est bien la hauteur du sol sous la zone d\'ap
     it(`${NAMES[i]} : le sol mesuré vaut groundY à 2 cm près`, () => {
       const info = build()
       const groundY = info.groundY ?? 0   // absent : les PNJ sont posés à 0
-      for (const [x, z] of samplePoints(info.spawnBounds)) {
+      for (const [x, z] of samplePoints(info.ancres.zone)) {
         const y = groundAt(x, z)
         expect(y, `sol introuvable en (${x}, ${z})`).not.toBe(null)
         expect(Math.abs(y - groundY), `sol mesuré ${y} en (${x}, ${z}), groundY ${groundY}`).toBeLessThanOrEqual(0.02)

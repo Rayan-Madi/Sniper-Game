@@ -29,6 +29,25 @@ describe.each(CAS)('scène %s %o', (id, params) => {
   })
 })
 
+// Effets atténués demandés par l'adresse (spec cinématiques v2 §3.2, point 1) : la route de développement
+// ?cine=<id>&attenue=1 transmet attenue dans params (main.js), et playCinematic force alors reducedMotion ; la version
+// atténuée d'une scène se capture ainsi sans toucher à main.js. Seule la valeur 1 compte.
+describe.each(CAS)('scène %s %o, paramètre attenue', (id, params) => {
+  const reduite = async p => {
+    const handle = await playCinematic(id, { params: p })
+    const st = document.querySelector('#briefing-root #st')
+    const vu = st.classList.contains('k-reduced')
+    handle.cancel()
+    return vu
+  }
+
+  it('attenue=1 pose k-reduced sur #st dès le montage (sans lui, ou avec attenue=0, non : garde-fou)', async () => {
+    expect(await reduite(params)).toBe(false)
+    expect(await reduite({ ...params, attenue: '0' })).toBe(false)
+    expect(await reduite({ ...params, attenue: '1' })).toBe(true)
+  })
+})
+
 // « NUMÉRO MASQUÉ » est la signature du recruteur (spec des cinématiques, écarts du plan 2) : l'offre du
 // prologue A, sa trace dans le journal d'appels du prologue B (refus du 21 février), et la source de
 // l'écoute de M6. Anton, lui, appelle toujours depuis son numéro jetable, affiché en clair.

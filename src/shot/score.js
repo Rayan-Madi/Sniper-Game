@@ -18,9 +18,10 @@ export function guardHit({ silenced, superSilenced }) {
   return { meurt: true, alerte: true, gardesReagissent: false, feed: 'Garde éliminé' }
 }
 
-// Tir manqué (la balle s'arrête dans le décor ou part au loin) : le fil ne parle de fuite que si des PNJ fuient
-// vraiment (fuyards : ceux que le point d'impact a fait fuir). Une balle partie au loin (point à 1 km) ou tirée au
-// silencieux ne fait fuir personne : « Tir manqué » seul (relecture de T5).
+// Tir manqué (la balle s'arrête dans le décor ou se perd au bout de son vol) : le fil ne parle de fuite que si des PNJ
+// fuient vraiment (fuyards : ceux que le point d'impact a fait fuir). Une balle perdue (à 480 m, au bout de 0,6 s :
+// ni son ni réaction, spec du lot 3, §2 c) ou tirée au silencieux ne fait fuir personne : « Tir manqué » seul
+// (relecture de T5).
 export function missFeed(fuyards) {
   return fuyards > 0 ? 'Tir manqué : cibles en fuite' : 'Tir manqué'
 }

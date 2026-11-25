@@ -2,12 +2,12 @@ import { describe, it, expect, vi } from 'vitest'
 import * as aim from '../../src/aim.js'
 import { MAIN_SRC, analyse } from '../gfx/mainSource.js'
 
-// maps.js pose ses objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
+// Les cartes (src/maps/) posent leurs objets dans la scène du jeu : une vraie THREE.Scene ici, sans rendu ni lumières.
 vi.mock('../../src/scene.js', async () => {
   const THREE = await import('three')
   return { scene: new THREE.Scene(), setLighting: () => {} }
 })
-import { MAP_BUILDERS } from '../../src/maps.js'
+import { MAP_BUILDERS } from '../../src/maps/index.js'
 
 // Plongée de la lunette (spec du lot 2, §3.2 ; plan, tâche T2) : tangage borné à [-1,35 ; 0,5] rad au lieu de
 // [-1,1 ; 0,5]. Avant, depuis le toit de M2 (22,5 m de haut, 8 m en retrait de la place), une bande d'environ 3 m de
@@ -48,7 +48,7 @@ const tangage = (de, x, y, z) => Math.asin((y - de[1]) / Math.hypot(x - de[0], y
 
 // Points de la zone d'apparition (grille de 0,5 m, bords compris), aux pieds et à la tête (1,7 m).
 function pointsDeZone(info) {
-  const b = info.spawnBounds, sol = info.groundY ?? 0, pts = []
+  const b = info.ancres.zone, sol = info.groundY ?? 0, pts = []
   for (let x = b.minX; x <= b.maxX + 1e-9; x += 0.5) for (let z = b.minZ; z <= b.maxZ + 1e-9; z += 0.5) {
     pts.push([x, sol, z], [x, sol + 1.7, z])
   }
@@ -58,7 +58,7 @@ function pointsDeZone(info) {
 // Points de la zone qu'une borne laisse hors d'atteinte : le tangage voulu n'est pas celui que la borne laisse prendre.
 function horsDAtteinte(info, borne) {
   return pointsDeZone(info).filter(([x, y, z]) => {
-    const p = tangage(info.cameraPos, x, y, z)
+    const p = tangage(info.ancres.oeil, x, y, z)
     return Math.abs(borne(p) - p) > 1e-9
   })
 }

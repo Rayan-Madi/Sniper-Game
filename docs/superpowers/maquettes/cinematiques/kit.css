@@ -1,5 +1,7 @@
 /* Kit commun des briefings « dossier du fixeur » — maquettes.
-   Tout est dimensionné en cqw (largeur de la scène 16:9) : la maquette tient à toute taille. */
+   Tout est dimensionné en cqw (largeur de la scène 16:9) : la maquette tient à toute taille. Les blocs « commun : … »
+   sont identiques dans src/briefing/kit.css et docs/superpowers/maquettes/cinematiques/kit.css (garde G7,
+   tests/briefing/kit-commun.test.js) : les retoucher des deux côtés. */
 * { box-sizing: border-box; }
 html, body { margin: 0; background: #050608; color: #d7dccf; font-family: system-ui, sans-serif; }
 .wrap { width: min(100%, calc((100vh - 56px) * 16 / 9)); margin: 0 auto; padding: 8px 10px; }
@@ -20,7 +22,8 @@ html, body { margin: 0; background: #050608; color: #d7dccf; font-family: system
 .st .scan { position: absolute; inset: 0; z-index: 19; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px); }
 .st .track { position: absolute; left: 0; right: 0; height: 4cqw; top: -5cqw; z-index: 19; pointer-events: none;
     background: linear-gradient(180deg, transparent, rgba(220,235,255,.07) 40%, rgba(220,235,255,.12) 50%, rgba(220,235,255,.07) 60%, transparent); animation: k-track 6.5s linear infinite; }
-@keyframes k-track { 0% { top: -5cqw } 100% { top: 60cqw } }
+/* la bande descend en transform (composée, sans repeindre l'image) : de top -5cqw à 60cqw, comme quand top l'animait */
+@keyframes k-track { 0% { transform: translateY(0) } 100% { transform: translateY(65cqw) } }
 .st .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.75) 100%); pointer-events: none; z-index: 20; }
 .st .grain { position: absolute; inset: -50%; z-index: 21; pointer-events: none; opacity: .09;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
@@ -51,7 +54,7 @@ html, body { margin: 0; background: #050608; color: #d7dccf; font-family: system
 .st .wave { display: flex; align-items: center; gap: .45cqw; height: 11cqw; margin: 2.2cqw 0; }
 .st .wave i { flex: 1; background: #e04848; height: 6%; border-radius: 1px; opacity: .85; transition: height .09s; }
 .st .trans { font-size: 2.6cqw; min-height: 3.4cqw; color: #f1f4ea; letter-spacing: .03em; }
-.st .who { font-size: 1.6cqw; color: rgba(215,220,207,.5); margin-top: 1.2cqw; letter-spacing: .15em; }
+.st .who { font-size: 1.6cqw; color: rgba(215,220,207,.62); margin-top: 1.2cqw; letter-spacing: .15em; }
 
 /* ── dossier ── */
 .st .dossier { position: absolute; top: 7.1cqw; left: 20cqw; width: 60cqw; padding: 1.8cqw 2cqw; border: 1px solid rgba(215,220,207,.28);
@@ -81,7 +84,7 @@ html, body { margin: 0; background: #050608; color: #d7dccf; font-family: system
 .st .idtag.on { opacity: 1; }
 .st .fields { flex: 1; padding-top: .4cqw; }
 .st .fl { font-size: 1.6cqw; line-height: 2.05; white-space: nowrap; min-height: 3.3cqw; }
-.st .fl .k { color: rgba(215,220,207,.5); }
+.st .fl .k { color: rgba(215,220,207,.62); }
 .st .redact { display: inline-block; height: 1.6cqw; width: 0; background: #d7dccf; vertical-align: middle; transition: width .45s cubic-bezier(.7,0,.2,1); }
 .st .redact.on { width: 14cqw; }
 .st .stamp { position: absolute; font-size: 3.2cqw; font-weight: bold; letter-spacing: .18em; color: #e04848; text-shadow: none;
@@ -150,6 +153,45 @@ html, body { margin: 0; background: #050608; color: #d7dccf; font-family: system
 .kctrl label { display: flex; align-items: center; gap: .3rem; }
 .kctrl .lbl { margin-left: auto; font-family: 'Courier New', monospace; }
 
-/* ── pas de transitions au chargement ni une fois figé (captures automatiques) ── */
+/* ── commun : matières ── */
+/* encre et papier statiques (spec cinématiques v2 §3.2, point 4) : .k-encre pose mask et filter (double frappe), jamais
+   transform, opacity ni animation ; .k-papier, une image de fond (couleur du papier par background-color) */
+.st { --k-encre: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='e'><feTurbulence type='fractalNoise' baseFrequency='.07' numOctaves='3' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -3 2.5'/></filter><rect width='100%' height='100%' filter='url(%23e)'/></svg>");
+      --k-papier: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='.05 .2' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .3 0 0 0 0 .24 0 0 0 0 .16 0 0 0 .5 -.22'/></filter><rect width='100%' height='100%' filter='url(%23p)'/></svg>"); }
+.st .k-encre { -webkit-mask-image: var(--k-encre); mask-image: var(--k-encre); -webkit-mask-size: 10cqw 10cqw; mask-size: 10cqw 10cqw;
+    filter: drop-shadow(.15cqw .1cqw 0 rgba(224,72,72,.4)); filter: drop-shadow(.15cqw .1cqw 0 color-mix(in srgb, currentColor 40%, transparent)); }
+.st .k-papier { background-image: var(--k-papier); background-size: 18cqw 18cqw; }
+/* frappe des tampons neufs (audit de design, CIN-7 ; spec §3.3) : le tampon tombe, s'écrase au contact (80 %, échelle
+   .97) et revient à 1 en 60 ms. S'emploie en .3s backwards sur un tampon dont le style de base est l'état frappé (son
+   opacité, transform: rotate(var(--k-rot))), la rotation lue dans --k-rot ; jumelle atténuée, dans la scène :
+   k-frappe-attenue en .15s backwards, un fondu sans changement d'échelle. Le .stamp de la v1 garde k-stamp. */
+@keyframes k-frappe { 0% { opacity: 0; transform: rotate(var(--k-rot, 0deg)) scale(2.4); animation-timing-function: cubic-bezier(.6,0,.9,.4) }
+    80% { opacity: .95; transform: rotate(var(--k-rot, 0deg)) scale(.97); animation-timing-function: ease-out }
+    100% { transform: rotate(var(--k-rot, 0deg)) scale(1) } }
+@keyframes k-frappe-attenue { 0% { opacity: 0 } }
+/* ── fin du commun : matières ── */
+
+/* ── commun : atténué ── */
+/* effets atténués (k-reduced sur #st : réglage du jeu, ?attenue=1 des maquettes) : grain d'un glitch au tiers de sa
+   hausse, .09 + (.32 - .09) / 3 ; carton SIGNAL PERDU sans clignoter (5,5 Hz sinon, au-delà de 3 flashs par seconde) */
+.st.k-reduced.gl .grain { opacity: .17; }
+.st.k-reduced .lost.on { animation: none; }
+/* jumelles des animations infinies du kit (spec cinématiques v2 §3.7, garde G4 : tests/briefing/attenue.test.js) :
+   voyants allumés fixes, ligne de balayage à sa pose de repos (hors cadre), ondes en anneau fixe, égaliseur de la radio
+   figé à mi-hauteur tant qu'Anton parle ; flash des pièces à conviction plafonné à .3 */
+.st.k-reduced .track { animation: none; }
+.st.k-reduced .rec, .st.k-reduced .photo .cam b, .st.k-reduced .radio .dot { animation: none; }
+.st.k-reduced .pulse { animation: none; transform: scale(1.7); opacity: .45; }
+.st.k-reduced .radio.talk .eq i { animation: none; height: 60%; }
+.st.k-reduced .radio.talk .eq i:nth-child(2n) { height: 90%; }
+.st.k-reduced .radio.talk .eq i:nth-child(3) { height: 35%; }
+.st.k-reduced .evp.on .flash { animation: k-flash-attenue .45s ease-out; }
+@keyframes k-flash-attenue { 0% { opacity: .3 } 100% { opacity: 0 } }
+/* ── fin du commun : atténué ── */
+
+/* ── commun : gel ── */
+/* pas de transitions au chargement ni une fois figé (captures automatiques) : au gel, tout saute à sa fin ; un mouvement
+   long dont la capture doit montrer la vraie position passe par K.anim (pause CSS au gel écartée, spec §3.2, point 6) */
 .st.k-preload, .st.k-preload * { transition: none !important; }
 .st.k-frozen, .st.k-frozen * { transition: none !important; animation-duration: 0s !important; animation-delay: 0s !important; }
+/* ── fin du commun : gel ── */

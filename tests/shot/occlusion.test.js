@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as THREE from 'three'
 
 // Ce que la balle touche en premier (spec du lot 2, §3.4 et §4 ; plan, tâche T5) : les zones des PNJ (npcHit), le
-// décor solide de la carte (maillages marqués userData.solid par maps.js, jeeps du convoi) et le cadenas du port ;
+// décor solide de la carte (maillages marqués userData.solid par src/maps/, jeeps du convoi) et le cadenas du port ;
 // resolveImpact garde le plus proche : { kind: 'npc' }, { kind: 'decor' } ou { kind: 'rien' } (point au loin).
 // solidHit cherche le décor sur le rayon : ce qui n'est pas solide est traversé, et les OCCLUSION.departM premiers
 // mètres devant l'œil ne comptent pas (le poste : le joueur est posé sur la face arrière du rebord de sa fenêtre en
@@ -248,12 +248,12 @@ describe('solidHit : le décor solide sur le rayon', () => {
   })
 })
 
-// Sur les vraies cartes (maps.js) et un vrai PNJ (repli procédural, npcHit) : le parcours du tir dans main.js.
+// Sur les vraies cartes (src/maps/) et un vrai PNJ (repli procédural, npcHit) : le parcours du tir dans main.js.
 describe('sur les cartes du jeu', () => {
   let maps, NPC, npcHit, withSeed
   beforeEach(async () => {
     vi.resetModules()
-    maps = await import('../../src/maps.js')
+    maps = await import('../../src/maps/index.js')
     ;({ NPC } = await import('../../src/npc.js'))
     ;({ npcHit } = await import('../../src/shot/hitzones.js'))
     ;({ withSeed } = await import('../../src/gfx/memtest.js'))
@@ -275,7 +275,7 @@ describe('sur les cartes du jeu', () => {
     const n = cible(-16.5, -3, info.groundY)
     const torse = n.hitZones().find(z => z.part === 'torse')
     const visee = torse.a.clone().lerp(torse.b, 0.5)
-    const ray = vers(v(...info.cameraPos), visee)
+    const ray = vers(v(...info.ancres.oeil), visee)
     expect(npcHit(ray, [n])?.npc, 'le rayon traverse bien la cible').toBe(n)
     const r = tir(ray, [n], info.groundY)
     expect(r.kind).toBe('decor')
@@ -288,16 +288,17 @@ describe('sur les cartes du jeu', () => {
     const info = withSeed(1002, maps.MAP_BUILDERS[2])
     const n = cible(-8, -3, info.groundY)
     const torse = n.hitZones().find(z => z.part === 'torse')
-    const r = tir(vers(v(...info.cameraPos), torse.a.clone().lerp(torse.b, 0.5)), [n], info.groundY)
+    const r = tir(vers(v(...info.ancres.oeil), torse.a.clone().lerp(torse.b, 0.5)), [n], info.groundY)
     expect(r).toMatchObject({ kind: 'npc', npc: n, part: 'torse' })
     n.dispose()
   })
 
   it('M6 fête : du poste (posé sur le rebord de la fenêtre), la cible assise sur le canapé est touchée', () => {
     const info = withSeed(1005, maps.MAP_BUILDERS[5])
-    const n = cible(-8, -21.7, info.hiddenTarget.seatY)
+    const { x, z, assise } = info.ancres.places.canape
+    const n = cible(x, z, assise)
     const torse = n.hitZones().find(z => z.part === 'torse')
-    const r = tir(vers(v(...info.cameraPos), torse.a.clone().lerp(torse.b, 0.5)), [n], info.groundY)
+    const r = tir(vers(v(...info.ancres.oeil), torse.a.clone().lerp(torse.b, 0.5)), [n], info.groundY)
     expect(r).toMatchObject({ kind: 'npc', npc: n })
     n.dispose()
   })
@@ -308,7 +309,7 @@ describe('sur les cartes du jeu', () => {
   POINTS.forEach(([x, z], i) => {
     it(`M${i + 1} : du poste vers (${x}, ${z}), la balle finit sur le sol de la carte`, () => {
       const info = withSeed(1000 + i, maps.MAP_BUILDERS[i])
-      const r = tir(vers(v(...info.cameraPos), v(x, info.groundY, z)), [], info.groundY)
+      const r = tir(vers(v(...info.ancres.oeil), v(x, info.groundY, z)), [], info.groundY)
       expect(r.kind).toBe('decor')
       expect(r.surface).toBe('sol')
       expect(Math.abs(r.point.y - info.groundY)).toBeLessThanOrEqual(0.011)

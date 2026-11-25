@@ -88,6 +88,21 @@ export function fakeCharacter({ armature = false } = {}) {
   return { scene: root, animations }
 }
 
+// Préfixe des maillages de chaque modèle du jeu, lu dans l'en-tête de son GLB (gangster_man_02 : Ch01_Body,
+// Ch01_Shirt…). Tests du casting (tâche A6 du lot 3) : la teinte par maillage vise un maillage par son nom.
+export const PREFIXES_MAILLAGES = { gangster_man_01: 'Ch33', gangster_man_02: 'Ch01', mafia_boss: 'vanguard',
+  mafia_henchman: 'Ch15', mafia_woman_01: 'Ch41', mafia_woman_02: 'Ch07', mafia_woman_03: 'Ch22' }
+
+// Faux modèle désigné par son adresse : la forme de fakeCharacter, l'adresse dans le userData de sa racine (un clone la
+// garde), et ses deux maillages animés nommés comme ceux du vrai modèle (Ch01_Body et Ch01_Shirt pour gangster_man_02).
+export function fakeModel(url) {
+  const g = fakeCharacter()
+  g.scene.userData.url = url
+  const prefixe = PREFIXES_MAILLAGES[url.split('/').pop().replace(/\.glb$/, '')]
+  if (prefixe) g.scene.traverse(o => { if (o.isSkinnedMesh) o.name = `${prefixe}_${o.name}` })
+  return g
+}
+
 // Géométries, matériaux et textures d'un arbre (ce qu'un GLB du cache partage entre ses instances).
 export function resourcesOf(root) {
   const out = new Set()
