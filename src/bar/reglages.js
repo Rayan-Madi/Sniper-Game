@@ -213,6 +213,35 @@ export const COQUILLE = {
   graine: 0x0b1fc011,   // hasard de la coquille (coups d'œil de MÉFIANCE, murmures d'Albert) : la même soirée à chaque partie
 }
 
+// ─── L'interface (§3.6, §3.8, §3.10, §3.11, §9 ; tâche B12) ────────
+// Ce que le joueur voit par-dessus la salle (src/bar/index.js, src/bar/bar.css). Les durées des fins sont au temps de la
+// boucle (borné comme le pas de jeu) : la pause ne s'ouvre plus une fois la fin commencée.
+export const INTERFACE = {
+  pivot: { reponseS: 0.35 },   // la vue pivote vers qui parle à Viktor (dialogue, démasqué), en tant de constante de temps ;
+                        // jamais en effets atténués (§9 : le panneau dit qui parle)
+  minuterieAlerteS: 3,  // la minuterie d'une réponse passe au rouge sur ses tant dernières secondes (audit BAR-3)
+  noteS: 2.5,           // le tampon NOTÉ reste au carnet tant de secondes de jeu après l'apprentissage
+  arcS: 2.5,            // un arc au bord de l'écran, vers un homme de l'escorte hors champ qui vient de remarquer Viktor (s de jeu)
+  pointHeureS: 0.6,     // le point de l'heure s'éteint et se rallume toutes les tant (s de jeu) : moins d'un éclat par
+                        // seconde ; fixe en effets atténués (§9)
+  demasque: {           // la scène du démasqué (§3.10) : 2,5 s au temps de jeu, puis onDone
+    dureeS: 2.5,
+    tablesS: 0.4,       // les deux tables de l'escorte se lèvent (qui parle s'est levé tout de suite)
+    noirS: 1.3,         // le noir tombe (0,6 s) : « Toi. Debout. » est frappé et lu avant
+    tamponS: 1.8,       // COUVERTURE GRILLÉE, frappé sur le noir
+  },
+  bilan: {              // le bilan « DOSSIER 05 » et le téléphone d'Anton (§3.11, 4 à 6 s), sur le noir de la sortie
+    ficheS: 0.7,        // la fiche et sa première ligne
+    ligneS: 0.3,        // une ligne de plus toutes les tant
+    telephoneS: 2.1,    // le téléphone s'allume (ANTON) et vibre
+    salves: 2,          // salves de vibration…
+    salveS: 0.28, ecartS: 0.42,   // … celles de l'enquête (BUZZ de src/prologue/ambience.js)
+    messageS: 3.1,      // « Alors ? » se tape
+    viktorS: 3.9,       // la réponse de Viktor se tape (« Il faudra faire avec. » finit vers 5,2 s)
+    finS: 5.8,          // onDone
+  },
+}
+
 // ─── Les dialogues à choix (§3.8) ──────────────────────────────────
 // Décision 7 de la spec (G4), tranchée le 28 octobre 2026 : 10 s, 6 s face à Sorel. Le déroulé (src/bar/dialogue.js) :
 // une réplique dure son estimation (350 + 62 × longueur ms, src/briefing/kit.js:10), frappée en 0,8 de ce temps.
@@ -352,6 +381,15 @@ export const SON = {
   note: {               // NOTÉ : le papier (paper, sound.js:115) et le crayon qui gratte
     papier: { hz: 2200, finHz: 3800, q: 0.8, dureeS: 0.22, niveau: 0.12 },
     crayon: { hz: 3500, q: 2, dureeS: 0.3, traits: 3, niveau: 0.05, retardS: 0.12 },   // traits : trois coups de crayon
+  },
+  tic: {                // la minuterie d'une réponse, à 1,5, 1 et 0,5 s de l'échéance (clock() du kit, sound.js:121 ; §3.8)
+    ton: { hz: 2600, dureeS: 0.015, niveau: 0.05 },   // un carré bref
+    bruit: { hz: 4000, dureeS: 0.02, niveau: 0.06 },  // un souffle aigu (passe-haut)
+  },
+  vibration: {          // une salve du téléphone au bilan (buzz() et BUZZ.salve de src/prologue/ambience.js)
+    moteurHz: 152, boisHz: 76,   // le moteur (dents de scie) et le bois qui résonne dessous (carré)
+    passeBas: 480, q: 3,         // sourds, sous un même passe-bas
+    niveau: 0.2, dureeS: 0.28, attaqueS: 0.025, relacheS: 0.04,
   },
   pas: {                // un pas de Viktor (amb.step, ambience.js:96), sur le parquet
     bruit: { hz: 420, dureeS: 0.07, niveau: 0.1 },

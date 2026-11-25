@@ -357,6 +357,31 @@ describe('les sons ponctuels (§3.12)', () => {
     expect(f.oscillateurs(o0).map(frequence)).toEqual([68])   // amb.step() de l'enquête (ambience.js:96)
     son.stop()
   })
+  it('tic (tâche B12) : le clock() du kit, un carré à 2,6 kHz de 15 ms et un souffle aigu à 4 kHz (la minuterie d\'une réponse, §3.8)', () => {
+    const f = fauxAudio(); const son = creerSon(f.audio)
+    const o0 = f.oscillateurs().length, s0 = f.ctx.createBufferSource.mock.results.length
+    son.tic()
+    const oscs = f.oscillateurs(o0)
+    expect(oscs.map(o => [o.type, frequence(o)])).toEqual([['square', SON.tic.ton.hz]])
+    expect(oscs[0].stop.mock.calls[0][0] - debut(oscs[0])).toBeCloseTo(0.015 + 0.02, 6)
+    const bruits = f.ctx.createBufferSource.mock.results.slice(s0).map(r => r.value)
+    expect(bruits.map(b => premier(b, n => n.genre === 'filtre')).map(n => [n.type, n.frequency.premiere])).toEqual([['highpass', 4000]])
+    son.stop()
+  })
+  it('vibre (tâche B12) : une salve du téléphone de l\'enquête (152 et 76 Hz sous un passe-bas à 480 Hz, 0,28 s), débranchée après', () => {
+    const f = fauxAudio(); const son = creerSon(f.audio)
+    const o0 = f.oscillateurs().length
+    son.vibre()
+    const oscs = f.oscillateurs(o0)
+    expect(oscs.map(o => [o.type, frequence(o)])).toEqual([['sawtooth', 152], ['square', 76]])   // buzz() d'ambience.js
+    const bas = premier(oscs[0], n => n.genre === 'filtre')
+    expect([bas.type, valeur(bas.frequency), valeur(bas.Q)]).toEqual(['lowpass', 480, 3])
+    expect(premier(oscs[1], n => n.genre === 'filtre')).toBe(bas)
+    expect(oscs[0].stop.mock.calls[0][0] - debut(oscs[0])).toBeCloseTo(SON.vibration.dureeS + 0.02, 6)
+    avance(f, son, 1)
+    expect(oscs.every(o => o.sorties.size === 0)).toBe(true)
+    son.stop()
+  })
   it('contexte suspendu : ni syllabe, ni note, ni son ponctuel, qui partiraient tous d\'un coup à la reprise', () => {
     const f = fauxAudio({ etat: 'suspended' }); const son = creerSon(f.audio)
     avance(f, son, 3, { presents: 8, soupcon: 70, palier: 'soupcon' })

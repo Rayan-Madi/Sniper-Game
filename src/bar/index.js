@@ -19,8 +19,12 @@
 // pas de Viktor, la soirée, le dialogue, l'écoute, les pensées et réactions, les déclencheurs, les patrons, les regards
 // puis la jauge (et ses remarques, src/bar/regard.js), la salle, les voix et le son, la visée, l'interface.
 //
-// L'interface est ici réduite à ce qui rend la soirée jouable (carte, pause, noir, sous-titre, pensée, dialogue, invite,
-// carnet, heure) ; la tâche B12 lui donne sa forme (jauge, anneau, arcs, vignette, tampon NOTÉ, bilan, téléphone).
+// L'interface (tâche B12) : la jauge (œil, barre graduée, plancher hachuré, palier), l'anneau de fixation, les arcs du
+// bord, la vignette rouge, les lignes de texte (qui parle : le rôle, puis le nom une fois prononcé ; une flèche quand la
+// source sort du champ), le panneau de dialogue, le carnet et son tampon NOTÉ, l'heure, l'invite et son anneau de
+// maintien ; puis les fins : la scène du démasqué (2,5 s au temps de jeu, §3.10) et le bilan « DOSSIER 05 » avec le
+// téléphone d'Anton (§3.11). onSortie(contrat), facultatif, est appelé une fois au début du bilan (sorti, passe), avec le
+// contrat que rendra onDone : la sauvegarde peut se faire avant le bilan (§6). Valeurs : INTERFACE de reglages.js.
 import * as THREE from 'three'
 import css from './bar.css?raw'
 import { creerSalle } from './salle.js'
@@ -29,13 +33,13 @@ import { createSeance, ESCORTE } from './seance.js'
 import { createSoupcon, PALIERS } from './soupcon.js'
 import { createRegards } from './regard.js'
 import { intelligibilite, transmission, fragilites, affichage, masquer, acquis } from './ecoute.js'
-import { createDialogue } from './dialogue.js'
+import { createDialogue, libelleChoix } from './dialogue.js'
 import { createCarnet, QUATRE } from './renseignements.js'
 import { creerChoeur, reglageBips } from './voix.js'
 import { creerSon } from './son.js'
 import { BOITES, FOYERS, PLACES, ANCRES, SIEGES, TABLES, dansZone, lacetVers, itineraire } from './plan.js'
-import { ECOUTE, SOUPCON, COUVERTURE, COQUILLE, DIALOGUE } from './reglages.js'
-import { PERSONNES, RENSEIGNEMENTS, LEURRE, CARNET, ECHANGES, ALBERT, REGARDS, REACTIONS, OBJETS, DIALOGUES, CARTE } from './textes.js'
+import { ECOUTE, SOUPCON, COUVERTURE, COQUILLE, DIALOGUE, INTERFACE, SON } from './reglages.js'
+import { PERSONNES, RENSEIGNEMENTS, LEURRE, CARNET, ECHANGES, ALBERT, REGARDS, REACTIONS, OBJETS, DIALOGUES, CARTE, BILAN, bilan as bilanDe } from './textes.js'
 import { createFrappe, dureeFrappe } from '../ui/frappe.js'
 import { createFpsController, forwardOf } from '../prologue/fpsController.js'
 import { createInteract } from '../prologue/interact.js'
@@ -54,6 +58,13 @@ const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z)
 const ECHANGE = new Map(ECHANGES.map(e => [e.id, e]))
 const SIEGE = new Map(SIEGES.map(s => [s.id, s]))
 const RESULTATS = Object.freeze(['sorti', 'demasque', 'passe', 'abandon', 'erreur'])
+const I = INTERFACE
+const PALIER_LIBELLE = { calme: 'CALME', mefiance: 'MÉFIANCE', soupcon: 'SOUPÇON', demasque: 'DÉMASQUÉ' }
+const PLAFOND = SOUPCON.paliers.demasque.monte
+const TABLES_ESCORTE = Object.freeze(['dussart', 'lenoir', 'mattei', 'haas'])   // les deux tables qui se lèvent (§3.10)
+// la forme d'un mot pour reconnaître un nom prononcé : minuscules, sans la ponctuation qui l'entoure
+const forme = mot => String(mot).normalize('NFC').toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+const NOMS = Object.entries(PERSONNES).filter(([, p]) => p.nom).map(([id, p]) => [id, forme(p.nom)])
 
 // la pose de l'option cam : 'x,y,z,lacet,tangage' ou { x, y, z, yaw, pitch }
 function lirePose(cam) {
@@ -66,11 +77,21 @@ function lirePose(cam) {
 const lireInfos = infos => (Array.isArray(infos) ? infos : String(infos || '').split(',')).map(s => s.trim()).filter(Boolean)
 
 const HTML = `
-  <div class="bar-fx"><div class="bar-scan"></div><div class="bar-vig"></div></div>
-  <div class="bar-heure" id="bar-heure">LE BIVOUAC · 18:10</div>
-  <div class="bar-carnet" id="bar-carnet"><h4></h4><ul></ul></div>
+  <div class="bar-fx"><div class="bar-scan"></div><div class="bar-vig"></div><div class="bar-vignette" id="bar-vignette"></div></div>
+  <div class="bar-arcs"><i class="arc gauche" id="bar-arc-g"></i><i class="arc droite" id="bar-arc-d"></i></div>
+  <div class="bar-jauge p-calme" id="bar-jauge">
+    <svg class="bar-oeil" viewBox="0 0 28 16" aria-hidden="true">
+      <g class="ouvert"><path d="M2 8 Q14 -2.5 26 8 Q14 18.5 2 8 Z"/><circle cx="14" cy="8" r="3.4"/></g>
+      <g class="clos"><path d="M2 8 Q14 15.5 26 8"/><path d="M2 8 Q14 4.5 26 8"/></g>
+    </svg>
+    <div class="bar-barre"><i class="niveau"></i><i class="plancher"></i>${[SOUPCON.paliers.mefiance.monte, SOUPCON.paliers.soupcon.monte].map(v => `<b style="left:${v / PLAFOND * 100}%"></b>`).join('')}</div>
+    <span class="bar-palier">CALME</span>
+  </div>
+  <div class="bar-heure" id="bar-heure"><i class="pt"></i><span class="tx">LE BIVOUAC · 18:10</span></div>
+  <div class="bar-carnet" id="bar-carnet"><h4><span class="titre"></span><b class="compte"></b></h4><ul></ul></div>
   <div class="bar-cross"></div>
-  <div class="bar-prompt" id="bar-prompt"></div>
+  <div class="bar-anneau" id="bar-anneau"></div>
+  <div class="bar-prompt" id="bar-prompt"><span class="touche"><i class="anneau"></i><b></b></span><span class="tx"></span></div>
   <div class="bar-pensee" id="bar-pensee"><span class="spk"></span><span class="tx"></span></div>
   <div class="bar-reaction" id="bar-reaction"><span class="spk"></span><span class="tx"></span></div>
   <div class="bar-sub" id="bar-sub"><span class="spk"></span><span class="tx"></span></div>
@@ -82,6 +103,12 @@ const HTML = `
     <div class="bar-minuterie"><i></i></div>
   </div>
   <div class="bar-black" id="bar-black"></div>
+  <div class="bar-demasque" id="bar-demasque" hidden><div class="tampon"></div></div>
+  <div class="bar-bilan" id="bar-bilan" hidden>
+    <div class="fiche"><div class="onglet"></div><ul></ul></div>
+    <div class="bar-tel"><div class="ecran"><span class="de"></span><span class="msg"></span></div></div>
+    <p class="viktor"><span class="spk">VIKTOR</span><span class="tx"></span></p>
+  </div>
   <div class="bar-card" id="bar-card">
     <div class="d"></div>
     <div class="l"></div>
@@ -99,7 +126,7 @@ const HTML = `
     <button type="button" id="bar-menu">MENU PRINCIPAL</button>
   </div>`
 
-export function startBar({ renderer, camera, audio = null, root = document.body, onDone = () => {}, options = {} } = {}) {
+export function startBar({ renderer, camera, audio = null, root = document.body, onDone = () => {}, onSortie = null, options = {} } = {}) {
   const opts = options || {}
   const journal = []          // ce qui s'est passé, au temps de la soirée (vérification réelle, accroches de développement)
   const listening = []        // [cible, type, fonction] à retirer au démontage
@@ -139,6 +166,13 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
   const voixDe = new Map()    // qui parle → d'où vient sa voix ({ x, z, voix } ou 'direct')
   let dussartApproche = false, demasque = false
   let saut = false            // option t : la soirée passe sans être jouée
+  // ── l'interface (B12) ──
+  const nommes = new Set()    // les personnes dont le nom s'est lu (le sous-titre dit alors le nom, et non plus le rôle)
+  const tampons = new Map()   // renseignement → l'instant de la soirée où il s'est appris (le tampon NOTÉ du carnet)
+  const arcs = new Map()      // homme de l'escorte qui vient de remarquer Viktor → secondes d'arc restantes
+  let vuParQuiCompte = false  // quelqu'un dont le regard compte pour la jauge voit Viktor (l'œil ouvert)
+  const cache = new Map()     // ce qui est déjà écrit dans le DOM, pour ne pas le réécrire à chaque image
+  const changer = (cle, v, fn) => { if (cache.get(cle) !== v) { cache.set(cle, v); fn(v) } }
 
   const note = (type, champs = {}) => { const e = { t: seance ? +seance.t.toFixed(3) : 0, type, ...champs }; journal.push(e); return e }
   const locked = () => !!document.pointerLockElement
@@ -257,6 +291,7 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     const nouveaux = carnet.apprendre(noms)
     if (!nouveaux.length) return
     note('appris', { noms: nouveaux, source })
+    for (const n of nouveaux) tampons.set(n, seance ? seance.t : 0)
     for (const n of nouveaux) {
       if (n === 'appel' || n === 'allie') continue
       if (son) son.note()
@@ -411,6 +446,7 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
         parler(e.qui, e.dureeS, e.qui === 'viktor' ? 'direct' : null)
         note('ligne', { qui: e.qui, texte: e.texte })
       } else if (e.type === 'choix') note('choix', { noeud: e.noeud, choix: e.choix.map(c => c.texte) })
+      else if (e.type === 'tic') { if (son) son.tic() }
       else if (e.type === 'effets') { note('effets', { noeud: e.noeud, issue: e.issue, effets: e.effets }); appliquerEffets(e.effets) }
       else if (e.type === 'fin') { fermerDialogue(); return }
       if (!dialogue || fin) return
@@ -497,30 +533,115 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
   // ─── La fin ───
   // Démasqué (§3.10) : « Toi. Debout. » (Sorel une fois entré, Dussart avant ; personne une fois l'escorte partie), puis
   // la fin. La séquence de 2,5 s (les têtes, les tables qui se lèvent, COUVERTURE GRILLÉE) est celle de la tâche B12.
+  // Sorti par la porte en SOUPÇON, Sorel a déjà dit « Hé. Vous. Attendez. » : personne ne dit « Toi. Debout. » à un homme
+  // debout sur le seuil.
   function demasquer(cause) {
     if (fin || demasque) return
     demasque = true
     note('demasque', { cause })
     if (jauge.palier !== 'demasque') suivreJauge(jauge.evenement('demasque'))
-    const r = REACTIONS.demasque, qui = seance.escortePartie ? null : seance.sorelEntre ? r.qui : r.quiAvantSorel
-    if (qui && present(qui)) dire(qui, r.texte)
+    const r = REACTIONS.demasque
+    const qui = cause === 'sortieSoupcon' || seance.escortePartie ? null : seance.sorelEntre ? r.qui : r.quiAvantSorel
+    const dit = qui && present(qui) ? qui : null
+    if (dit) {
+      paroles.reaction.file.length = 0; paroles.reaction.cur = null   // il coupe ce qui se disait : on le lit tout de suite
+      dire(dit, r.texte)
+      const p = patron(dit)
+      if (p.pose === 'assis') p.seLever()
+    }
+    choregraphie.clear()
     finir('demasque')
+    if (fin) fin.qui = dit
   }
   function sortir() {
     if (fin || !seance) return
     note('sortir', { S: jauge.S })
     for (const e of seance.sortir(jauge.S)) traiterSoiree(e)
   }
+  // La fin : le noir tombe (démasqué : après sa scène), puis la scène du démasqué, le bilan (sorti, passe) ou rien
+  // (abandon) ; onDone quand elle est jouée (image).
   function finir(resultat) {
     if (fin || stopped) return
-    fin = { resultat, t: 0 }
+    const mode = resultat === 'demasque' ? 'demasque' : resultat === 'sorti' || resultat === 'passe' ? 'bilan' : 'noir'
+    fin = { resultat, t: 0, mode, faits: new Set(), qui: null, bilan: null }
     note('fin', { resultat })
     annulerMaintien()
-    const black = $('#bar-black')
-    if (black) { black.classList.add('end'); black.classList.remove('off') }
+    arcs.clear()
     if ($('#bar-card')) $('#bar-card').hidden = true
     if ($('#bar-pause')) $('#bar-pause').hidden = true
     if (controller) controller.setFrozen(true)
+    if (interact) interact.clear()
+    if (mode !== 'demasque') noir()
+    if (mode === 'bilan' && typeof onSortie === 'function') {
+      try { onSortie(contrat(resultat)) } catch (e) { console.error('[bar]', e) }
+    }
+  }
+  function noir() {
+    const black = $('#bar-black')
+    if (black) { black.classList.add('end'); black.classList.remove('off') }
+  }
+  // une étape de la fin, une seule fois, dès son instant
+  const une = (cle, quand, fn) => { if (fin.t >= quand - EPS && !fin.faits.has(cle)) { fin.faits.add(cle); fn() } }
+  const allumer = el => { if (!el) return; el.hidden = false; void el.offsetWidth; el.classList.add('on') }
+
+  // Démasqué (§3.10), au temps de jeu : qui parle se lève et dit « Toi. Debout. », toutes les têtes se tournent vers
+  // Viktor, la salle se tait (le son, au palier DÉMASQUÉ), les deux tables se lèvent, le noir, le tampon COUVERTURE GRILLÉE.
+  function sceneDemasque(g) {
+    const D = I.demasque
+    une('tables', D.tablesS, () => {
+      for (const r of TABLES_ESCORTE) { const p = patron(r); if (p && p.present && p.pose === 'assis') p.seLever() }
+    })
+    une('noir', D.noirS, noir)
+    une('tampon', D.tamponS, () => allumer($('#bar-demasque')))
+    avancerParoles(g)
+    for (const p of casting.liste) if (p.present) { p.regarder(oeil); p.parler(!!choeur && choeur.parle(p.role)) }
+    if (fin.qui && present(fin.qui)) pivoter(g, patron(fin.qui).personne)
+    controller.update(0)
+    suivreOeil()
+    casting.update(g)
+    voixEtSon(g, false)
+    placerVerre()
+    afficher()
+  }
+
+  // Le bilan « DOSSIER 05 » et le téléphone (§3.11), sur le noir : les quatre lignes, apprises (la valeur et NOTÉ) ou
+  // INCONNU ; le téléphone vibre (les salves de l'enquête), ANTON, « Alors ? » tapé ; la réponse de Viktor. La salle reste
+  // derrière la porte (la musique plus bas, comme en pause).
+  function preparerBilan() {
+    const donnees = bilanDe(fin.resultat === 'passe' || !carnet ? {} : carnet.renseignements)
+    const el = $('#bar-bilan')
+    fin.bilan = { donnees, message: null, reponse: null }
+    if (!el) return
+    el.querySelector('.onglet').textContent = donnees.titre
+    el.querySelector('ul').innerHTML = donnees.lignes.map(l => `<li class="${l.appris ? 'su' : 'inconnu'}"><span class="lib">${esc(l.libelle)}</span>`
+      + `<span class="val">${esc(l.valeur)}</span>${l.appris ? `<i class="tampon">${esc(BILAN.tampon)}</i>` : ''}</li>`).join('')
+    el.querySelector('.de').textContent = donnees.telephone.de
+  }
+  function sceneBilan(g) {
+    const B = I.bilan
+    if (!fin.bilan) preparerBilan()
+    const b = fin.bilan, el = $('#bar-bilan')
+    une('fiche', B.ficheS, () => allumer(el))
+    if (el) {
+      el.querySelectorAll('li').forEach((li, k) => une(`ligne${k}`, B.ficheS + k * B.ligneS, () => li.classList.add('on')))
+      const tel = el.querySelector('.bar-tel')
+      une('telephone', B.telephoneS, () => tel.classList.add('on'))
+      for (let k = 0; k < B.salves; k++) {
+        const debut = B.telephoneS + k * (B.salveS + B.ecartS)
+        une(`salve${k}`, debut, () => { tel.classList.add('vibre'); if (son) son.vibre() })
+        une(`finSalve${k}`, debut + B.salveS, () => tel.classList.remove('vibre'))
+      }
+    }
+    une('message', B.messageS, () => { b.message = createFrappe(); b.message.dire(b.donnees.telephone.message) })
+    une('viktor', B.viktorS, () => {
+      b.reponse = createFrappe(); b.reponse.dire(b.donnees.viktor)
+      parler('viktor', estimate(b.donnees.viktor) / 1000, 'direct')
+      if (el) el.querySelector('.viktor').classList.add('on')
+    })
+    if (b.message) { b.message.update(g); if (el) changer('bilan.msg', b.message.texte, v => { el.querySelector('.msg').textContent = v }) }
+    if (b.reponse) { b.reponse.update(g); if (el) changer('bilan.viktor', b.reponse.texte, v => { el.querySelector('.viktor .tx').textContent = v }) }
+    voixEtSon(g, true)
+    if (choeur) choeur.update(g, { sources: { viktor: { gain: 1, pan: 0 } }, sousTitre: null })
   }
 
   // une erreur en cours de route ne bloque pas la partie : on termine en « erreur », avec ce qui est appris
@@ -656,6 +777,7 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     const interdite = dansZone('interdite', p)
     if (interdite && present('fernand') && !temoins.includes('fernand')) temoins.push('fernand')   // il voit toujours le zinc
     const vu = temoins.some(c => SOUPCON.temoins[c] > 0)
+    vuParQuiCompte = vu
     if (interdite && !viktor.interdite && vu) evenementJauge('surprisZoneInterdite')
     viktor.interdite = interdite
     const sources = [...regards.sources]
@@ -670,6 +792,7 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     for (const e of emis) {
       if (e.type === 'remarque') {
         note('remarque', { qui: e.qui, categorie: e.categorie })
+        if (e.categorie === 'escorte') arcs.set(e.qui, I.arcS)
         evenementJauge('remarque', e.categorie)
         if (!premiereRemarque) { premiereRemarque = true; dire('viktor', REACTIONS.premiereFixation.texte) }
         if (e.categorie === 'escorte' && !l2Du) { l2Du = true; attendre('lise-regard') }
@@ -739,7 +862,10 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     const reel = Math.min(Math.max(+dt || 0, 0), 0.1)
     if (fin) {
       fin.t += reel
-      if (fin.t >= K.noirFinS - EPS) { const payload = contrat(fin.resultat); stop(); report(payload) }
+      if (fin.mode === 'demasque') sceneDemasque(reel)
+      else if (fin.mode === 'bilan') sceneBilan(reel)
+      const duree = fin.mode === 'demasque' ? I.demasque.dureeS : fin.mode === 'bilan' ? I.bilan.finS : K.noirFinS
+      if (fin.t >= duree - EPS) { const payload = contrat(fin.resultat); stop(); report(payload) }
       return
     }
     if (!started) { controller.update(0); return }
@@ -754,13 +880,30 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     }
     jouer(reel)
   }
-  function jouer(g) {
-    controller.update(!dialogue && viktor.posture === 'debout' && (locked() || cam) ? g : 0)
+  // La vue pivote vers qui parle à Viktor (dialogue, démasqué), hors effets atténués (§3.8, §9 : le panneau dit qui parle)
+  function pivoter(g, point) {
+    if (attenue || !point || !controller) return
+    const p = controller.position, dx = point.x - p.x, dz = point.z - p.z, d = Math.hypot(dx, dz)
+    if (d < 1e-3) return
+    const lacet = Math.atan2(-dx, -dz), tangage = Math.atan2((point.y ?? camera.position.y) - camera.position.y, d)
+    const k = 1 - Math.exp(-g / I.pivot.reponseS)
+    const ecart = Math.atan2(Math.sin(lacet - controller.yaw), Math.cos(lacet - controller.yaw))
+    controller.setPose({ x: p.x, z: p.z, yaw: controller.yaw + ecart * k, pitch: controller.pitch + (tangage - controller.pitch) * k })
+  }
+  // l'œil de Viktor, le centre de l'écran et le regard au sol, relus sur le contrôleur
+  function suivreOeil() {
     const p = controller.position
     oeil.x = p.x; oeil.y = camera.position.y; oeil.z = p.z
     const yaw = controller.yaw, pitch = controller.pitch
     direction.x = -Math.sin(yaw) * Math.cos(pitch); direction.y = Math.sin(pitch); direction.z = -Math.cos(yaw) * Math.cos(pitch)
     regardSol = forwardOf(yaw)
+    return p
+  }
+  function jouer(g) {
+    if (dialogue && present(dialogue.d.interlocuteur)) pivoter(g, patron(dialogue.d.interlocuteur).personne)
+    for (const [r, s] of arcs) { if (s - g <= EPS) arcs.delete(r); else arcs.set(r, s - g) }
+    controller.update(!dialogue && viktor.posture === 'debout' && (locked() || cam) ? g : 0)
+    const p = suivreOeil()
 
     for (const e of seance.update(g, { palier: jauge.palier, dialogue: dialogue ? dialogue.d : null, appris: carnet.appris })) {
       traiterSoiree(e)
@@ -790,75 +933,176 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     afficher()
   }
 
-  // ─── L'interface (réduite : la tâche B12 lui donne sa forme) ───
-  const nom = qui => (PERSONNES[qui] ? PERSONNES[qui].role : String(qui).toUpperCase())
+  // ─── L'interface (tâche B12) ───
+  // qui parle : le rôle, puis le nom une fois qu'il s'est lu à l'écran (§3.4, comme « INCONNU » devenu « ANTON »)
+  const nom = qui => {
+    const p = PERSONNES[qui]
+    if (!p) return String(qui).toUpperCase()
+    return p.nom && nommes.has(qui) ? p.nom : p.role
+  }
+  function entendreNoms(texte) {
+    if (!texte) return
+    for (const mot of texte.split(/\s+/)) {
+      const f = forme(mot)
+      if (f) for (const [id, n] of NOMS) if (f === n) nommes.add(id)
+    }
+  }
+  // d'où vient une voix, vue de Viktor : 'gauche' ou 'droite' hors du champ de la caméra, null dedans
+  function cote(point) {
+    if (!point) return null
+    const dx = point.x - oeil.x, dz = point.z - oeil.z
+    const devant = dx * regardSol.x + dz * regardSol.z, droite = -dx * regardSol.z + dz * regardSol.x
+    if (Math.hypot(devant, droite) < 1e-6) return null
+    const demi = Math.atan(Math.tan(camera.fov * Math.PI / 360) * (camera.aspect || 1))
+    if (Math.atan2(Math.abs(droite), devant) <= demi) return null
+    return droite > 0 ? 'droite' : 'gauche'
+  }
+  const etiquette = (qui, point) => {
+    const c = cote(point)
+    return `${c === 'gauche' ? '‹ ' : ''}${nom(qui)}${c === 'droite' ? ' ›' : ''}`
+  }
   function ligne(el, spk, texte, on) {
     if (!el) return
-    el.querySelector('.spk').textContent = spk
-    el.querySelector('.tx').textContent = texte
-    el.classList.toggle('on', on)
+    const id = el.id
+    changer(`${id}.spk`, spk, v => { el.querySelector('.spk').textContent = v })
+    changer(`${id}.tx`, texte, v => { el.querySelector('.tx').textContent = v })
+    changer(`${id}.on`, on, v => el.classList.toggle('on', v))
   }
   const texteParole = cur => (cur ? [cur.didascalie ? `(${cur.didascalie})` : '', cur.frappe.texte].filter(Boolean).join(' ') : '')
+  const pointDe = qui => (present(qui) ? patron(qui).personne : null)
+
   function afficher() {
     if (!ui) return
-    $('#bar-heure').textContent = `LE BIVOUAC · ${seance.heure}`
+    const t = seance.t
+    // l'heure, et son point qui s'éteint et se rallume au temps de jeu (fixe en effets atténués, §9)
+    changer('heure', `LE BIVOUAC · ${seance.heure}`, v => { $('#bar-heure .tx').textContent = v })
+    changer('heure.pt', !attenue && Math.floor(t / I.pointHeureS + EPS) % 2 === 1, v => $('#bar-heure .pt').classList.toggle('off', v))
+    afficherJauge()
+    afficherRegard()
+    // les lignes : la pensée de Viktor, ce qu'on lui dit, le sous-titre d'écoute (jamais pendant un dialogue ni à la fin)
     const pe = paroles.pensee.cur
     ligne($('#bar-pensee'), 'VIKTOR', texteParole(pe), !!pe)
-    // ce qu'on dit à Viktor a sa ligne : il ne cache jamais le sous-titre d'une table (ce qu'on lit est ce qu'on sait)
-    const re = paroles.reaction.cur
-    ligne($('#bar-reaction'), re ? nom(re.qui) : '', texteParole(re), !!re && !dialogue)
-    const st = sousTitre
-    ligne($('#bar-sub'), st ? nom(st.qui) : '', st ? masquer(st.frappe.motsFrappes, st.Is, st.f) : '', !!st && !dialogue)
-    $('#bar-aide').textContent = aide ? aide.texte : ''
-    $('#bar-aide').classList.toggle('on', !!aide)
-    // l'invite de ce qu'on vise
-    const id = interact.current, k = keyName('KeyE')
-    let invite = ''
-    if (viktor.posture !== 'debout') invite = `${k} : SE LEVER`
-    else if (id) {
-      const type = typeDe(id)
-      if (type === 'siege') invite = `${k} : S'ASSEOIR`
-      else if (type === 'place') invite = `${k} : S'ACCOUDER`
-      else if (id === 'porte') invite = `MAINTENIR ${k} : SORTIR · RENSEIGNEMENTS ${carnet.appris} / ${QUATRE.length}`
-      else if (id === 'jukebox') invite = `MAINTENIR ${k} : UNE PIÈCE`
-      else if (type === 'objet' && OBJETS[id]) invite = `${k} : REGARDER`
-      else if (type === 'personne' && peutParler(id)) invite = `${k} : PARLER`
-    }
-    const pr = $('#bar-prompt')
-    pr.textContent = invite
-    pr.classList.toggle('on', !!invite && !dialogue)
-    pr.style.setProperty('--p', maintien ? String(Math.min(1, maintien.t / K.maintienS)) : '0')
-    $('.bar-cross').classList.toggle('on', !!id && !dialogue && viktor.posture === 'debout')
-    if (dialogue) afficherDialogue()
+    const re = paroles.reaction.cur, reOn = !!re && (!dialogue || !!fin)
+    if (reOn) entendreNoms(re.frappe.texte)
+    ligne($('#bar-reaction'), re ? etiquette(re.qui, pointDe(re.qui)) : '', texteParole(re), reOn)
+    const st = sousTitre, stOn = !!st && !dialogue && !fin
+    const stTexte = st ? masquer(st.frappe.motsFrappes, st.Is, st.f) : ''
+    if (stOn) entendreNoms(stTexte)
+    ligne($('#bar-sub'), st ? etiquette(st.qui, st.foyer) : '', stTexte, stOn)
+    changer('aide', aide ? aide.texte : '', v => { $('#bar-aide').textContent = v; $('#bar-aide').classList.toggle('on', !!v) })
+    afficherInvite()
+    afficherCarnet()
+    afficherDialogue()
     if (statsEl) statsEl.textContent = `appels ${renderer.info.render.calls} · triangles ${renderer.info.render.triangles}`
   }
+
+  // la jauge (§3.6) : l'œil, la barre graduée à 30 et 60, le plancher hachuré, le palier ; la vignette rouge dès SOUPÇON
+  function afficherJauge() {
+    const palier = jauge.palier, rang = RANG[palier]
+    changer('jauge.classe', `bar-jauge p-${palier}${vuParQuiCompte ? ' vu' : ''}`, v => { $('#bar-jauge').className = v })
+    changer('jauge.palier', PALIER_LIBELLE[palier], v => { $('#bar-jauge .bar-palier').textContent = v })
+    changer('jauge.S', +(jauge.S / PLAFOND * 100).toFixed(2), v => { $('#bar-jauge .niveau').style.width = `${v}%` })
+    changer('jauge.plancher', +(jauge.plancher / PLAFOND * 100).toFixed(2), v => { $('#bar-jauge .plancher').style.width = `${v}%` })
+    // le battement de la jauge et de la vignette suit celui du cœur (SON.coeur : de 1,1 s à S = 60 jusqu'à 0,6 s à 100)
+    const [lent, vite] = SON.coeur.intervalleS, [s0, s1] = SON.coeur.soupcon
+    const bat = lent + (vite - lent) * Math.min(1, Math.max(0, (jauge.S - s0) / (s1 - s0)))
+    changer('bat', bat.toFixed(2), v => ui.style.setProperty('--bat', `${v}s`))
+    changer('vignette', rang >= RANG.soupcon, v => $('#bar-vignette').classList.toggle('on', v))
+  }
+
+  // l'anneau de fixation (la fixation la plus avancée, rapportée à la tolérance de la personne : rouge au-delà) et les arcs
+  // du bord vers un homme de l'escorte hors champ qui vient de remarquer Viktor
+  function afficherRegard() {
+    let rapport = 0
+    if (!fin) {
+      for (const p of casting.liste) {
+        if (!p.present) continue
+        const e = regards.etat(p.role)
+        if (e.fixation > 0 && Number.isFinite(e.tolerance) && e.tolerance > 0) rapport = Math.max(rapport, e.fixation / e.tolerance)
+      }
+    }
+    const a = $('#bar-anneau')
+    changer('anneau.p', +Math.min(1, rapport).toFixed(3), v => a.style.setProperty('--p', String(v)))
+    changer('anneau.on', rapport > 0, v => a.classList.toggle('on', v))
+    changer('anneau.rouge', rapport >= 1 - EPS, v => a.classList.toggle('rouge', v))
+    let g = false, d = false
+    for (const role of arcs.keys()) {
+      const c = cote(pointDe(role))
+      if (c === 'gauche') g = true
+      else if (c === 'droite') d = true
+    }
+    changer('arc.g', g, v => $('#bar-arc-g').classList.toggle('on', v))
+    changer('arc.d', d, v => $('#bar-arc-d').classList.toggle('on', v))
+  }
+
+  // l'invite de ce qu'on vise ; maintenir E (sortir, une pièce) remplit l'anneau ambré autour de la touche
+  function afficherInvite() {
+    const id = fin || dialogue ? null : interact.current, k = keyName('KeyE')
+    let texte = '', tenir = false
+    if (!fin && !dialogue && viktor.posture !== 'debout') texte = 'SE LEVER'
+    else if (id) {
+      const type = typeDe(id)
+      if (type === 'siege') texte = 'S\'ASSEOIR'
+      else if (type === 'place') texte = 'S\'ACCOUDER'
+      else if (id === 'porte') { tenir = true; texte = `SORTIR · RENSEIGNEMENTS ${carnet.appris} / ${QUATRE.length}` }
+      else if (id === 'jukebox') { tenir = true; texte = 'UNE PIÈCE' }
+      else if (type === 'objet' && OBJETS[id]) texte = 'REGARDER'
+      else if (type === 'personne' && peutParler(id)) texte = 'PARLER'
+    }
+    const pr = $('#bar-prompt')
+    changer('invite.k', k, v => { pr.querySelector('.touche b').textContent = v })
+    changer('invite.tx', texte ? ` ${tenir ? 'MAINTENIR ' : ''}: ${texte}` : '', v => { pr.querySelector('.tx').textContent = v })
+    changer('invite.on', !!texte, v => pr.classList.toggle('on', v))
+    changer('invite.maintien', tenir, v => pr.classList.toggle('maintien', v))
+    changer('invite.p', tenir ? +Math.min(1, maintienEnCours() / K.maintienS).toFixed(3) : 0, v => pr.style.setProperty('--p', String(v)))
+    changer('croix', !!id && viktor.posture === 'debout', v => $('.bar-cross').classList.toggle('on', v))
+  }
+  const maintienEnCours = () => (maintien ? maintien.t : 0)
+
+  // le panneau de dialogue : onglet, réplique, choix 1 à 3 (créés quand ils changent ; la surbrillance suit la touche
+  // sans les recréer), la minuterie qui raccourcit, du ton du texte puis rouge sur ses 3 dernières secondes (BAR-3)
   function afficherDialogue() {
     const el = $('#bar-dialogue')
     if (!el) return
-    el.hidden = !dialogue
-    if (!dialogue) return
+    const ouvert = !!dialogue && !fin
+    changer('dialogue.ouvert', ouvert, v => { el.hidden = !v })
+    if (!ouvert) return
     const d = dialogue.d
-    el.querySelector('.bar-onglet').textContent = nom(d.interlocuteur)
-    el.querySelector('.did').textContent = d.didascalie ? `(${d.didascalie}) ` : ''
-    el.querySelector('.tx').textContent = d.qui ? `${nom(d.qui)} : ${d.texte}` : ''
-    const choix = d.choix
-    const liste = el.querySelector('.bar-choix')
-    const cle = choix.map(c => c.texte).join('|') + '#' + d.surbrillance
-    if (liste.dataset.cle !== cle) {
-      liste.dataset.cle = cle
-      liste.innerHTML = choix.map(c => `<li class="${c.n === d.surbrillance ? 'on' : ''}"><b>${c.n}</b> ${esc(c.texte)}</li>`).join('')
-    }
-    const m = el.querySelector('.bar-minuterie i')
-    m.style.transform = `scaleX(${d.restant == null ? 0 : Math.max(0, d.restant / d.delai)})`
+    const replique = d.qui ? `${nom(d.qui)} : ${d.texte}` : ''
+    entendreNoms(d.texte)
+    changer('dialogue.onglet', nom(d.interlocuteur), v => { el.querySelector('.bar-onglet').textContent = v })
+    changer('dialogue.did', d.didascalie ? `(${d.didascalie}) ` : '', v => { el.querySelector('.did').textContent = v })
+    changer('dialogue.tx', replique, v => { el.querySelector('.bar-replique .tx').textContent = v })
+    const liste = el.querySelector('.bar-choix'), choix = d.choix
+    changer('dialogue.choix', `${dialogue.id}#${choix.map(c => c.texte).join('|')}`, () => {
+      liste.innerHTML = choix.map(c => `<li data-n="${c.n}"><b>${libelleChoix(c.n)}</b> ${esc(c.texte)}</li>`).join('')
+      cache.delete('dialogue.surbrillance')
+    })
+    changer('dialogue.surbrillance', d.surbrillance, n => { for (const li of liste.children) li.classList.toggle('on', +li.dataset.n === n) })
+    const m = el.querySelector('.bar-minuterie')
+    changer('dialogue.minuterie', d.restant == null ? 0 : +Math.max(0, d.restant / d.delai).toFixed(4), v => { m.querySelector('i').style.transform = `scaleX(${v})` })
+    changer('dialogue.alerte', d.restant != null && d.restant <= I.minuterieAlerteS + EPS, v => m.classList.toggle('alerte', v))
   }
+
+  // le carnet « CE QU'IL ME FAUT » : une ligne par renseignement, le tampon NOTÉ un temps sur ce qui vient de s'apprendre,
+  // le compte ; il ne bloque rien (rien ne s'arrête quand il change)
   function afficherCarnet() {
     const el = $('#bar-carnet')
     if (!el || !carnet) return
-    el.querySelector('h4').textContent = CARNET.titre
-    const r = carnet.renseignements
-    const lignes = QUATRE.map(n => `<li class="${r[n] ? 'su' : ''}">${esc(RENSEIGNEMENTS[n].libelle)}${r[n] ? ` · ${esc(RENSEIGNEMENTS[n].valeur)}` : ''}</li>`)
-    if (r.leurre) lignes.splice(2, 0, `<li class="su">${esc(LEURRE.carnet)}</li>`)
-    el.querySelector('ul').innerHTML = lignes.join('')
+    const r = carnet.renseignements, t = seance ? seance.t : 0
+    const frais = n => tampons.has(n) && t - tampons.get(n) < I.noteS - EPS
+    const tampon = n => (frais(n) ? `<i class="tampon">${esc(CARNET.tampon)}</i>` : '')
+    const cle = QUATRE.concat('leurre').map(n => `${r[n] ? 1 : 0}${frais(n) ? 'n' : ''}`).join('')
+    changer('carnet.titre', CARNET.titre, v => { el.querySelector('.titre').textContent = v })
+    changer('carnet.compte', `${carnet.appris} / ${QUATRE.length}`, v => {
+      const b = document.createElement('b'); b.className = 'compte'; b.textContent = v      // un élément neuf : sa frappe rejoue
+      el.querySelector('.compte').replaceWith(b)
+    })
+    changer('carnet.lignes', cle, () => {
+      const lignes = QUATRE.map(n => `<li class="${r[n] ? 'su' : ''}">${esc(RENSEIGNEMENTS[n].libelle)}${r[n] ? ` · ${esc(RENSEIGNEMENTS[n].valeur)}` : ''}${tampon(n)}</li>`)
+      if (r.leurre) lignes.splice(2, 0, `<li class="su">${esc(LEURRE.carnet)}${tampon('leurre')}</li>`)
+      el.querySelector('ul').innerHTML = lignes.join('')
+    })
   }
   // libellé d'une touche physique selon la disposition du clavier, sinon dérivé du code
   const keyName = code => { const k = layout && layout.get(code); return k ? String(k).toUpperCase() : keyLabel(code) }
@@ -1025,6 +1269,7 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     carte.querySelector('.consigne').textContent = CARTE.consigne
     carte.querySelector('.go').textContent = CARTE.commencer
     $('#bar-card-partir').textContent = CARTE.partir
+    $('#bar-demasque .tampon').textContent = REACTIONS.demasque.tampon
     montrerTouches()
 
     carte.addEventListener('click', garde(demanderVerrou))

@@ -14,7 +14,8 @@
 //   Viktor (T : ce que laissent passer les boîtes du plan, transmission de src/bar/ecoute.js ; pan : sin(azimut),
 //   reglageBips de src/bar/voix.js ; gain : 1 par défaut) ;
 // - les sons ponctuels clochette() (et la porte), sonnerie() (une sonnerie du téléphone : la soirée en émet trois),
-//   note() (NOTÉ : un renseignement appris), pas() (onStep du contrôleur) ;
+//   note() (NOTÉ : un renseignement appris), pas() (onStep du contrôleur), tic() (la minuterie d'une réponse) et vibre()
+//   (une salve du téléphone du bilan), ces deux derniers ajoutés par la tâche B12 ;
 // - reverberation : le nœud où envoyer les voix (null sans son, ou une fois arrêtée) ; etat() pour le débogage ;
 // - stop() : tout débranché et arrêté, la réponse impulsionnelle lâchée, sans fondu ni minuteur ; rien de partagé
 //   (la destination du jeu, le contexte) n'est touché.
@@ -289,6 +290,28 @@ export function creerSon(audio, { sortie, graine = SON.graine } = {}) {
       souffle(P.dureeS, P.niveau, P.hz, 'bandpass', t0, [general], { q: P.q, finHz: P.finHz })
       const trait = K.dureeS / K.traits
       for (let k = 0; k < K.traits; k++) souffle(trait, K.niveau, K.hz, 'bandpass', t0 + K.retardS + k * trait, [general], { q: K.q })
+    },
+    // le tic de la minuterie d'une réponse (clock() du kit des cinématiques, sound.js:121), sur la dernière 1,5 s (§3.8)
+    tic() {
+      if (!joue()) return
+      const { ton: T, bruit: B } = SON.tic, t0 = c.currentTime
+      ton(T.hz, 'square', T.dureeS, T.niveau, t0, [general])
+      souffle(B.dureeS, B.niveau, B.hz, 'highpass', t0, [general])
+    },
+    // une salve de vibration du téléphone (buzz() de l'enquête, src/prologue/ambience.js) : le moteur et le bois qui
+    // résonne dessous, sous un même passe-bas ; débranchée sur l'horloge audio, une fois la salve finie (bilan, §3.11)
+    vibre() {
+      if (!joue()) return
+      const V = SON.vibration, t0 = c.currentTime, fin = t0 + V.dureeS
+      const moteur = c.createOscillator(), bois = c.createOscillator(), bas = c.createBiquadFilter(), g = c.createGain()
+      moteur.type = 'sawtooth'; moteur.frequency.setValueAtTime(V.moteurHz, t0)
+      bois.type = 'square'; bois.frequency.setValueAtTime(V.boisHz, t0)
+      bas.type = 'lowpass'; bas.frequency.value = V.passeBas; bas.Q.value = V.q
+      g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(V.niveau, t0 + V.attaqueS)
+      g.gain.setValueAtTime(V.niveau, fin - V.relacheS); g.gain.linearRampToValueAtTime(0.0001, fin)
+      moteur.connect(bas); bois.connect(bas); bas.connect(g); g.connect(general)
+      for (const o of [moteur, bois]) { o.start(t0); o.stop(fin + ARRET_S) }
+      ephemeres.ajouter([moteur, bois, bas, g], fin + DEBRANCHE_S)
     },
     // un pas sur le parquet
     pas() {

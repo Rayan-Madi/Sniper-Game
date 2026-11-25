@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as THREE from 'three'
 import { readFileSync } from 'node:fs'
-import { PLACES, ANCRES, SIEGES } from '../../src/bar/plan.js'
-import { CARTE, REACTIONS, OBJETS, DIALOGUES } from '../../src/bar/textes.js'
-import { COQUILLE, SOUPCON, COUVERTURE } from '../../src/bar/reglages.js'
+import { PLACES, ANCRES, SIEGES, TABLES } from '../../src/bar/plan.js'
+import { CARTE, REACTIONS, OBJETS, DIALOGUES, BILAN, RENSEIGNEMENTS, PERSONNES } from '../../src/bar/textes.js'
+import { COQUILLE, SOUPCON, COUVERTURE, INTERFACE, DIALOGUE, SON } from '../../src/bar/reglages.js'
 import { NOMS } from '../../src/bar/renseignements.js'
 import { trackDisposals } from '../gfx/fakeRenderer.js'
-import { fauxAudio, branches, enCours } from './fauxAudio.js'
+import { fauxAudio, branches, enCours, frequence } from './fauxAudio.js'
+import { settings } from '../../src/settings.js'
 
 // La coquille du Bivouac (spec docs/superpowers/specs/2026-10-28-m5-bar-design.md §3.4 à §3.11, §3.13 ; plan
 // docs/superpowers/plans/2026-10-28-m5-bar.md, tâche B11) : cycle de vie et assemblage des modules du bar, sur le patron
@@ -153,8 +154,8 @@ describe('la coquille du bar : cycle de vie', () => {
     const h = startBar({ renderer, camera: new THREE.PerspectiveCamera(), onDone, options: { infos: ['heure', 'trajet'] } })
     clic('#bar-card-partir')
     expect(renderer.domElement.requestPointerLock).not.toHaveBeenCalled()   // le clic ne passe pas à la carte
-    expect(onDone).not.toHaveBeenCalled()                   // le noir de fin d'abord
-    images(h, COQUILLE.noirFinS + 0.05, 0.05)
+    expect(onDone).not.toHaveBeenCalled()                   // le noir de fin d'abord, puis le bilan (B12)
+    images(h, INTERFACE.bilan.finS + 0.05, 0.05)
     expect(onDone).toHaveBeenCalledTimes(1)
     const [r] = onDone.mock.calls[0]
     expect(r.resultat).toBe('passe')
@@ -168,7 +169,7 @@ describe('la coquille du bar : cycle de vie', () => {
     const h = startBar({ renderer, camera: new THREE.PerspectiveCamera(), onDone })
     clic('#bar-card-partir'); clic('#bar-card-partir')
     clic('#bar-menu')                                       // la pause, cachée, n'en est pas moins un bouton
-    images(h, 2, 0.05)
+    images(h, INTERFACE.bilan.finS + 0.5, 0.05)
     h.stop(); h.update(DT)
     expect(onDone).toHaveBeenCalledTimes(1)
     expect(onDone.mock.calls[0][0].resultat).toBe('passe')  // témoin : sans garde, la dernière sortie l'emporte (« abandon »)
@@ -205,7 +206,7 @@ describe('la coquille du bar : cycle de vie', () => {
       images(h, 1)
       perdreVerrou()
       clic(bouton)
-      images(h, 1, 0.05)
+      images(h, INTERFACE.bilan.finS + 0.5, 0.05)            // le bilan (sorti) et la scène du démasqué (B12) d'abord
       expect(onDone, bouton).toHaveBeenCalledTimes(1)
       expect(onDone.mock.calls[0][0].resultat, `${bouton} à ${soupcon}`).toBe(resultat)
       document.body.innerHTML = ''
@@ -335,7 +336,7 @@ describe('la coquille du bar : la soirée assemblée', () => {
     expect(h.debug.etat().mode).toBe('exploration')         // témoin : la sortie à l'appui
     touche('KeyE'); images(h, COQUILLE.maintienS + 0.05)
     expect(h.debug.etat().mode).toBe('sortie')
-    images(h, COQUILLE.noirFinS + 0.1, 0.05)
+    images(h, INTERFACE.bilan.finS + 0.1, 0.05)
     expect(onDone).toHaveBeenCalledTimes(1)
     const [r] = onDone.mock.calls[0]
     expect(r.resultat).toBe('sorti')
@@ -349,7 +350,7 @@ describe('la coquille du bar : la soirée assemblée', () => {
     const { h, onDone } = partie({ soupcon: 70 })
     viser(h, 'porte', ANCRES.depart.x, ANCRES.depart.z)
     touche('KeyE'); images(h, COQUILLE.maintienS + 0.05)
-    images(h, COQUILLE.noirFinS + 0.1, 0.05)
+    images(h, INTERFACE.demasque.dureeS + 0.1, 0.05)
     expect(onDone.mock.calls[0][0].resultat).toBe('demasque')
     expect(h.debug.journal.some(e => e.type === 'reaction' && e.texte === REACTIONS.sortieSoupcon.texte)).toBe(true)
   })
@@ -375,8 +376,10 @@ describe('la coquille du bar : la soirée assemblée', () => {
     images(h, 0.2)
     fixer(h, 'dussart', 1.5, 0.75)
     images(h, 1.3)
-    const e = h.debug.etat()
-    expect(e.S).toBeGreaterThanOrEqual(12)                  // témoin : la remarque jamais passée à la jauge
+    // la remarque passée à la jauge, lue au journal (depuis B12, la vue pivote ensuite vers Lise, qui vient pour L2, et S
+    // redescend déjà)
+    const r = h.debug.journal.find(x => x.type === 'jauge' && x.evenement === 'remarque')
+    expect(r.apres - r.avant).toBeCloseTo(SOUPCON.evenements.remarque.escorte.s, 6)   // témoin : la remarque jamais passée à la jauge
     expect(h.debug.jauge.plancher).toBe(SOUPCON.evenements.remarque.escorte.plancher)
     expect(h.debug.journal.some(x => x.type === 'remarque' && x.qui === 'dussart')).toBe(true)
     expect(jusqua(h, () => h.debug.etat().pensee && h.debug.etat().pensee.texte === REACTIONS.premiereFixation.texte, 5)).toBe(true)
@@ -552,5 +555,377 @@ describe('la coquille du bar : règles de design (base design, audit BAR-1 et BA
     expect(prop(regle(css, '.bar .bar-card .texte, .bar .bar-card .consigne'), 'text-wrap')).toBe('balance')
     for (const sel of ['.bar .bar-sub', '.bar .bar-pensee']) expect(prop(regle(css, sel), 'text-wrap'), sel).toBeNull()
     expect(css).not.toMatch(/bar-sub[^{]*\{[^}]*text-wrap\s*:\s*balance/)
+  })
+})
+
+// ─── L'interface du bar (tâche B12 ; spec §3.4 à §3.11, §9 ; audit de la base design BAR-2 à BAR-7) ───
+// Chaque test de comportement a été vu rouge : sur la coquille de B11 quand le comportement est neuf (jauge, anneau, arcs,
+// vignette, minuterie, carnet, horloge, noms, pivot, démasqué, bilan), sinon sur le témoin écrit à côté de son assertion,
+// glissé seul dans la coquille finie (sorties dans shots/bar/b12/temoins/, hors dépôt).
+const attenues = fn => { const avant = settings.reducedMotion; settings.reducedMotion = 'oui'; try { return fn() } finally { settings.reducedMotion = avant } }
+const yawVers = (de, vers) => Math.atan2(-(vers.x - de.x), -(vers.z - de.z))
+const ecart = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))
+const auZinc = (h, lacet = Math.PI / 2) => {
+  h.debug.aller(-3.2, -1.2, lacet, 0)
+  expect(jusqua(h, () => h.debug.etat().dialogue && h.debug.etat().dialogue.phase === 'choix', 10)).toBe(true)
+}
+const ligneDe = sel => ({ on: $(sel).classList.contains('on'), spk: $(sel).querySelector('.spk').textContent, tx: $(sel).querySelector('.tx').textContent })
+
+describe('l\'interface du bar : le dialogue (tâche B12, §3.8)', () => {
+  it('en dialogue, Digit2 (« é » en AZERTY) choisit et ZQSD ne déplace pas', () => {
+    const { h } = partie()
+    images(h, 0.5)
+    auZinc(h)
+    const p = { ...h.debug.controller.position }
+    touche('KeyW', { key: 'z' }); touche('KeyA', { key: 'q' })
+    images(h, 1)
+    lache('KeyW'); lache('KeyA')
+    expect(h.debug.controller.position).toEqual(p)          // témoin : le contrôleur laissé libre pendant le dialogue
+    touche('Digit2', { key: 'é' })
+    expect(jusqua(h, () => h.debug.etat().verre === 'cafe', 5)).toBe(true)   // témoin : e.key lu (« é » ne choisit rien)
+    h.stop()
+  })
+
+  it('libellés « 1 » à « 3 » avec une carte de clavier AZERTY ; la carte de départ relit ZQSD', async () => {
+    const carte = new Map([['KeyW', 'z'], ['KeyA', 'q'], ['KeyS', 's'], ['KeyD', 'd'], ['KeyE', 'e'], ['Digit1', '&'], ['Digit2', 'é'], ['Digit3', '"']])
+    Object.defineProperty(navigator, 'keyboard', { configurable: true, value: { getLayoutMap: () => Promise.resolve(carte) } })
+    try {
+      const h = startBar({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone: vi.fn() })
+      await Promise.resolve(); await Promise.resolve()
+      const kbd = [...$('.bar-card .k').querySelectorAll('kbd')].map(k => k.textContent)
+      expect(kbd.slice(0, 4)).toEqual(['Z', 'Q', 'S', 'D'])
+      expect(kbd).toContain('1'); expect(kbd).not.toContain('&')
+      clic('#bar-card')
+      images(h, 0.5)
+      auZinc(h)
+      expect([...$('#bar-dialogue .bar-choix').querySelectorAll('b')].map(b => b.textContent)).toEqual(['1', '2', '3'])   // témoin : keyName('Digit1'), « & »
+      h.stop()
+    } finally { delete navigator.keyboard }
+  })
+
+  it('la vue pivote vers l\'interlocuteur, jamais en effets atténués', () => {
+    const tourne = attenue => {
+      const run = () => {
+        const { h } = partie()
+        images(h, 0.5)
+        auZinc(h, -Math.PI / 2)                               // dos au zinc : Fernand derrière Viktor
+        images(h, 2)
+        const cible = yawVers(h.debug.controller.position, h.debug.casting.patrons.get('fernand').personne)
+        const r = { yaw: h.debug.controller.yaw, cible }
+        h.stop(); document.body.innerHTML = ''
+        return r
+      }
+      return attenue ? attenues(run) : run()
+    }
+    const libre = tourne(false), fixe = tourne(true)
+    expect(ecart(libre.yaw, libre.cible)).toBeLessThan(0.1)  // rouge sur B11 : la vue ne pivote jamais
+    expect(fixe.yaw).toBe(-Math.PI / 2)                       // témoin : le pivot même en effets atténués
+  })
+
+  it('la minuterie garde la couleur du texte, passe au rouge sur ses 3 dernières secondes, et fait tic à 1,5, 1 et 0,5 s', () => {
+    const f = fauxAudio()
+    const { h } = partie({}, { audio: f.audio })
+    images(h, 0.5)
+    auZinc(h)
+    const tics = () => f.oscillateurs().filter(o => o.type === 'square' && frequence(o) === SON.tic.ton.hz).length
+    const m = $('#bar-dialogue .bar-minuterie')
+    expect(m.classList.contains('alerte')).toBe(false)
+    expect(jusqua(h, () => h.debug.etat().dialogue.restant <= INTERFACE.minuterieAlerteS - 0.05, 10)).toBe(true)
+    expect(m.classList.contains('alerte')).toBe(true)        // rouge sur B11 : la minuterie toujours de la même couleur
+    expect(tics()).toBe(0)
+    expect(jusqua(h, () => h.debug.etat().dialogue === null || h.debug.etat().dialogue.restant === null, 5)).toBe(true)
+    expect(tics()).toBe(DIALOGUE.ticsS.length)               // rouge sur B11 : les tics ignorés
+    h.stop()
+  })
+
+  it('aucun sous-titre de table pendant un dialogue', () => {
+    const { h } = partie({ t: 62 })
+    h.debug.asseoir('D-ouest')                                // sans verre : Lise vient prendre la commande (L1)
+    expect(jusqua(h, () => h.debug.etat().dialogue && h.debug.etat().dialogue.id === 'lise-commande', 3)).toBe(true)
+    let ecoutees = 0
+    while (h.debug.etat().dialogue) {
+      if (h.debug.ecoutes.some(e => !e.finie)) ecoutees++
+      expect($('#bar-sub').classList.contains('on')).toBe(false)   // témoin : le sous-titre montré pendant le dialogue
+      h.update(DT)
+    }
+    expect(ecoutees).toBeGreaterThan(30)                      // A1 se jouait pendant le dialogue
+    h.stop()
+  })
+})
+
+describe('l\'interface du bar : écouter (tâche B12, §3.4)', () => {
+  it('sous les murmures, le sous-titre d\'écoute dit « (murmures) »', () => {
+    const { h } = partie({ t: 62, verre: 'cafe' })
+    h.debug.aller(-1.5, -3.5, 0, 0)                           // à 7 m de la table A, dos tourné : I = 0, mais on l'entend
+    expect(jusqua(h, () => ligneDe('#bar-sub').on, 10)).toBe(true)
+    expect(h.debug.etat().sousTitre.qui).toMatch(/lenoir|dussart/)
+    expect(jusqua(h, () => h.debug.ecoutes.some(e => e.echange === 'A1' && e.frappe.motsFrappes.length > 2), 5)).toBe(true)
+    expect(ligneDe('#bar-sub').tx).toBe('(murmures)')        // témoin : frappe.texte affiché, qui ne les dit jamais
+    h.stop()
+  })
+
+  it('qui parle : le rôle, puis le nom une fois prononcé ; une flèche ‹ ou › quand la source sort du champ', () => {
+    const { h } = partie({ t: 62, verre: 'cafe' })
+    h.debug.asseoir('D-ouest')
+    const dussart = () => h.debug.etat().sousTitre && h.debug.etat().sousTitre.qui === 'dussart'
+    const c = h.debug.controller, p = c.position
+    c.setPose({ x: p.x, z: p.z, yaw: yawVers(p, TABLES.A) })   // assis à D, la table A est de côté : Viktor se tourne vers elle
+    expect(jusqua(h, dussart, 10, 0.05)).toBe(true)
+    h.update(0.05)
+    expect(ligneDe('#bar-sub').spk).toBe(PERSONNES.dussart.role)   // « LE SERGENT » : personne ne l'a nommé
+    // A4 : Lise, « Je te ressers, Dussart ? », puis Dussart répond
+    expect(jusqua(h, () => h.debug.seance.statut('A4') === 'cours' && dussart(), 90, 0.05)).toBe(true)
+    h.update(0.05)
+    expect(ligneDe('#bar-sub').spk).toBe(PERSONNES.dussart.nom)    // rouge sur B11 : toujours le rôle
+    c.setPose({ x: p.x, z: p.z, yaw: yawVers(p, TABLES.A) + Math.PI / 2 })   // la table A à 90° à droite
+    h.update(0.05)
+    expect(ligneDe('#bar-sub').spk).toBe(`${PERSONNES.dussart.nom} ›`)
+    c.setPose({ x: p.x, z: p.z, yaw: yawVers(p, TABLES.A) - Math.PI / 2 })
+    h.update(0.05)
+    expect(ligneDe('#bar-sub').spk).toBe(`‹ ${PERSONNES.dussart.nom}`)
+    h.stop()
+  })
+
+  it('le carnet « CE QU\'IL ME FAUT » : la ligne apprise, le tampon NOTÉ un temps, le compte', () => {
+    const { h } = partie({ t: 62, verre: 'cafe' })
+    h.debug.asseoir('D-ouest')
+    expect($('#bar-carnet .compte').textContent).toBe('0 / 4')
+    expect(jusqua(h, () => h.debug.carnet.connait('trajet'), 40, 0.05)).toBe(true)
+    h.update(0.05)
+    const ligne = [...$('#bar-carnet').querySelectorAll('li')].find(li => li.textContent.includes(RENSEIGNEMENTS.trajet.libelle))
+    expect(ligne.textContent).toContain(RENSEIGNEMENTS.trajet.valeur)
+    expect(ligne.querySelector('.tampon').textContent).toBe(BILAN.tampon)   // rouge sur B11 : aucun tampon
+    expect($('#bar-carnet .compte').textContent).toBe('1 / 4')
+    images(h, INTERFACE.noteS + 0.1, 0.05)
+    expect($('#bar-carnet .tampon')).toBeNull()
+    h.stop()
+  })
+
+  it('l\'horloge « LE BIVOUAC · 18:36 » à 273 s ; son point clignote au temps de jeu, fixe en effets atténués', () => {
+    const points = attenue => {
+      const run = () => {
+        const { h } = partie({ t: 272.9 })
+        images(h, 0.2)
+        expect($('#bar-heure').textContent).toBe('LE BIVOUAC · 18:36')
+        const vus = new Set()
+        for (let k = 0; k < 120; k++) { h.update(DT); vus.add($('#bar-heure .pt').classList.contains('off')) }
+        h.stop(); document.body.innerHTML = ''
+        return vus
+      }
+      return attenue ? attenues(run) : run()
+    }
+    expect([...points(false)].sort()).toEqual([false, true])  // rouge sur B11 : aucun point
+    expect([...points(true)]).toEqual([false])               // témoin : le point qui clignote en atténué
+  })
+})
+
+describe('l\'interface du bar : la jauge, le regard (tâche B12, §3.5, §3.6)', () => {
+  it('la jauge : barre au niveau de S, graduée à 30 et 60, plancher hachuré, palier ; vignette rouge dès SOUPÇON', () => {
+    const { h } = partie({ soupcon: 40 })
+    images(h, 0.2)
+    const j = $('#bar-jauge')
+    expect(j.className).toMatch(/\bp-mefiance\b/)              // rouge sur B11 : aucune jauge
+    expect(j.querySelector('.bar-palier').textContent).toBe('MÉFIANCE')
+    expect(parseFloat(j.querySelector('.niveau').style.width)).toBeCloseTo(h.debug.jauge.S, 1)
+    expect([...j.querySelectorAll('.bar-barre b')].map(b => b.style.left)).toEqual(['30%', '60%'])
+    expect($('#bar-vignette').classList.contains('on')).toBe(false)
+    fixer(h, 'dussart', 1.5, 0.75)
+    images(h, 1.3)
+    expect(h.debug.jauge.plancher).toBeGreaterThan(0)
+    expect(parseFloat(j.querySelector('.plancher').style.width)).toBeCloseTo(h.debug.jauge.plancher, 1)
+    h.debug.soupcon(70); h.update(DT)
+    expect(j.className).toMatch(/\bp-soupcon\b/)
+    expect(j.querySelector('.bar-palier').textContent).toBe('SOUPÇON')
+    expect($('#bar-vignette').classList.contains('on')).toBe(true)
+    h.stop()
+  })
+
+  it('l\'œil (BAR-5) : un SVG au trait à deux états, ouvert si quelqu\'un qui compte voit Viktor, jamais un glyphe', () => {
+    const { h } = partie()
+    const oeil = $('#bar-jauge svg.bar-oeil')
+    expect(oeil.querySelector('.ouvert')).not.toBeNull(); expect(oeil.querySelector('.clos')).not.toBeNull()
+    expect($('#bar-jauge').textContent).not.toMatch(/[\u{1F300}-\u{1FAFF}☀-➿◉◎⊙]/u)
+    const etats = new Set()
+    for (const [x, z] of [[1.5, 0.75], [-2.4, -3.3], [-2.0, -6.5], [-1.5, 1.5], [5, -0.45], [0, -4], [-1.6, 3.6]]) {
+      h.debug.aller(x, z, 0, 0); h.update(DT)
+      const vu = h.debug.regards.temoins.some(c => SOUPCON.temoins[c] > 0)
+      expect($('#bar-jauge').classList.contains('vu'), `${x}, ${z}`).toBe(vu)
+      etats.add(vu)
+    }
+    expect([...etats].sort()).toEqual([false, true])
+    h.stop()
+  })
+
+  it('l\'anneau de fixation se remplit vers la tolérance de qui l\'on fixe, rougit au-delà, se vide quand on détourne les yeux', () => attenues(() => {
+    const { h } = partie()
+    images(h, 0.2)
+    fixer(h, 'dussart', 1.5, 0.75)
+    images(h, 0.6)
+    const a = $('#bar-anneau')
+    expect(a.classList.contains('on')).toBe(true)             // rouge sur B11 : aucun anneau
+    expect(parseFloat(a.style.getPropertyValue('--p'))).toBeCloseTo(0.5, 1)   // 0,6 s sur les 1,2 s de l'escorte
+    expect(a.classList.contains('rouge')).toBe(false)
+    images(h, 0.7)
+    expect(a.classList.contains('rouge')).toBe(true)
+    h.debug.aller(1.5, 0.75, Math.PI, 0)
+    images(h, 1.5)
+    expect(a.classList.contains('on')).toBe(false)
+    h.stop()
+  }))   // en effets atténués : la vue ne pivote pas vers Lise, qui vient pour L2
+
+  it('un arc ambré au bord, du côté d\'un homme de l\'escorte hors champ qui vient de remarquer Viktor, le temps d\'un arc', () => attenues(() => {
+    const { h } = partie({ verre: 'cafe' })
+    images(h, 0.2)
+    fixer(h, 'dussart', 1.5, 0.75)
+    images(h, 1.3)
+    expect(h.debug.journal.some(e => e.type === 'remarque' && e.qui === 'dussart')).toBe(true)
+    const p = { ...h.debug.controller.position }, d = h.debug.casting.patrons.get('dussart').personne
+    h.debug.aller(p.x, p.z, yawVers(p, d) + Math.PI / 2, 0)  // Dussart à 90° à droite, hors champ
+    h.update(DT)
+    expect($('#bar-arc-d').classList.contains('on')).toBe(true)   // rouge sur B11 : aucun arc
+    expect($('#bar-arc-g').classList.contains('on')).toBe(false)
+    h.debug.aller(p.x, p.z, yawVers(p, d), 0)                // dans le champ : pas d'arc
+    h.update(DT)
+    expect($('#bar-arc-d').classList.contains('on')).toBe(false)
+    h.debug.aller(p.x, p.z, yawVers(p, d) - Math.PI / 2, 0)
+    h.update(DT)
+    expect($('#bar-arc-g').classList.contains('on')).toBe(true)
+    images(h, INTERFACE.arcS)
+    expect($('#bar-arc-g').classList.contains('on')).toBe(false)
+    h.stop()
+  }))
+})
+
+describe('l\'interface du bar : les fins (tâche B12, §3.10, §3.11)', () => {
+  it('démasqué : « Toi. Debout. » lisible pendant la scène, les tables se lèvent, COUVERTURE GRILLÉE, onDone une fois après 2,5 s de jeu', () => {
+    const { h, onDone } = partie({ soupcon: 95 })
+    images(h, 0.2)
+    h.debug.soupcon(100)
+    expect(h.debug.etat().mode).toBe('sortie')
+    images(h, 1)
+    expect(ligneDe('#bar-reaction')).toEqual({ on: true, spk: PERSONNES.dussart.role, tx: REACTIONS.demasque.texte })   // témoin : finir aussitôt après dire (B11)
+    const P = h.debug.casting.patrons
+    for (const r of ['dussart', 'lenoir', 'mattei', 'haas']) expect(P.get(r).ordres.some(([o]) => o === 'seLever'), r).toBe(true)
+    for (const p of h.debug.casting.liste.filter(x => x.present)) expect(p.regard, p.role).toMatchObject({ x: expect.any(Number), z: expect.any(Number) })
+    images(h, INTERFACE.demasque.dureeS - 1 - 0.2 - 0.05)
+    expect($('#bar-demasque').hidden).toBe(false)
+    expect($('#bar-demasque').textContent).toBe(REACTIONS.demasque.tampon)
+    expect(onDone).not.toHaveBeenCalled()                     // rouge sur B11 : rendu après le noir de 0,7 s
+    images(h, 0.3)
+    expect(onDone).toHaveBeenCalledTimes(1)                   // témoin : un setTimeout de 2,5 s, que la boucle ne fait pas avancer
+    expect(onDone.mock.calls[0][0].resultat).toBe('demasque')
+    images(h, 3)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('le bilan « DOSSIER 05 » : lignes apprises tamponnées, INCONNU sinon ; le téléphone vibre, ANTON, « Alors ? », la réponse de Viktor ; onSortie avant, onDone après', () => {
+    const f = fauxAudio(), onDone = vi.fn(), onSortie = vi.fn()
+    const h = startBar({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), audio: f.audio, onDone, onSortie, options: { infos: ['heure', 'trajet'] } })
+    clic('#bar-card')
+    images(h, 1)
+    viser(h, 'porte', ANCRES.depart.x, ANCRES.depart.z)
+    touche('KeyE'); images(h, COQUILLE.maintienS + 0.05)
+    expect(onSortie).toHaveBeenCalledTimes(1)                 // rouge sur B11 : aucun bilan
+    expect(onSortie.mock.calls[0][0].resultat).toBe('sorti')
+    const vibre = () => f.oscillateurs().filter(o => o.type === 'sawtooth' && frequence(o) === SON.vibration.moteurHz).length
+    images(h, INTERFACE.bilan.telephoneS - 0.2, 0.05)
+    expect($('#bar-bilan').hidden).toBe(false)
+    expect($('#bar-bilan .onglet').textContent).toBe(BILAN.titre)
+    const lignes = [...$('#bar-bilan').querySelectorAll('li')]
+    expect(lignes.map(l => l.classList.contains('on'))).toEqual([true, true, true, true])
+    expect(lignes.map(l => l.querySelector('.val').textContent)).toEqual([RENSEIGNEMENTS.trajet.valeur, BILAN.inconnu, BILAN.inconnu, RENSEIGNEMENTS.heure.valeur])
+    expect(lignes.map(l => !!l.querySelector('.tampon'))).toEqual([true, false, false, true])
+    images(h, INTERFACE.bilan.viktorS - INTERFACE.bilan.telephoneS + 0.2, 0.05)
+    expect($('#bar-bilan .bar-tel .de').textContent).toBe(BILAN.telephone.de)
+    expect($('#bar-bilan .bar-tel .msg').textContent.replace(/\u00a0/g, ' ')).toBe(BILAN.telephone.message)   // « ? » rattaché par une insécable
+    expect(vibre()).toBe(INTERFACE.bilan.salves)
+    expect(onDone).not.toHaveBeenCalled()
+    images(h, INTERFACE.bilan.finS - INTERFACE.bilan.viktorS - 0.3, 0.05)
+    expect($('#bar-bilan .viktor .tx').textContent).toBe(BILAN.viktor.partiel)
+    images(h, 0.4, 0.05)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(onDone.mock.calls[0][0]).toEqual(onSortie.mock.calls[0][0])
+    expect(onDone.mock.calls[0][0].renseignements).toMatchObject({ heure: true, trajet: true, vehicule: false, place: false })
+  })
+})
+
+// ─── Règles de la base design lues dans bar.css (audit BAR-2 à BAR-7) ───
+const regles = feuille => [...feuille.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@keyframes[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)]
+  .map(m => ({ selecteurs: m[1].trim().split(',').map(s => s.trim().replace(/\s+/g, ' ')), decl: m[2] }))
+// la déclaration `nom` de la règle qui porte le sélecteur `sel` (la dernière qui la donne)
+const lire = (feuille, sel, nom) => {
+  let v = null
+  for (const r of regles(feuille)) if (r.selecteurs.includes(sel)) { const x = prop(r.decl, nom); if (x !== null) v = x }
+  return v
+}
+// le contraste d'un texte sur sa plaque, elle-même posée sur `dessous` (blanc : au pire un mur éclairé par les stores)
+function contrasteSur(feuille, selTexte, selPlaque, dessous = [255, 255, 255]) {
+  const fond = selPlaque ? rgba(lire(feuille, selPlaque, 'background')) : [...dessous, 1]
+  if (!fond) throw new Error(`pas de plaque pour ${selPlaque}`)
+  const plaque = sur(fond, dessous)
+  const texte = rgba(lire(feuille, selTexte, 'color'))
+  if (!texte) throw new Error(`pas de couleur pour ${selTexte}`)
+  return contraste(sur(texte, plaque), plaque)
+}
+// les sélecteurs d'une animation infinie sans jumelle .bar-reduced qui l'arrête (BAR-6)
+const sansJumelle = feuille => {
+  const toutes = regles(feuille)
+  return toutes.filter(r => /\binfinite\b/.test(prop(r.decl, 'animation') || '')).flatMap(r => r.selecteurs)
+    .filter(s => !toutes.some(t => t.selecteurs.includes(s.replace(/^\.bar /, '.bar.bar-reduced ')) && !/\binfinite\b/.test(prop(t.decl, 'animation') || 'infinite')))
+}
+
+describe('l\'interface du bar : règles de design (base design, audit BAR-2 à BAR-7)', () => {
+  it('BAR-2 : tout texte posé sur la 3D a sa plaque et tient 4,5:1 même devant un mur blanc', () => {
+    const paires = [
+      ['.bar .bar-heure', '.bar .bar-heure'], ['.bar .bar-carnet h4', '.bar .bar-carnet'], ['.bar .bar-carnet li', '.bar .bar-carnet'],
+      ['.bar .bar-carnet li.su', '.bar .bar-carnet'], ['.bar .bar-carnet .tampon', '.bar .bar-carnet .tampon'],
+      ['.bar .bar-prompt', '.bar .bar-prompt'], ['.bar .bar-prompt .touche', '.bar .bar-prompt'], ['.bar .bar-aide', '.bar .bar-aide'],
+      ['.bar .bar-palier', '.bar .bar-palier'], ['.bar .bar-palier', '.bar .bar-jauge.p-mefiance .bar-palier'],
+      ['.bar .bar-palier', '.bar .bar-jauge.p-soupcon .bar-palier'],
+      ['.bar .bar-sub', '.bar .bar-sub .tx'], ['.bar .bar-reaction', '.bar .bar-sub .tx'], ['.bar .bar-pensee', '.bar .bar-sub .tx'],
+      ['.bar .bar-sub .spk', '.bar .bar-sub .spk'],
+      ['.bar .bar-replique', '.bar .bar-dialogue'], ['.bar .bar-choix li', '.bar .bar-dialogue'], ['.bar .bar-choix b', '.bar .bar-dialogue'],
+      ['.bar .bar-bilan .lib', '.bar .bar-bilan .fiche'], ['.bar .bar-bilan .val', '.bar .bar-bilan .fiche'],
+      ['.bar .bar-bilan .inconnu .val', '.bar .bar-bilan .fiche'], ['.bar .bar-bilan .tampon', '.bar .bar-bilan .fiche'],
+    ]
+    for (const [t, p] of paires) expect(contrasteSur(css, t, p), `${t} sur ${p}`).toBeGreaterThanOrEqual(4.5)
+    // posé sur le noir de fin : le tampon du démasqué
+    expect(contrasteSur(css, '.bar .bar-demasque .tampon', null, [0, 0, 0])).toBeGreaterThanOrEqual(4.5)
+    // témoin : l'heure de l'enquête, gris à 0,55 sans plaque
+    expect(contrasteSur(cssEnquete, '.enq .enq-time', null)).toBeLessThan(4.5)
+  })
+
+  it('BAR-3 : l\'ambre pour ce que le joueur peut faire ; la minuterie de la couleur du texte, puis rouge', () => {
+    expect(lire(css, '.bar .bar-minuterie i', 'background').toLowerCase()).toBe('#d7dccf')
+    expect(lire(css, '.bar .bar-minuterie.alerte i', 'background').toLowerCase()).toBe('#e04848')
+    expect(lire(css, '.bar .bar-choix li.on', 'border-left-color').toLowerCase()).toBe('#f0c040')
+    expect(lire(css, '.bar .bar-anneau.rouge', 'background')).not.toMatch(/f0c040/i)
+  })
+
+  it('BAR-4 : choix en fondu de 150 ms sans glissement, surbrillance sans transition, sans cadre ni fond ; NOTÉ et le compte en 250 ms', () => {
+    const anim = sel => lire(css, sel, 'animation') || ''
+    const duree = a => parseFloat((a.match(/([\d.]+)s/) || [])[1])
+    expect(duree(anim('.bar .bar-choix li'))).toBeLessThanOrEqual(0.15)
+    const cle = anim('.bar .bar-choix li').split(/\s+/)[0]
+    expect(css.match(new RegExp(`@keyframes ${cle}\\s*\\{(?:[^{}]*\\{[^}]*\\})*\\s*\\}`))[0]).not.toMatch(/transform/)
+    for (const nom of ['transition', 'background', 'border', 'box-shadow']) expect(lire(css, '.bar .bar-choix li', nom), nom).toBeNull()
+    expect(lire(css, '.bar .bar-choix li.on', 'transition')).toBeNull()
+    for (const sel of ['.bar .bar-carnet .tampon', '.bar .bar-carnet .compte', '.bar .bar-bilan li.on .tampon', '.bar .bar-demasque .tampon']) expect(duree(anim(sel)), sel).toBeLessThanOrEqual(0.25)
+    // effets atténués : sans agrandissement (§9)
+    for (const sel of ['.bar.bar-reduced .bar-carnet .tampon', '.bar.bar-reduced .bar-carnet .compte', '.bar.bar-reduced .bar-bilan li.on .tampon', '.bar.bar-reduced .bar-demasque .tampon']) {
+      expect(anim(sel), sel).toMatch(/^bar-fondu\b|^none$/)
+    }
+  })
+
+  it('BAR-6 : toute animation répétée de bar.css a sa jumelle .bar-reduced ; le téléphone ne vibre pas, l\'écran ne tremble pas', () => {
+    expect(sansJumelle(css)).toEqual([])
+    expect(lire(css, '.bar.bar-reduced .bar-tel.vibre', 'animation')).toBe('none')
+    expect(lire(css, '.bar.bar-reduced .bar-demasque.on', 'animation')).toBe('none')
+    expect(sansJumelle(css + '\n.bar .bar-x .go { animation: enq-pulse 1.6s ease-in-out infinite; }')).toEqual(['.bar .bar-x .go'])   // témoin
+  })
+
+  it('BAR-7 : text-wrap: balance sur le bilan et les invites, jamais sur une ligne tapée', () => {
+    for (const sel of ['.bar .bar-bilan li', '.bar .bar-aide', '.bar .bar-prompt']) expect(lire(css, sel, 'text-wrap'), sel).toBe('balance')
+    for (const sel of ['.bar .bar-sub', '.bar .bar-pensee', '.bar .bar-reaction', '.bar .bar-bilan .viktor', '.bar .bar-tel .msg', '.bar .bar-replique']) expect(lire(css, sel, 'text-wrap'), sel).toBeNull()
   })
 })
