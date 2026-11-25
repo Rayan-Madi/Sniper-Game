@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { CONVOI } from '../../src/bar/reglages.js'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { CONVOI } from '../../src/bar/reglages-convoi.js'
 import { createCarnet, effetsSurLeConvoi, NOMS, QUATRE, RENSEIGNEMENTS_COMPLETS, FICHE, RADIO } from '../../src/bar/renseignements.js'
 
 // Ce que Viktor apprend au Bivouac, et ce que le convoi en tire (spec docs/superpowers/specs/2026-10-28-m5-bar-design.md
@@ -201,5 +203,40 @@ describe('le convoi selon les renseignements : effetsSurLeConvoi (§5.1)', () =>
       }
     }
     expect(avecTiret).toEqual([])                          // témoin : un tiret cadratin dans « Ils accélèrent. »
+  })
+})
+
+// Relecture de l'étape 1 (spec §5.1, « Réglé en B6 ») : le convoi du sous-lot 3d (src/campaign/missions/m5.js, au
+// démarrage du jeu) importe effetsSurLeConvoi. Un module va entier dans un seul morceau du build : si renseignements.js
+// tirait src/bar/reglages.js, tous les réglages du bar (son, décor, patrons) entreraient au démarrage avec lui, et même
+// tous, une fois le bar câblé, puisque son morceau les emploie (mesuré par un build sonde : +4 751 o avant le câblage,
+// +10 487 o après ; spec §3.13, « Relecture de l'étape 1 »). Lecture des sources, de proche en proche ; les import() à
+// la demande ne comptent pas.
+describe('ce que tire le contrat avec le convoi', () => {
+  const RACINE = resolve(__dirname, '../..')
+  // import … from '…', import '…' et export … from '…' vers un module .js du dépôt (ni paquet, ni feuille de style)
+  const statiques = texte => [...texte.matchAll(/^\s*(?:import|export)\s(?:[^;'"`]*?\sfrom\s*)?['"](\.[^'"]+\.js)['"]/gm)]
+    .map(m => m[1])
+  function fermeture(depart) {
+    const vus = new Set(), pile = [depart]
+    while (pile.length) {
+      const fichier = pile.pop()
+      if (vus.has(fichier)) continue
+      vus.add(fichier)
+      for (const m of statiques(readFileSync(resolve(RACINE, fichier), 'utf8'))) {
+        pile.push(resolve(RACINE, fichier, '..', m).slice(RACINE.length + 1).replaceAll('\\', '/'))
+      }
+    }
+    return [...vus].sort()
+  }
+
+  it('la lecture suit les imports de proche en proche (la coquille du bar tire ses réglages, la frappe et la visée)', () => {
+    expect(fermeture('src/bar/index.js')).toEqual(expect.arrayContaining(['src/bar/index.js', 'src/bar/reglages.js',
+      'src/bar/seance.js', 'src/ui/frappe.js', 'src/prologue/interact.js', 'src/shot/acoustics.js']))
+  })
+
+  it('renseignements.js ne tire que les réglages du convoi, jamais ceux du bar', () => {
+    expect(fermeture('src/bar/renseignements.js')).toEqual(['src/bar/reglages-convoi.js', 'src/bar/renseignements.js'])
+    // témoin : CONVOI dans src/bar/reglages.js, que renseignements.js importait, et avec lui tous les réglages du bar
   })
 })

@@ -26,7 +26,7 @@
 // téléphone d'Anton (§3.11). onSortie(contrat), facultatif, est appelé une fois au début du bilan (sorti, passe), avec le
 // contrat que rendra onDone : la sauvegarde peut se faire avant le bilan (§6). Valeurs : INTERFACE de reglages.js.
 import * as THREE from 'three'
-import css from './bar.css?raw'
+import css from './bar.css?inline'   // le texte de la feuille, minifié au build (?raw le gardait tel quel, commentaires compris)
 import { creerSalle } from './salle.js'
 import { creerCasting } from './patrons.js'
 import { createSeance, ESCORTE } from './seance.js'

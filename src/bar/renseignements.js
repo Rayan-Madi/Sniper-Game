@@ -8,8 +8,11 @@
 // renseignements, sept booléens.
 //
 // effetsSurLeConvoi(r) est le contrat avec le convoi (sous-lot 3d du lot 3) : ce que le convoi doit à ce que Viktor a
-// appris, sans aléa, jamais une devinette à 50 % (§5.1). Valeurs : CONVOI de src/bar/reglages.js.
-import { CONVOI } from './reglages.js'
+// appris, sans aléa, jamais une devinette à 50 % (§5.1). Valeurs : CONVOI de src/bar/reglages-convoi.js. Jamais
+// d'import de src/bar/reglages.js ici : le convoi importe ce module au démarrage du jeu, et tous les réglages du bar y
+// entreraient avec lui (relecture de l'étape 1 ; tests/bar/renseignements.test.js, « ce que tire le contrat avec le
+// convoi »).
+import { CONVOI } from './reglages-convoi.js'
 
 // Les sept noms, dans l'ordre du contrat de sortie ; les quatre du carnet d'abord.
 export const NOMS = Object.freeze(['trajet', 'vehicule', 'place', 'heure', 'leurre', 'appel', 'allie'])

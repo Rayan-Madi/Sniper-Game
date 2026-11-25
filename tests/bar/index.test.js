@@ -23,7 +23,7 @@ vi.mock('../../src/bar/patrons.js', async () => {
 })
 const { startBar } = await import('../../src/bar/index.js')
 
-// la feuille de style telle qu'écrite (sous Vitest, un import ?raw de CSS revient vide)
+// la feuille de style telle qu'écrite (sous Vitest, un import ?inline de CSS revient vide, comme ?raw)
 const css = readFileSync('src/bar/bar.css', 'utf8')
 const cssEnquete = readFileSync('src/prologue/enquete.css', 'utf8')
 
