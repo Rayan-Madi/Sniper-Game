@@ -177,8 +177,10 @@ describe('la coquille du bar : cycle de vie', () => {
 
   it('perdre le verrou ouvre la pause ; REPRENDRE reverrouille ; refusé, « CLIQUE ENCORE POUR REPRENDRE » après 0,6 s réelles', () => {
     const { h, renderer } = partie()
+    expect($('#bar-root').classList.contains('en-pause')).toBe(false)
     perdreVerrou()
     expect($('#bar-pause').hidden).toBe(false)
+    expect($('#bar-root').classList.contains('en-pause')).toBe(true)   // témoin : aucune classe, les battements CSS continuent (§3.10)
     expect([...$('#bar-pause').querySelectorAll('button')].map(b => b.textContent)).toEqual(['REPRENDRE', 'SORTIR DU BAR', 'MENU PRINCIPAL'])
     const retry = $('#bar-retry')
     expect(retry.hidden).toBe(true)
@@ -194,6 +196,7 @@ describe('la coquille du bar : cycle de vie', () => {
     clic('#bar-reprendre')
     expect($('#bar-pause').hidden).toBe(true)
     expect(retry.hidden).toBe(true)
+    expect($('#bar-root').classList.contains('en-pause')).toBe(false)
     perdreVerrou()                                          // la pause suivante : l'invite repart cachée
     expect(retry.hidden).toBe(true)
     h.stop()
@@ -206,6 +209,7 @@ describe('la coquille du bar : cycle de vie', () => {
       images(h, 1)
       perdreVerrou()
       clic(bouton)
+      expect($('#bar-root').classList.contains('en-pause'), bouton).toBe(false)   // témoin : finir sans retirer la classe ; la vignette du démasqué bat de nouveau
       images(h, INTERFACE.bilan.finS + 0.5, 0.05)            // le bilan (sorti) et la scène du démasqué (B12) d'abord
       expect(onDone, bouton).toHaveBeenCalledTimes(1)
       expect(onDone.mock.calls[0][0].resultat, `${bouton} à ${soupcon}`).toBe(resultat)
@@ -330,7 +334,7 @@ describe('la coquille du bar : la soirée assemblée', () => {
     images(h, 2)
     viser(h, 'porte', ANCRES.depart.x, ANCRES.depart.z)
     expect(h.debug.interact.current).toBe('porte')
-    expect($('#bar-prompt').textContent).toMatch(/SORTIR · RENSEIGNEMENTS 1 \/ 4/)
+    expect($('#bar-prompt').textContent).toBe('MAINTENIR E : SORTIR · RENSEIGNEMENTS 1 / 4')   // témoin : « E MAINTENIR : … » (B12 avant relecture)
     touche('KeyE'); images(h, 0.6); lache('KeyE')
     images(h, 1.5)
     expect(h.debug.etat().mode).toBe('exploration')         // témoin : la sortie à l'appui
@@ -847,6 +851,47 @@ describe('l\'interface du bar : les fins (tâche B12, §3.10, §3.11)', () => {
     expect(onDone.mock.calls[0][0]).toEqual(onSortie.mock.calls[0][0])
     expect(onDone.mock.calls[0][0].renseignements).toMatchObject({ heure: true, trajet: true, vehicule: false, place: false })
   })
+
+  // relecture de B12 : une fin décidée ne change plus de sens si une image lève pendant sa scène
+  it('une exception pendant la scène du démasqué rend quand même « demasque », une fois, avec l\'erreur', () => {
+    const erreur = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { h, onDone } = partie({ soupcon: 95, infos: ['heure'] })
+    images(h, 0.2)
+    h.debug.soupcon(100)
+    images(h, 0.5)
+    expect(onDone).not.toHaveBeenCalled()
+    h.debug.casting.casser(new Error('image cassée'))
+    expect(() => h.update(DT)).not.toThrow()
+    expect(onDone).toHaveBeenCalledTimes(1)
+    const [r] = onDone.mock.calls[0]
+    expect(r.resultat).toBe('demasque')                       // témoin : « erreur », qui mènerait au convoi une partie perdue
+    expect(r.error.message).toBe('image cassée')
+    expect(r.renseignements.heure).toBe(true)
+    expect($('#bar-root')).toBeNull()
+    expect(erreur).toHaveBeenCalled()
+    images(h, 3); h.stop()
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('une exception pendant le bilan rend le contrat qu\'onSortie a reçu, avec l\'erreur, une fois', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onDone = vi.fn(), onSortie = vi.fn()
+    const h = startBar({ renderer: fakeRenderer(), camera: new THREE.PerspectiveCamera(), onDone, onSortie, options: { infos: ['heure'] } })
+    clic('#bar-card')
+    images(h, 1)
+    viser(h, 'porte', ANCRES.depart.x, ANCRES.depart.z)
+    touche('KeyE'); images(h, COQUILLE.maintienS + 0.05)
+    expect(onSortie).toHaveBeenCalledTimes(1)
+    images(h, INTERFACE.bilan.ficheS + 0.1, 0.05)
+    $('#bar-bilan .bar-tel').remove()                         // le téléphone arraché : l'image qui l'allume lève
+    images(h, INTERFACE.bilan.telephoneS - INTERFACE.bilan.ficheS + 0.1, 0.05)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    const { error, ...rendu } = onDone.mock.calls[0][0]
+    expect(rendu).toEqual(onSortie.mock.calls[0][0])         // témoin : « erreur » après « sorti »
+    expect(error).toBeInstanceOf(TypeError)
+    images(h, 3); h.stop()
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
 })
 
 // ─── Règles de la base design lues dans bar.css (audit BAR-2 à BAR-7) ───
@@ -922,6 +967,13 @@ describe('l\'interface du bar : règles de design (base design, audit BAR-2 à B
     expect(lire(css, '.bar.bar-reduced .bar-tel.vibre', 'animation')).toBe('none')
     expect(lire(css, '.bar.bar-reduced .bar-demasque.on', 'animation')).toBe('none')
     expect(sansJumelle(css + '\n.bar .bar-x .go { animation: enq-pulse 1.6s ease-in-out infinite; }')).toEqual(['.bar .bar-x .go'])   // témoin
+  })
+
+  it('§3.10 : en pause, tout est figé : la vignette, la jauge, l\'anneau rouge et les arcs cessent de battre (relecture de B12)', () => {
+    for (const sel of ['.bar .bar-vignette.on', '.bar .bar-jauge.p-soupcon .bar-barre', '.bar .bar-anneau.rouge', '.bar .bar-arcs .arc.on']) {
+      expect(lire(css, sel, 'animation'), sel).toBeTruthy()  // une animation en jeu…
+      expect(lire(css, sel.replace(/^\.bar /, '.bar.en-pause '), 'animation-play-state'), sel).toBe('paused')   // témoin : aucune règle de pause
+    }
   })
 
   it('BAR-7 : text-wrap: balance sur le bilan et les invites, jamais sur une ligne tapée', () => {

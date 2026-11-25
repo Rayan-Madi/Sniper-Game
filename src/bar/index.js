@@ -91,7 +91,7 @@ const HTML = `
   <div class="bar-carnet" id="bar-carnet"><h4><span class="titre"></span><b class="compte"></b></h4><ul></ul></div>
   <div class="bar-cross"></div>
   <div class="bar-anneau" id="bar-anneau"></div>
-  <div class="bar-prompt" id="bar-prompt"><span class="touche"><i class="anneau"></i><b></b></span><span class="tx"></span></div>
+  <div class="bar-prompt" id="bar-prompt"><span class="avant"></span><span class="touche"><i class="anneau"></i><b></b></span><span class="tx"></span></div>
   <div class="bar-pensee" id="bar-pensee"><span class="spk"></span><span class="tx"></span></div>
   <div class="bar-reaction" id="bar-reaction"><span class="spk"></span><span class="tx"></span></div>
   <div class="bar-sub" id="bar-sub"><span class="spk"></span><span class="tx"></span></div>
@@ -569,6 +569,7 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     arcs.clear()
     if ($('#bar-card')) $('#bar-card').hidden = true
     if ($('#bar-pause')) $('#bar-pause').hidden = true
+    if (ui) ui.classList.remove('en-pause')   // finie depuis la pause (SORTIR DU BAR) : la scène du démasqué bat de nouveau
     if (controller) controller.setFrozen(true)
     if (interact) interact.clear()
     if (mode !== 'demasque') noir()
@@ -644,12 +645,14 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     if (choeur) choeur.update(g, { sources: { viktor: { gain: 1, pan: 0 } }, sousTitre: null })
   }
 
-  // une erreur en cours de route ne bloque pas la partie : on termine en « erreur », avec ce qui est appris
+  // une erreur en cours de route ne bloque pas la partie : on termine en « erreur », avec ce qui est appris. Pendant une
+  // fin déjà décidée (la scène du démasqué, le bilan), son résultat tient (relecture de B12) : une partie perdue ne mène
+  // pas au convoi, et onDone rend le contrat qu'onSortie a reçu ; l'erreur y est jointe.
   function fail(error) {
     console.error('[bar]', error)
     if (stopped) return
     let payload
-    try { payload = { ...contrat('erreur'), error } } catch (e) { payload = { resultat: 'erreur', renseignements: createCarnet().renseignements, couverture: null, error } }
+    try { payload = { ...contrat(fin ? fin.resultat : 'erreur'), error } } catch (e) { payload = { resultat: 'erreur', renseignements: createCarnet().renseignements, couverture: null, error } }
     stop()
     report(payload)
   }
@@ -1051,7 +1054,9 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     }
     const pr = $('#bar-prompt')
     changer('invite.k', k, v => { pr.querySelector('.touche b').textContent = v })
-    changer('invite.tx', texte ? ` ${tenir ? 'MAINTENIR ' : ''}: ${texte}` : '', v => { pr.querySelector('.tx').textContent = v })
+    // « MAINTENIR E : SORTIR », comme l'enquête : le verbe avant la touche et son anneau
+    changer('invite.avant', tenir ? 'MAINTENIR ' : '', v => { pr.querySelector('.avant').textContent = v })
+    changer('invite.tx', texte ? ` : ${texte}` : '', v => { pr.querySelector('.tx').textContent = v })
     changer('invite.on', !!texte, v => pr.classList.toggle('on', v))
     changer('invite.maintien', tenir, v => pr.classList.toggle('maintien', v))
     changer('invite.p', tenir ? +Math.min(1, maintienEnCours() / K.maintienS).toFixed(3) : 0, v => pr.style.setProperty('--p', String(v)))
@@ -1144,13 +1149,14 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     if (stopped || fin || !locked()) return
     $('#bar-card').hidden = true; $('#bar-pause').hidden = true
     $('#bar-retry').hidden = true; reprise = null
-    if (pause) { pause = false; note('reprise') }
+    if (pause) { pause = false; ui.classList.remove('en-pause'); note('reprise') }
     controller.setFrozen(!!dialogue)
     if (!started) commencer()
   }
   function mettreEnPause() {
     if (!started || fin || stopped || cam || pause) return
     pause = true
+    ui.classList.add('en-pause')   // les battements CSS (vignette, jauge, anneau, arcs) s'arrêtent avec le reste (§3.10)
     controller.setFrozen(true)
     annulerMaintien()
     if (interact) interact.clear()
