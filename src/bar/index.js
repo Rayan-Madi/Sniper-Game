@@ -428,11 +428,12 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     if (ef.ouvre) ouverts.add(ef.ouvre)
     if (ef.demasque) evenementJauge('demasque')
   }
-  // les dialogues que des déclencheurs attendent : ouverts dès que l'interlocuteur est libre, dans l'ordre
+  // les dialogues que des déclencheurs attendent : ouverts dès que l'interlocuteur est libre, dans l'ordre ; retirés
+  // s'ils sont déjà joués, si l'interlocuteur ne parle plus à Viktor, ou (L1) si un verre lui a été servi entre-temps
   function ouvrirEnAttente() {
     while (!dialogue && !fin && enAttente.length) {
       const id = enAttente[0]
-      if (faits.has(id) || muets.has(DIALOGUES[id].interlocuteur)) { enAttente.shift(); continue }
+      if (faits.has(id) || muets.has(DIALOGUES[id].interlocuteur) || (id === 'lise-commande' && viktor.verre)) { enAttente.shift(); continue }
       if (!ouvrirDialogue(id)) return
       enAttente.shift()
     }
@@ -661,8 +662,9 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     if (interdite) sources.push('zoneInterdite')
     if (ESCORTE.some(r => present(r) && distance(patron(r).personne, p) < SOUPCON.tropPresM)) sources.push('tropPres')
     if (dansZone('privee', p) && !viktor.verre) sources.push(pretexte(p) ? 'zonePriveePretexte' : 'zonePrivee')
+    // les −2/s de la table d'Albert (§3.14) : une fois qu'il a parlé à Albert, tant qu'il est assis à sa chaise libre
     suivreJauge(jauge.update(g, { sources, temoins, pose: poseJauge(),
-      baisseEnPlus: viktor.siege && viktor.siege.id === 'D-ouest' ? COUVERTURE.albertBaisse : 0,
+      baisseEnPlus: albertParle && viktor.siege && viktor.siege.id === 'D-ouest' ? COUVERTURE.albertBaisse : 0,
       facteurBaisse: viktor.surveille ? SOUPCON.surveilleBaisse : 1 }))
     if (fin) return
     for (const e of emis) {
@@ -973,6 +975,8 @@ export function startBar({ renderer, camera, audio = null, root = document.body,
     cam = lirePose(opts.cam)
     attenue = !!effectsReduced()
     hasard = generateur(K.graine)
+    // le premier murmure d'Albert, tiré comme les suivants : jamais à l'entrée, avec « Bonsoir. » et la pensée d'entrée
+    compteurs.murmure = K.murmuresAlbertS[0] + hasard() * (K.murmuresAlbertS[1] - K.murmuresAlbertS[0])
     salle = creerSalle({ attenue })
     casting = creerCasting()
     scene = new THREE.Scene()

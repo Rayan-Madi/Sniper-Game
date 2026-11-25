@@ -76,8 +76,8 @@ export function createSoupcon(reglages = SOUPCON) {
     // zonePrivee, zonePriveePretexte et rien, selon la couverture (verre, prétexte, §3.6). temoins : la catégorie de
     // chaque personne qui voit Viktor. pose : 'debout', 'assis' (sans verre) ou 'pose' (posé, un verre à la main, §3.7).
     // La baisse de l'image, que la coquille du bar règle (tâche B11, §3.14) : baisseEnPlus, ajoutée par seconde (assis à la
-    // table d'Albert, COUVERTURE.albertBaisse), puis le tout multiplié par facteurBaisse (« Je vous ai à l'œil »,
-    // SOUPCON.surveilleBaisse) ; une valeur négative ou illisible est une erreur.
+    // table d'Albert après lui avoir parlé, COUVERTURE.albertBaisse), puis le tout multiplié par facteurBaisse (« Je vous
+    // ai à l'œil », SOUPCON.surveilleBaisse) ; une valeur négative ou illisible est une erreur.
     update(dt, { sources = [], temoins = [], pose = 'debout', baisseEnPlus = 0, facteurBaisse = 1 } = {}) {
       if (!(Number.isFinite(baisseEnPlus) && baisseEnPlus >= 0)) throw new Error(`jauge de soupçon : baisse en plus illisible (${baisseEnPlus})`)
       if (!(Number.isFinite(facteurBaisse) && facteurBaisse >= 0)) throw new Error(`jauge de soupçon : facteur de baisse illisible (${facteurBaisse})`)

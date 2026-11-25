@@ -180,7 +180,8 @@ export const COUVERTURE = {
   sansCommandeS: 60,    // sans verre au bout de ce temps : événement sansCommande de la jauge, et la réplique de Lise
   toilettesS: [240, 300],   // le routier occupe le WC de 240 à 300 s : attendre devant la porte est un prétexte
   jukeboxMaintienS: 1,  // mettre une pièce dans le juke-box (un prétexte) : E maintenu ce temps
-  albertBaisse: 2,      // assis à la table d'Albert, la jauge redescend de tant de plus par seconde (§3.14 : « −2/s »)
+  albertBaisse: 2,      // assis à la table d'Albert, une fois qu'il lui a parlé : la jauge redescend de tant de plus
+                        // par seconde (§3.14 : « si Viktor lui parle […] (−2/s tant qu'il est assis à sa table) »)
 }
 
 // ─── La coquille du bar (§3.7, §3.9, §3.10, tâche B11) ─────────────

@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { readFileSync } from 'node:fs'
 import { PLACES, ANCRES, SIEGES } from '../../src/bar/plan.js'
 import { CARTE, REACTIONS, OBJETS, DIALOGUES } from '../../src/bar/textes.js'
-import { COQUILLE, SOUPCON } from '../../src/bar/reglages.js'
+import { COQUILLE, SOUPCON, COUVERTURE } from '../../src/bar/reglages.js'
 import { NOMS } from '../../src/bar/renseignements.js'
 import { trackDisposals } from '../gfx/fakeRenderer.js'
 import { fauxAudio, branches, enCours } from './fauxAudio.js'
@@ -224,8 +224,6 @@ describe('la coquille du bar : cycle de vie', () => {
     expect(avant.sousTitre.texte.length).toBeGreaterThan(3)
     expect(avant.pensee.texte.length).toBeGreaterThan(0)    // la pensée d'entrée se tape encore
     expect(avant.pensee.texte.length).toBeLessThan(OBJETS.entree.pensee.length)
-    expect(avant.pensee.texte.length).toBeGreaterThan(0)    // la pensée d'entrée se tape encore
-    expect(avant.pensee.texte.length).toBeLessThan(OBJETS.entree.pensee.length)
     perdreVerrou()
     for (let k = 0; k < 100; k++) { h.update(0.05); await vi.advanceTimersByTimeAsync(50) }
     const apres = h.debug.etat()
@@ -426,6 +424,63 @@ describe('la coquille du bar : la soirée assemblée', () => {
     for (let k = 0; k < 100; k++) { h.update(0.05); await vi.advanceTimersByTimeAsync(50) }
     expect(h.debug.etat().dialogue.restant).toBe(restant)
     h.stop()
+  })
+
+  it('un verre servi pendant qu\'elle attend retire L1 : Lise ne vient pas prendre une commande déjà servie par Fernand', () => {
+    const { h } = partie()
+    images(h, 0.2)
+    h.debug.aller(-1.5, 1.5, Math.PI, 0)                    // loin des tables de l'escorte et du zinc, face à la vitrine
+    images(h, COQUILLE.liseCommandeS - 5.2, 0.05)          // 40 s sans verre
+    expect(h.debug.etat().mode).toBe('exploration')
+    h.debug.aller(-3.2, -1.2, Math.PI / 2, 0)               // au zinc : Fernand sert (D1)
+    expect(jusqua(h, () => h.debug.etat().dialogue && h.debug.etat().dialogue.phase === 'choix', 5)).toBe(true)
+    expect(jusqua(h, () => h.debug.etat().t > COQUILLE.liseCommandeS + 0.1, 10)).toBe(true)   // L1 attend la fin de D1
+    expect(h.debug.etat().dialogue.id).toBe('fernand')
+    touche('Digit1')                                        // « Un demi. »
+    expect(jusqua(h, () => h.debug.etat().verre === 'demi' && h.debug.etat().dialogue.phase === 'choix', 5)).toBe(true)
+    touche('Digit2')                                        // « Je cherche du travail. »
+    expect(jusqua(h, () => h.debug.journal.some(e => e.type === 'finDialogue' && e.id === 'fernand'), 10)).toBe(true)
+    images(h, 5)
+    const ouverts = h.debug.journal.filter(e => e.type === 'dialogue').map(e => e.id)
+    expect(ouverts[0]).toBe('fernand')                      // puis F3 (« Vingt-quatre. »), 20 s cumulées au zinc
+    expect(ouverts.filter(id => DIALOGUES[id].interlocuteur === 'lise')).toEqual([])   // témoin : L1 resté en attente, ouvert après D1
+    h.stop()
+  })
+
+  it('Albert murmure pour la première fois de 20 à 35 s après l\'entrée, jamais en même temps que « Bonsoir. »', () => {
+    const { h } = partie()
+    const [a, b] = COQUILLE.murmuresAlbertS
+    const murmures = () => h.debug.journal.filter(e => e.type === 'replique' && e.echange === 'albert')
+    images(h, a - 0.5, 0.05)
+    expect(murmures()).toEqual([])                          // témoin : le compteur à 0 au montage, le premier murmure à t = 0
+    expect(jusqua(h, () => murmures().length > 0, b - a + 1, 0.05)).toBe(true)
+    expect(murmures()[0].t).toBeGreaterThanOrEqual(a)
+    expect(murmures()[0].t).toBeLessThanOrEqual(b)
+    h.stop()
+  })
+
+  it('la table d\'Albert : −2/s de plus à sa chaise ouest seulement après lui avoir parlé (§3.14, « si Viktor lui parle »)', () => {
+    const D = SIEGES.find(s => s.id === 'D-ouest')
+    const baisse = parle => {
+      const { h } = partie({ soupcon: 40, verre: 'cafe' })
+      images(h, 0.2)
+      if (parle) {
+        viser(h, 'albert', D.x, D.z)
+        expect(h.debug.interact.current).toBe('albert')
+        touche('KeyE'); h.update(DT)
+        expect(h.debug.journal.some(e => e.type === 'reaction' && e.qui === 'albert')).toBe(true)
+      }
+      h.debug.asseoir('D-ouest')
+      h.update(DT)
+      const avant = h.debug.jauge.S
+      images(h, 1)
+      const d = avant - h.debug.jauge.S
+      h.stop(); document.body.innerHTML = ''
+      return d
+    }
+    const sans = baisse(false), avec = baisse(true)
+    expect(sans).toBeGreaterThan(0)
+    expect(avec - sans).toBeCloseTo(COUVERTURE.albertBaisse, 1)   // témoin : les −2/s dès qu'il s'assoit, parlé ou non
   })
 
   it('Lise part servir la table A avant A4 (« Je te ressers, Dussart ? »), puis revient au zinc', () => {
