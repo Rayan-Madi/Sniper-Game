@@ -8,6 +8,8 @@ import { removePartVisual, applyIncomingAbility } from './contreTueur.js'
 
 // ─── Mode PvP : salon ────────────────────────────────────────────────
 // Écrans du menu multijoueur (créer, rejoindre, résultat), boutons, et abonnements aux messages du relais.
+// initMultiplayerMenu abonne aussi la manche et les deux rôles (index.js, sniper.js, contreTueur.js, importés ici) :
+// charger ce module charge tout le PvP.
 
 // ─── Navigation entre écrans ─────────────────────────────────────────
 function hideAllMpScreens() {

@@ -12,9 +12,9 @@ import { disposeObject } from '../gfx/dispose.js'
 import { npcCastsShadow } from '../gfx/quality.js'
 import { startWhenReady, waitForCharacters, createLoadingScreen } from '../campaign/loading.js'
 import { el, menuEl, mpResult, mpHud, roleBanner, timerEl, partsEl, abilitiesEl, crosshairEl, killfeedEl, scoreEl, resultTitle, resultDetail, rematchBtn, etat } from './etat.js'
-import { startPvpAmbience, stopPvpAmbience } from './son.js'
+import { playAlarmSound, positionalRingtone, startPvpAmbience, stopPvpAmbience } from './son.js'
 import { hideAllMpScreens } from './salon.js'
-import { SNIPER_FOV, SCOPE_FOV, setupSniper, sniperFrame, sniperShoot, triggerAbility, updateClinger } from './sniper.js'
+import { SNIPER_FOV, SCOPE_FOV, setupSniper, sniperFrame, sniperShoot, triggerAbility } from './sniper.js'
 import { keys, triggerEmote, setupPnj, pnjFrame, removePartVisual, pnjShoot } from './contreTueur.js'
 
 // ─── Mode PvP : Sniper vs Contre-tueur ───────────────────────────────
@@ -22,11 +22,12 @@ import { keys, triggerEmote, setupPnj, pnjFrame, removePartVisual, pnjShoot } fr
 // client calcule sa propre visée/collision et l'annonce à l'autre —
 // modèle "confiance au client", très bien pour un 1v1 non compétitif.
 //
-// Modules (src/pvp/) : index.js, ce fichier, tient la manche (départ, décor, boucle, entrées, fin) ; salon.js le menu
-// et les messages du relais ; sniper.js et contreTueur.js les deux rôles ; son.js les sons ; etat.js le DOM et l'état
-// qu'ils partagent ; pvpMap.js l'arène, pvpIntro.js l'intro de rôle, pvpMath.js le repère au sol. Les modules de la
-// manche s'importent entre eux en rond (un rôle finit la manche, la manche lance les rôles) : aucun n'appelle l'autre
-// pendant son chargement, seulement depuis ses fonctions.
+// Modules (src/pvp/) : index.js, ce fichier, tient la manche (départ, décor, foule, effets des capacités, boucle,
+// entrées, fin) ; salon.js le menu et les messages du relais ; sniper.js et contreTueur.js les deux rôles ; son.js les
+// sons ; etat.js le DOM et l'état qu'ils partagent ; pvpMap.js l'arène, pvpIntro.js l'intro de rôle, pvpMath.js le
+// repère au sol. Les modules de la manche s'importent entre eux en rond (un rôle finit la manche, la manche lance les
+// rôles) : aucun n'appelle l'autre pendant son chargement, seulement depuis ses fonctions. Un rôle n'importe jamais
+// l'autre : ce qui tourne chez les deux joueurs (laser, foule, effets des capacités) est ici.
 
 export { initMultiplayerMenu } from './salon.js'
 
@@ -282,6 +283,56 @@ function makeCivilianAvatar() {
   return av
 }
 
+// ─── Capacités du sniper : effets appliqués chez les deux joueurs ────
+// Position visée par une capacité : chez le contre-tueur = lui-même ; chez le
+// sniper = l'avatar de l'adversaire (donc l'effet est bien AU BON ENDROIT chez
+// les deux). Les deux clients appliquent l'effet localement → parfaite parité.
+function abilityTarget() {
+  if (etat.myRole === 'pnj') return etat.pnjPos
+  if (etat.oppAvatar) return etat.oppAvatar.group.position
+  return etat.lastPnjNet || new THREE.Vector3(...etat.arena.pnjSpawn)
+}
+
+function applyAbilityLocal(kind) {
+  const now = performance.now()
+  const tgt = abilityTarget()
+  if (kind === 'phone') {
+    positionalRingtone(tgt)   // sonne DEPUIS la position du contre-tueur
+    if (etat.myRole === 'pnj') { etat.phoneShakeUntil = now + 3000; showKillfeed('📞 Votre téléphone sonne…') }
+    else showKillfeed('📞 Téléphone du contre-tueur déclenché')
+  } else if (kind === 'alarm') {
+    playAlarmSound()
+    scatterCrowd(tgt)         // TOUTE la foule panique et court
+    if (etat.myRole === 'pnj') { etat.alarmUntil = now + 2500; showKillfeed('🚨 Une alarme retentit : la foule panique !') }
+    else showKillfeed('🚨 Alarme déclenchée : la foule se disperse')
+  } else if (kind === 'cling') {
+    etat.clingerUntil = now + 4000
+    let closest = null, cd = Infinity
+    for (const n of etat.crowd) { const d = n.mesh.position.distanceTo(tgt); if (d < cd) { cd = d; closest = n } }
+    etat.clingerNpc = closest
+    showKillfeed(etat.myRole === 'pnj' ? '🫂 Un PNJ vous colle et vous ralentit…' : '🫂 Un PNJ colle le contre-tueur')
+  }
+}
+
+// Fait fuir toute la foule loin de sourcePos (panique d'alarme). La sortie de
+// panique est gérée dans loop() (retour à un comportement normal après ~3,5 s).
+function scatterCrowd(sourcePos) {
+  etat.crowdPanicUntil = performance.now() + 3500
+  for (const n of etat.crowd) { if (n.alive) n.flee(sourcePos) }
+}
+
+// Le PNJ collant suit sa cible (le contre-tueur, chez les DEUX joueurs).
+function updateClinger() {
+  const now = performance.now()
+  if (etat.clingerNpc && now < etat.clingerUntil) {
+    const tgt = abilityTarget()
+    etat.clingerNpc.mesh.position.set(tgt.x + 0.7, 0, tgt.z + 0.4)
+    etat.clingerNpc.mesh.lookAt(tgt.x, 0, tgt.z)
+  } else if (etat.clingerNpc && now >= etat.clingerUntil) {
+    etat.clingerNpc = null
+  }
+}
+
 // ─── Boucle commune ──────────────────────────────────────────────────
 function showKillfeed(text) {
   killfeedEl.textContent = text
@@ -471,4 +522,4 @@ function quitToMenu() {
 }
 
 // Pour les autres modules du PvP.
-export { onMatchStart, endRoundFromPeer, sniperAimDir, laserOrigin, updateLaser, showKillfeed, endRound, quitToMenu }
+export { onMatchStart, endRoundFromPeer, sniperAimDir, laserOrigin, updateLaser, applyAbilityLocal, showKillfeed, endRound, quitToMenu }

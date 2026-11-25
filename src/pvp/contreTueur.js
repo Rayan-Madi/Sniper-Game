@@ -4,11 +4,11 @@ import * as net from '../net.js'
 import { groundForward, groundRight } from './pvpMath.js'
 import { el, partsEl, crosshairEl, etat } from './etat.js'
 import { playGunshot, playHitmarker } from './son.js'
-import { sniperAimDir, laserOrigin, updateLaser, showKillfeed, endRound } from './index.js'
-import { applyAbilityLocal } from './sniper.js'
+import { sniperAimDir, laserOrigin, updateLaser, showKillfeed, endRound, applyAbilityLocal } from './index.js'
 
 // ─── Mode PvP : rôle contre-tueur ────────────────────────────────────
-// Le déplacement dans la foule, les pièces d'arme, le pistolet, et les capacités du sniper qu'il subit.
+// Le déplacement dans la foule, les pièces d'arme, le pistolet, et la réception des capacités du sniper (leurs effets,
+// appliqués chez les deux joueurs, sont dans index.js).
 
 // ─── Rôle CONTRE-TUEUR (PNJ) ─────────────────────────────────────────
 const keys = { w: false, a: false, s: false, d: false }

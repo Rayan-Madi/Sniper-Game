@@ -2,11 +2,12 @@ import * as THREE from 'three'
 import { camera } from '../scene.js'
 import * as net from '../net.js'
 import { el, etat } from './etat.js'
-import { playAlarmSound, playGunshot, playHitmarker, positionalRingtone } from './son.js'
-import { sniperAimDir, laserOrigin, updateLaser, showKillfeed, endRound } from './index.js'
+import { playGunshot, playHitmarker } from './son.js'
+import { sniperAimDir, laserOrigin, updateLaser, showKillfeed, endRound, applyAbilityLocal } from './index.js'
 
 // ─── Mode PvP : rôle sniper ──────────────────────────────────────────
-// Le nid, la visée, le tir, et les capacités de sabotage, appliquées chez les deux joueurs.
+// Le nid, la visée, le tir, et le déclenchement des capacités de sabotage (leurs effets, appliqués chez les deux
+// joueurs, sont dans index.js).
 
 const ABILITY_CD = 45000
 // Déblocage progressif : téléphone dès le départ, PNJ collant à 1 min, alarme à 2 min.
@@ -144,53 +145,4 @@ function triggerAbility(kind) {
   applyAbilityLocal(kind)   // le sniper voit AUSSI l'effet appliqué à l'adversaire
 }
 
-// Position visée par une capacité : chez le contre-tueur = lui-même ; chez le
-// sniper = l'avatar de l'adversaire (donc l'effet est bien AU BON ENDROIT chez
-// les deux). Les deux clients appliquent l'effet localement → parfaite parité.
-function abilityTarget() {
-  if (etat.myRole === 'pnj') return etat.pnjPos
-  if (etat.oppAvatar) return etat.oppAvatar.group.position
-  return etat.lastPnjNet || new THREE.Vector3(...etat.arena.pnjSpawn)
-}
-
-function applyAbilityLocal(kind) {
-  const now = performance.now()
-  const tgt = abilityTarget()
-  if (kind === 'phone') {
-    positionalRingtone(tgt)   // sonne DEPUIS la position du contre-tueur
-    if (etat.myRole === 'pnj') { etat.phoneShakeUntil = now + 3000; showKillfeed('📞 Votre téléphone sonne…') }
-    else showKillfeed('📞 Téléphone du contre-tueur déclenché')
-  } else if (kind === 'alarm') {
-    playAlarmSound()
-    scatterCrowd(tgt)         // TOUTE la foule panique et court
-    if (etat.myRole === 'pnj') { etat.alarmUntil = now + 2500; showKillfeed('🚨 Une alarme retentit : la foule panique !') }
-    else showKillfeed('🚨 Alarme déclenchée : la foule se disperse')
-  } else if (kind === 'cling') {
-    etat.clingerUntil = now + 4000
-    let closest = null, cd = Infinity
-    for (const n of etat.crowd) { const d = n.mesh.position.distanceTo(tgt); if (d < cd) { cd = d; closest = n } }
-    etat.clingerNpc = closest
-    showKillfeed(etat.myRole === 'pnj' ? '🫂 Un PNJ vous colle et vous ralentit…' : '🫂 Un PNJ colle le contre-tueur')
-  }
-}
-
-// Fait fuir toute la foule loin de sourcePos (panique d'alarme). La sortie de
-// panique est gérée dans loop() (retour à un comportement normal après ~3,5 s).
-function scatterCrowd(sourcePos) {
-  etat.crowdPanicUntil = performance.now() + 3500
-  for (const n of etat.crowd) { if (n.alive) n.flee(sourcePos) }
-}
-
-// Le PNJ collant suit sa cible (le contre-tueur, chez les DEUX joueurs).
-function updateClinger() {
-  const now = performance.now()
-  if (etat.clingerNpc && now < etat.clingerUntil) {
-    const tgt = abilityTarget()
-    etat.clingerNpc.mesh.position.set(tgt.x + 0.7, 0, tgt.z + 0.4)
-    etat.clingerNpc.mesh.lookAt(tgt.x, 0, tgt.z)
-  } else if (etat.clingerNpc && now >= etat.clingerUntil) {
-    etat.clingerNpc = null
-  }
-}
-
-export { SNIPER_FOV, SCOPE_FOV, setupSniper, sniperFrame, sniperShoot, triggerAbility, applyAbilityLocal, updateClinger }
+export { SNIPER_FOV, SCOPE_FOV, setupSniper, sniperFrame, sniperShoot, triggerAbility }
